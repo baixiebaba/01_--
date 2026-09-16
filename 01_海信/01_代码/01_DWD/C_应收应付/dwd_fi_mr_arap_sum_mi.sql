@@ -406,7 +406,10 @@ xh_company AS (
         ON ap_map.account_no = x.credit_customer_account
       LEFT JOIN ods.odsmr_ztab_9000_acct_maping ar_map
         ON ar_map.account_no = x.hold_customer_account
-      LEFT JOIN ods.odsfima_azienda ap_azi
+      LEFT JOIN (SELECT sede_legale,MIN(cod_azienda) AS cod_azienda
+                   FROM ods.odsfima_azienda
+                  WHERE sede_legale IS NOT NULL GROUP BY sede_legale
+                )  ap_azi
         ON ap_azi.sede_legale = x.credit_customer_code
       LEFT JOIN (SELECT sede_legale,MIN(cod_azienda) AS cod_azienda
                    FROM ods.odsfima_azienda
