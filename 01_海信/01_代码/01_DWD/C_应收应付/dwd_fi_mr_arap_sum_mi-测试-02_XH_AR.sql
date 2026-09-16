@@ -27,7 +27,17 @@ detail_nature AS (
      GROUP BY company_code
             , cust_code
 ),
--- XH应收：按票据编号、子序号和区间保留最新票据记录。
+-- 读取目标月份有效的信汇账龄段配置，供信汇账龄天数匹配账龄区间。
+aging_seg_cfg AS (
+    SELECT r.aging_seg_code
+         , r.aging_seg_name
+         , r.aging_seg_fr
+         , r.aging_seg_to
+      FROM dim.dim_rule_fi_mr_ar_aging_seg r
+     WHERE NVL(r.valid_fr, '202401') <= @dt_month
+       AND NVL(r.valid_to, '999999') >= @dt_month
+),
+-- XH应收：按票据编号、子序号和区间保留最新票据记录，并保留SIGN_DATE作为账龄起算日。
 xh_parsed AS (
     SELECT ROW_NUMBER() OVER (
                PARTITION BY SUBSTRING_INDEX(bill_code, '-', 1)
@@ -45,6 +55,7 @@ xh_parsed AS (
          , hold_customer_name
          , bill_amount
          , bill_status
+         , CAST(SIGN_DATE AS DATE) AS sign_date
       FROM ods.odsmt_fin_bill_view_data
      WHERE data_date = DATE_FORMAT(
                            LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
@@ -60,6 +71,7 @@ xh_company AS (
                 ELSE COALESCE(ar_map.bukrs, ar_azi.cod_azienda)
             END AS ar_bukrs
          , x.bill_amount
+         , x.sign_date
       FROM xh_parsed x
       LEFT JOIN ods.odsmr_ztab_9000_acct_maping ap_map
         ON ap_map.account_no = x.credit_customer_account
@@ -72,10 +84,18 @@ xh_company AS (
      WHERE x.rn = 1
        AND COALESCE(x.bill_status, '') <> '9999'
 ),
--- XH应收：保留公司排除范围与非零金额过滤。
+-- XH应收：按公司对、SIGN_DATE和账龄天数汇总，保留公司排除范围与非零金额过滤。
 xh_ar_sum AS (
     SELECT ar_bukrs
          , ap_bukrs
+         , sign_date
+         , CASE
+               WHEN sign_date IS NULL THEN 1
+               ELSE DATEDIFF(
+                        LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
+                      , sign_date
+                    ) + 1
+           END AS aging_days
          , SUM(COALESCE(bill_amount, 0)) AS bill_amt
       FROM xh_company
      WHERE COALESCE(ar_bukrs, '') <> COALESCE(ap_bukrs, '')
@@ -83,9 +103,17 @@ xh_ar_sum AS (
        AND ar_bukrs NOT IN ('9000', '9002', '9003', '9005', '9008')
      GROUP BY ar_bukrs
             , ap_bukrs
+            , sign_date
+            , CASE
+                  WHEN sign_date IS NULL THEN 1
+                  ELSE DATEDIFF(
+                           LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
+                         , sign_date
+                       ) + 1
+              END
     HAVING SUM(COALESCE(bill_amount, 0)) <> 0
 ),
--- XH应收：标准化为窄事实接口，金额写入账龄段1并回接性质。
+-- XH应收：标准化为窄事实接口，按账龄天数匹配账龄段并回接性质。
 xh_ar_fact AS (
     SELECT @dt_month AS dt_month
          , LEFT(@dt_month, 4) AS `year`
@@ -135,10 +163,13 @@ xh_ar_fact AS (
          , n.nature_l3_name AS nature_l3_name
          , NULL AS exchange_rate_eval_flag
          , NULL AS is_apar_flag
-         , '1' AS aging_seg_code
+         , COALESCE(NULLIF(TRIM(seg.aging_seg_code), ''), '9') AS aging_seg_code
          , bill_amt AS bcy_amt
          , bill_amt AS qcy_amt
       FROM xh_ar_sum x
+      LEFT JOIN aging_seg_cfg seg
+        ON x.aging_days >= seg.aging_seg_fr
+       AND x.aging_days <= seg.aging_seg_to
       LEFT JOIN detail_nature n
         ON n.nature_company_code = x.ar_bukrs
        AND n.nature_cust_code = CONCAT('XH_', COALESCE(x.ap_bukrs, 'Z001'))
