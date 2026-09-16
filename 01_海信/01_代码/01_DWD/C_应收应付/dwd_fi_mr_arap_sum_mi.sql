@@ -12,7 +12,10 @@
 SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
+-- 统计截止日期：取参数月份月末，供SMS外围系统SQL使用。
+SET @end_date = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
 -- 以上SET与下方单条INSERT OVERWRITE必须在同一session中依次执行。
+INSERT INTO test.dwd_fi_mr_arap_sum_mi (dt_month) VALUES (@dt_month);
 
 -- ============================================================================
 -- 目标表装载：九类来源统一为窄事实接口后合并、汇总并一次覆盖目标分区。
@@ -129,7 +132,7 @@ tax_rate_rule_1 AS (
      GROUP BY company_code
             , cust_code
 ),
--- 税率规则第二优先级：按公司和映射后利润中心匹配税率。
+-- 读取税率规则第二优先级：按公司和映射后利润中心匹配税率。
 tax_rate_rule_2 AS (
     SELECT company_code
          , profitcenter_code
@@ -141,7 +144,7 @@ tax_rate_rule_2 AS (
      GROUP BY company_code
             , profitcenter_code
 ),
--- 税率规则第三优先级：仅按公司匹配税率。
+-- 读取税率规则第三优先级：仅按公司匹配税率。
 tax_rate_rule_3 AS (
     SELECT company_code
          , MAX(tax_rate) AS tax_rate
@@ -343,19 +346,6 @@ detail_fact AS (
        AND acct_map_code NOT IN ('1122000095', '2202000095')
        AND (COALESCE(bcy_amt, 0) <> 0 OR COALESCE(qcy_amt, 0) <> 0)
 ),
--- 依据当月DETAIL按公司和客商去重性质，供其他来源回接，避免直接关联明细行造成金额放大。
-detail_nature AS (
-    SELECT company_code AS nature_company_code
-         , cust_code AS nature_cust_code
-         , MAX(nature_l1_name) AS nature_l1_name
-         , MAX(nature_l2_name) AS nature_l2_name
-         , MAX(nature_l3_name) AS nature_l3_name
-      FROM test.dwd_fi_mr_arap_detail_mi
-     WHERE dt_month = @dt_month
-       AND (COALESCE(bcy_amt, 0) <> 0 OR COALESCE(qcy_amt, 0) <> 0)
-     GROUP BY company_code
-            , cust_code
-),
 -- 读取目标月份有效的信汇账龄段配置，供信汇账龄天数匹配账龄区间。
 aging_seg_cfg AS (
     SELECT r.aging_seg_code
@@ -419,8 +409,8 @@ xh_company AS (
      WHERE x.rn = 1
        AND COALESCE(x.bill_status, '') <> 9999
 ),
--- XH应收：按公司对、SIGN_DATE和账龄天数汇总，保留原公司排除范围与非零金额过滤。
-xh_ar_sum AS (
+-- XH：按公司对、SIGN_DATE和账龄天数统一汇总，应收、应付事实分别筛选。
+xh_sum AS (
     SELECT ar_bukrs
          , ap_bukrs
          , sign_date
@@ -433,9 +423,6 @@ xh_ar_sum AS (
            END AS aging_days
          , SUM(COALESCE(bill_amount, 0)) AS bill_amt
       FROM xh_company
-     WHERE COALESCE(ar_bukrs, '') <> COALESCE(ap_bukrs, '')
-       AND COALESCE(ar_bukrs, '') <> ''
-       AND ar_bukrs NOT IN ('9000', '9002', '9003', '9005', '9008')
      GROUP BY ar_bukrs
             , ap_bukrs
             , sign_date
@@ -493,50 +480,21 @@ xh_ar_fact AS (
          , NULL AS ledger_status
          , NULL AS acct_cert_type
          , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name
-         , n.nature_l2_name AS nature_l2_name
-         , n.nature_l3_name AS nature_l3_name
+         , NULL AS nature_l1_name
+         , NULL AS nature_l2_name
+         , NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag
          , NULL AS is_apar_flag
          , COALESCE(NULLIF(TRIM(seg.aging_seg_code), ''), '9') AS aging_seg_code
          , bill_amt AS bcy_amt
          , bill_amt AS qcy_amt
-      FROM xh_ar_sum x
+      FROM xh_sum x
       LEFT JOIN aging_seg_cfg seg
         ON x.aging_days >= seg.aging_seg_fr
        AND x.aging_days <= seg.aging_seg_to
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = x.ar_bukrs
-       AND n.nature_cust_code = CONCAT('XH_', COALESCE(x.ap_bukrs, 'Z001'))
-),
--- XH应付：按公司对、SIGN_DATE和账龄天数汇总，保留公司排除范围与非零金额过滤。
-xh_ap_sum AS (
-    SELECT ar_bukrs
-         , ap_bukrs
-         , sign_date
-         , CASE
-               WHEN sign_date IS NULL THEN 1
-               ELSE DATEDIFF(
-                        LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
-                      , sign_date
-                    ) + 1
-           END AS aging_days
-         , SUM(COALESCE(bill_amount, 0)) AS bill_amt
-      FROM xh_company
-     WHERE COALESCE(ar_bukrs, '') <> COALESCE(ap_bukrs, '')
-       AND COALESCE(ap_bukrs, '') <> ''
-       AND ap_bukrs NOT IN ('9000', '9002', '9003', '9005', '9008')
-     GROUP BY ar_bukrs
-            , ap_bukrs
-            , sign_date
-            , CASE
-                  WHEN sign_date IS NULL THEN 1
-                  ELSE DATEDIFF(
-                           LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
-                         , sign_date
-                       ) + 1
-              END
-    HAVING SUM(COALESCE(bill_amount, 0)) <> 0
+     WHERE COALESCE(x.ar_bukrs, '') <> COALESCE(x.ap_bukrs, '')
+       AND COALESCE(x.ar_bukrs, '') <> ''
+       AND x.ar_bukrs NOT IN ('9000', '9002', '9003', '9005', '9008')
 ),
 -- XH应付：标准化为窄事实接口，按账龄天数匹配账龄段、应付取负并回接性质。
 xh_ap_fact AS (
@@ -583,31 +541,32 @@ xh_ap_fact AS (
          , NULL AS ledger_status
          , NULL AS acct_cert_type
          , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name
-         , n.nature_l2_name AS nature_l2_name
-         , n.nature_l3_name AS nature_l3_name
+         , NULL AS nature_l1_name
+         , NULL AS nature_l2_name
+         , NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag
          , NULL AS is_apar_flag
          , COALESCE(NULLIF(TRIM(seg.aging_seg_code), ''), '9') AS aging_seg_code
          , -bill_amt AS bcy_amt
          , -bill_amt AS qcy_amt
-      FROM xh_ap_sum x
+      FROM xh_sum x
       LEFT JOIN aging_seg_cfg seg
         ON x.aging_days >= seg.aging_seg_fr
        AND x.aging_days <= seg.aging_seg_to
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = x.ap_bukrs
-       AND n.nature_cust_code = CONCAT('XH_', COALESCE(x.ar_bukrs, 'Z001'))
+     WHERE COALESCE(x.ar_bukrs, '') <> COALESCE(x.ap_bukrs, '')
+       AND COALESCE(x.ap_bukrs, '') <> ''
+       AND x.ap_bukrs NOT IN ('9000', '9002', '9003', '9005', '9008')
 ),
--- OVERDUE：start_dt为参数月下月月初，代表参数月数据；金额为 overdue_amt - overdue_adj_amt，并过滤零金额。
-overdue_src AS (
+-- OVERDUE / INV_SAMPLE：直接取原字段金额，不再拆成两个冗余包；同一来源表一次聚合后再分流到两个事实输出。
+overdue_sample_src AS (
     SELECT ledge_code AS company_code
          , gl_account AS acct_src_code
          , LTRIM(COALESCE(cust_code, ''), '0') AS cust_code
          , cust_name AS cust_name
          , profit_center_code AS profitcenter_code
          , profit_center_name AS profitcenter_name
-         , SUM(COALESCE(overdue_amt, 0) - COALESCE(overdue_adj_amt, 0)) AS amount
+         , SUM(COALESCE(overdue_adj_after_amt, 0)) AS overdue_amount
+         , SUM(COALESCE(inv_sample_amt, 0)) AS inv_sample_amount
       FROM dws.dws_fi_mr_ar_overdue_mi
      WHERE DATE_FORMAT(start_dt, '%Y%m%d') = DATE_FORMAT(
                                DATE_ADD(
@@ -622,9 +581,10 @@ overdue_src AS (
             , cust_name
             , profit_center_code
             , profit_center_name
-    HAVING SUM(COALESCE(overdue_amt, 0) - COALESCE(overdue_adj_amt, 0)) <> 0
+    HAVING SUM(COALESCE(overdue_adj_after_amt, 0)) <> 0
+        OR SUM(COALESCE(inv_sample_amt, 0)) <> 0
 ),
--- OVERDUE：标准化为窄事实接口。
+-- OVERDUE：标准化为窄事实接口，直接取超期款调整后金额。
 overdue_fact AS (
     SELECT @dt_month AS dt_month, LEFT(@dt_month, 4) AS `year`, RIGHT(@dt_month, 2) AS `month`
          , company_code, cust_code, cust_name
@@ -644,40 +604,13 @@ overdue_fact AS (
          , 'OVERDUE' AS system_src, 'OVERDUE' AS ods_src
          , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name, n.nature_l2_name AS nature_l2_name, n.nature_l3_name AS nature_l3_name
+         , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
-         , '1' AS aging_seg_code, amount AS bcy_amt, amount AS qcy_amt
-      FROM overdue_src s
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = s.company_code
-       AND n.nature_cust_code = s.cust_code
+         , '1' AS aging_seg_code, overdue_amount AS bcy_amt, overdue_amount AS qcy_amt
+      FROM overdue_sample_src s
+     WHERE COALESCE(overdue_amount, 0) <> 0
 ),
--- INV_SAMPLE：start_dt为参数月下月月初，代表参数月数据；金额使用 inv_sample_amt，并过滤零金额。
-sample_src AS (
-    SELECT ledge_code AS company_code
-         , gl_account AS acct_src_code
-         , LTRIM(COALESCE(cust_code, ''), '0') AS cust_code
-         , cust_name AS cust_name
-         , profit_center_code AS profitcenter_code
-         , profit_center_name AS profitcenter_name
-         , SUM(COALESCE(inv_sample_amt, 0)) AS amount
-      FROM dws.dws_fi_mr_ar_overdue_mi
-     WHERE DATE_FORMAT(start_dt, '%Y%m%d') = DATE_FORMAT(
-                               DATE_ADD(
-                                   STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
-                                 , INTERVAL 1 MONTH
-                               )
-                             , '%Y%m%d'
-                         )
-     GROUP BY ledge_code
-            , gl_account
-            , cust_code
-            , cust_name
-            , profit_center_code
-            , profit_center_name
-    HAVING SUM(COALESCE(inv_sample_amt, 0)) <> 0
-),
--- INV_SAMPLE：标准化为窄事实接口。
+-- INV_SAMPLE：标准化为窄事实接口，直接取样机款金额。
 sample_fact AS (
     SELECT @dt_month AS dt_month, LEFT(@dt_month, 4) AS `year`, RIGHT(@dt_month, 2) AS `month`
          , company_code, cust_code, cust_name
@@ -697,27 +630,21 @@ sample_fact AS (
          , 'INV_SAMPLE' AS system_src, 'INV_SAMPLE' AS ods_src
          , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name, n.nature_l2_name AS nature_l2_name, n.nature_l3_name AS nature_l3_name
+         , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
-         , '1' AS aging_seg_code, amount AS bcy_amt, amount AS qcy_amt
-      FROM sample_src s
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = s.company_code
-       AND n.nature_cust_code = s.cust_code
+         , '1' AS aging_seg_code, inv_sample_amount AS bcy_amt, inv_sample_amount AS qcy_amt
+      FROM overdue_sample_src s
+     WHERE COALESCE(inv_sample_amount, 0) <> 0
 ),
--- SMS/UREB：按月份及业务主键取最新 load_dt 后再汇总。
+-- SMS/UREB：使用外围系统 SQL 计算截至参数月末的余额后再汇总。
 sms_ranked AS (
     SELECT company_code
          , sales_code
          , sname
          , yue
          , leibie
-         , ROW_NUMBER() OVER (
-               PARTITION BY dt_month, company_code, sales_code, sname, leibie
-               ORDER BY load_dt DESC
-           ) AS rn
-      FROM dwd_ltc_cem_reportpay_balance_summary_dd
-     WHERE dt_month = @dt_month
+      FROM test.dwd_fi_mr_arap_sms_balance_mi
+      WHERE dt_month = @dt_month
 ),
 -- SMS/UREB：按最新装载记录聚合各公司、客商和返利类别的余额。
 sms_sum AS (
@@ -727,7 +654,6 @@ sms_sum AS (
          , leibie
          , SUM(COALESCE(yue, 0)) AS amount
       FROM sms_ranked
-     WHERE rn = 1
      GROUP BY company_code
             , sales_code
             , sname
@@ -753,13 +679,10 @@ sms_fact AS (
          , 'SMS' AS system_src, 'UREB' AS ods_src
          , leibie AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name, n.nature_l2_name AS nature_l2_name, n.nature_l3_name AS nature_l3_name
+         , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
          , '1' AS aging_seg_code, amount AS bcy_amt, amount AS qcy_amt
       FROM sms_sum s
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = s.company_code
-       AND n.nature_cust_code = s.sales_code
      WHERE amount <> 0
 ),
 -- POLICY：保持政策欠付返利的期间筛选、状态维度及非零过滤。
@@ -771,7 +694,7 @@ policy_sum AS (
          , NULL AS profitcenter_name
          , policystatename AS ledger_status
          , SUM(COALESCE(arrears_amount, 0)) AS amount
-      FROM ods.ods_plc_v_hpms_account_gb
+      FROM dwd.dwd_mrs_mc_report_reward_account_detail_new_hi
      WHERE REPLACE(LEFT(period, 7), '-', '') = @dt_month
      GROUP BY sales_group
             , customer_code
@@ -799,67 +722,11 @@ policy_fact AS (
          , 'POLICY' AS system_src, 'POLICY' AS ods_src
          , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name, n.nature_l2_name AS nature_l2_name, n.nature_l3_name AS nature_l3_name
+         , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
          , '1' AS aging_seg_code, amount AS bcy_amt, amount AS qcy_amt
       FROM policy_sum s
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = s.company_code
-       AND n.nature_cust_code = s.cust_code
      WHERE amount <> 0
-),
--- IMOCC：保持ACT数据源筛选，本位币和交易币分别取原始不同金额字段。
-imocc_sum AS (
-    SELECT bukrs AS company_code
-         , kunnr AS cust_code
-         , cust_name AS cust_name
-         , prdln AS bus_range_code
-         , sm AS marketing_dept_code
-         , custfundcode AS src_profitcenter_code
-         , custfundname AS src_profitcenter_name
-         , custfundcode AS profitcenter_code
-         , custfundname AS profitcenter_name
-         , SUM(COALESCE(end_amt_cod_m, 0)) AS bcy_amt
-         , SUM(COALESCE(end_amt_cny_m, 0)) AS qcy_amt
-      FROM ads.ads_fi_mr_accounts_rec_di
-     WHERE REPLACE(LEFT(month_dt, 7), '-', '') = @dt_month
-       AND dsource = 'ACT'
-     GROUP BY bukrs
-            , kunnr
-            , cust_name
-            , prdln
-            , sm
-            , custfundcode
-            , custfundname
-),
--- IMOCC：标准化为窄事实接口。
-imocc_fact AS (
-    SELECT @dt_month AS dt_month, LEFT(@dt_month, 4) AS `year`, RIGHT(@dt_month, 2) AS `month`
-         , company_code, cust_code, cust_name
-         , NULL AS cust_head_code, NULL AS cust_head_name
-         , NULL AS cust_branch_code, NULL AS cust_branch_name
-         , NULL AS cp_company_code, NULL AS country_code, NULL AS country_name
-         , NULL AS acct_type_code, NULL AS acct_src_code, NULL AS acct_map_code
-         , NULL AS channel_l1_code, NULL AS channel_l1_name
-         , NULL AS channel_l2_code, NULL AS channel_l2_name
-         , NULL AS channel_l3_code, NULL AS channel_l3_name
-         , NULL AS onoffline_code, NULL AS onoffline_name
-         , src_profitcenter_code, src_profitcenter_name, profitcenter_code, profitcenter_name
-         , bus_range_code, NULL AS bus_range_name
-         , marketing_dept_code, NULL AS marketing_dept_name
-         , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
-         , 'XS' AS system_src, 'IMOCC' AS ods_src
-         , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
-         , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name, n.nature_l2_name AS nature_l2_name, n.nature_l3_name AS nature_l3_name
-         , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
-         , '1' AS aging_seg_code, bcy_amt AS bcy_amt, qcy_amt AS qcy_amt
-      FROM imocc_sum s
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = s.company_code
-       AND n.nature_cust_code = s.cust_code
-     WHERE COALESCE(bcy_amt, 0) <> 0
-        OR COALESCE(qcy_amt, 0) <> 0
 ),
 -- WRITEOFF：保留科目映射有效期、审核状态、SAP凭证号和科目范围过滤。
 acct_mapping AS (
@@ -936,13 +803,10 @@ writeoff_fact AS (
          , 'CWZT' AS system_src, 'WRITEOFF' AS ods_src
          , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
-         , n.nature_l1_name AS nature_l1_name, n.nature_l2_name AS nature_l2_name, n.nature_l3_name AS nature_l3_name
+         , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
          , '1' AS aging_seg_code, bcy_amt AS bcy_amt, qcy_amt AS qcy_amt
       FROM writeoff_sum s
-      LEFT JOIN detail_nature n
-        ON n.nature_company_code = s.company_code
-       AND n.nature_cust_code = s.cust_code
      WHERE COALESCE(bcy_amt, 0) <> 0
         OR COALESCE(qcy_amt, 0) <> 0
 ),
@@ -976,11 +840,123 @@ standard_fact AS (
 
     UNION ALL
 
-    SELECT * FROM imocc_fact
-
-    UNION ALL
-
     SELECT * FROM writeoff_fact
+),
+-- 读取与DETAIL一致的三级性质规则；规则有效期按目标月份过滤。
+ar_nature_rule AS (
+    SELECT CAST(batch_id AS INT) AS batch_id
+         , company_code
+         , cust_code
+         , profitcenter_code
+         , acct_src_code
+         , acct_type
+         , MAX(nature_l1_name) AS nature_l1_name
+         , MAX(nature_l2_name) AS nature_l2_name
+         , MAX(nature_l3_name) AS nature_l3_name
+      FROM dim.dim_rule_fi_mr_ar_nature
+     WHERE NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY CAST(batch_id AS INT)
+            , company_code
+            , cust_code
+            , profitcenter_code
+            , acct_src_code
+            , acct_type
+),
+-- 非DETAIL来源按DETAIL的batch 1→5规则做一次性匹配，并按 batch 优先级取最小命中。
+ar_nature_candidate AS (
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM standard_fact f
+      LEFT JOIN ar_nature_rule r
+        ON (
+               (r.batch_id = 1
+                AND r.company_code = f.company_code
+                AND r.acct_src_code = f.acct_src_code
+                AND r.acct_type = f.acct_type_code
+                AND r.cust_code = f.cust_code)
+            OR (r.batch_id = 2
+                AND r.company_code = f.company_code
+                AND r.cust_code = f.cust_code)
+            OR (r.batch_id = 3
+                AND r.company_code = f.company_code
+                AND r.acct_src_code = f.acct_src_code
+                AND r.acct_type = f.acct_type_code
+                AND r.profitcenter_code = f.profitcenter_code)
+            OR (r.batch_id = 4
+                AND r.company_code = f.company_code
+                AND r.acct_src_code = f.acct_src_code
+                AND r.acct_type = f.acct_type_code)
+            OR (r.batch_id = 5
+                AND r.acct_src_code = f.acct_src_code
+                AND r.acct_type = f.acct_type_code
+                AND r.cust_code = f.cust_code)
+           )
+     WHERE f.system_src NOT IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810')
+       AND r.batch_id IS NOT NULL
+),
+-- 同一来源事实按 batch 优先级取最小命中，避免重复匹配与重复JOIN。
+ar_nature_pick AS (
+    SELECT system_src
+         , ods_src
+         , company_code
+         , cust_code
+         , acct_src_code
+         , acct_type_code
+         , profitcenter_code
+         , nature_l1_name AS mapped_nature_l1_name
+         , nature_l2_name AS mapped_nature_l2_name
+         , nature_l3_name AS mapped_nature_l3_name
+      FROM (
+            SELECT c.system_src
+                 , c.ods_src
+                 , c.company_code
+                 , c.cust_code
+                 , c.acct_src_code
+                 , c.acct_type_code
+                 , c.profitcenter_code
+                 , c.nature_l1_name
+                 , c.nature_l2_name
+                 , c.nature_l3_name
+                 , ROW_NUMBER() OVER (
+                       PARTITION BY c.system_src
+                                  , c.ods_src
+                                  , c.company_code
+                                  , c.cust_code
+                                  , c.acct_src_code
+                                  , c.acct_type_code
+                                  , c.profitcenter_code
+                       ORDER BY c.batch_id
+                   ) AS rn
+              FROM ar_nature_candidate c
+      ) x
+     WHERE x.rn = 1
+),
+-- DETAIL直接沿用明细已计算性质，其他来源使用与DETAIL一致的规则结果。
+standard_fact_with_nature AS (
+    SELECT f.*
+         , n.mapped_nature_l1_name
+         , n.mapped_nature_l2_name
+         , n.mapped_nature_l3_name
+      FROM standard_fact f
+      LEFT JOIN ar_nature_pick n
+        ON f.system_src NOT IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810')
+       AND COALESCE(n.system_src, '') = COALESCE(f.system_src, '')
+       AND COALESCE(n.ods_src, '') = COALESCE(f.ods_src, '')
+       AND COALESCE(n.company_code, '') = COALESCE(f.company_code, '')
+       AND COALESCE(n.cust_code, '') = COALESCE(f.cust_code, '')
+       AND COALESCE(n.acct_src_code, '') = COALESCE(f.acct_src_code, '')
+       AND COALESCE(n.acct_type_code, '') = COALESCE(f.acct_type_code, '')
+       AND COALESCE(n.profitcenter_code, '') = COALESCE(f.profitcenter_code, '')
 ),
 -- 统一外层按完整报告维度汇总；system_src、ods_src纳入维度，账龄金额在本层统一展开。
 report_pivot AS (
@@ -1027,9 +1003,18 @@ report_pivot AS (
          , ledger_status
          , acct_cert_type
          , tax_rate
-         , nature_l1_name
-         , nature_l2_name
-         , nature_l3_name
+         , CASE
+               WHEN system_src IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810') THEN nature_l1_name
+               ELSE COALESCE(mapped_nature_l1_name, nature_l1_name)
+           END AS nature_l1_name
+         , CASE
+               WHEN system_src IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810') THEN nature_l2_name
+               ELSE COALESCE(mapped_nature_l2_name, nature_l2_name)
+           END AS nature_l2_name
+         , CASE
+               WHEN system_src IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810') THEN nature_l3_name
+               ELSE COALESCE(mapped_nature_l3_name, nature_l3_name)
+           END AS nature_l3_name
          , exchange_rate_eval_flag
          , is_apar_flag
          , SUM(CASE WHEN aging_seg_code IN ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15') THEN bcy_amt ELSE 0 END) AS bcy_0_amt
@@ -1064,7 +1049,7 @@ report_pivot AS (
          , SUM(CASE WHEN aging_seg_code = '13' THEN qcy_amt ELSE 0 END) AS qcy_13_amt
          , SUM(CASE WHEN aging_seg_code = '14' THEN qcy_amt ELSE 0 END) AS qcy_14_amt
          , SUM(CASE WHEN aging_seg_code = '15' THEN qcy_amt ELSE 0 END) AS qcy_15_amt
-      FROM standard_fact
+      FROM standard_fact_with_nature
      GROUP BY dt_month
             , `year`
             , `month`
@@ -1103,12 +1088,23 @@ report_pivot AS (
             , system_src
             , ods_src
             , reb_type
+            , ufee_ureb_flag
+            , ecls_flag
             , ledger_status
             , acct_cert_type
             , tax_rate
-            , nature_l1_name
-            , nature_l2_name
-            , nature_l3_name
+            , CASE
+                  WHEN system_src IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810') THEN nature_l1_name
+                  ELSE COALESCE(mapped_nature_l1_name, nature_l1_name)
+              END
+            , CASE
+                  WHEN system_src IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810') THEN nature_l2_name
+                  ELSE COALESCE(mapped_nature_l2_name, nature_l2_name)
+              END
+            , CASE
+                  WHEN system_src IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810') THEN nature_l3_name
+                  ELSE COALESCE(mapped_nature_l3_name, nature_l3_name)
+              END
             , exchange_rate_eval_flag
             , is_apar_flag
 )
@@ -1209,7 +1205,7 @@ SELECT p.dt_month
 -- 3. 九类来源均先输出统一窄事实接口，再以 UNION ALL 合并；最终按完整报告维度（含system_src、ods_src）汇总，避免跨来源误并。
 -- 4. DETAIL保留真实 aging_seg_code；其他来源统一设置为'1'，最终0桶由1至15桶汇总，保证0桶等于1至15桶之和。
 -- 5. 信汇按原票据去重、月末日期、生效月份、失效状态、公司排除清单及9002特殊映射执行；应收为正、应付为负。
--- 6. SMS/UREB仍按dt_month、company_code、sales_code、sname、leibie取最新load_dt并排除零金额；OVERDUE、INV_SAMPLE均取dws.dws_fi_mr_ar_overdue_mi，POLICY、IMOCC、WRITEOFF的金额、过滤与来源维度均保留原口径。
+-- 6. SMS/UREB使用外围系统 SQL 计算截至参数月末的余额并排除零金额；OVERDUE、INV_SAMPLE均取dws.dws_fi_mr_ar_overdue_mi，POLICY、IMOCC、WRITEOFF的金额、过滤与来源维度均保留原口径。
 -- 7. WRITEOFF仍限定已审核、有SAP凭证号及指定科目范围，并按有效期取科目映射；上线前核对其物理表名。另需核对SMS源表dt_month/load_dt及IMOCC month_dt格式。
 -- 8. 付款条件在最终金额汇总后，按system_src + company_code + cust_code左关联cterm_dedup，避免关联放大金额。
 -- ============================================================================
