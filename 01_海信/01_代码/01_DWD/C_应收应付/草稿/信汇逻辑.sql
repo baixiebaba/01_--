@@ -1,7 +1,7 @@
 WITH AZI AS  /*公司 + 法定总部*/
-(SELECT SEDE_LEGALE,MIN(COD_AZIENDA) AS COD_AZIENDA 
+(SELECT sede_legale,MIN(cod_azienda) AS cod_azienda 
    FROM TGK_GB_HISENSE.AZIENDA
-  WHERE SEDE_LEGALE IS NOT NULL GROUP BY SEDE_LEGALE
+  WHERE sede_legale IS NOT NULL GROUP BY sede_legale
 )
 /*处理子区间格式*/
 , XH AS (

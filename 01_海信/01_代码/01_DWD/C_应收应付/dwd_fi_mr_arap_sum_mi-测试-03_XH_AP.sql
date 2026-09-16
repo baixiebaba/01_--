@@ -79,7 +79,10 @@ xh_company AS (
         ON ar_map.account_no = x.hold_customer_account
       LEFT JOIN ods.odsfima_azienda ap_azi
         ON ap_azi.sede_legale = x.credit_customer_code
-      LEFT JOIN ods.odsfima_azienda ar_azi
+      LEFT JOIN (SELECT sede_legale,MIN(cod_azienda) AS cod_azienda
+                   FROM ods.odsfima_azienda
+                  WHERE sede_legale IS NOT NULL GROUP BY sede_legale
+                ) ar_azi
         ON ar_azi.sede_legale = x.receive_credit_code
      WHERE x.rn = 1
        AND COALESCE(x.bill_status, '') <> '9999'

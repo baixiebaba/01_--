@@ -9,7 +9,7 @@
 */
 
 -- 运行月份基准日；本脚本与下方最终 SELECT 必须在同一 session 中按顺序执行。
-SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
 
