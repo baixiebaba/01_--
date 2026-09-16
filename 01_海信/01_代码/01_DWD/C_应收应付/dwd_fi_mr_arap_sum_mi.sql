@@ -417,7 +417,7 @@ xh_company AS (
                 ) ar_azi
         ON ar_azi.sede_legale = x.receive_credit_code
      WHERE x.rn = 1
-       AND COALESCE(x.bill_status, '') <> '9999'
+       AND COALESCE(x.bill_status, '') <> 9999
 ),
 -- XH应收：按公司对、SIGN_DATE和账龄天数汇总，保留原公司排除范围与非零金额过滤。
 xh_ar_sum AS (
