@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sms_balance_mi (
     , company_code VARCHAR(8) COMMENT '组织'
     , orgname VARCHAR(20) COMMENT '分公司'
     , sales_code VARCHAR(30) COMMENT '客商编码'
-    , sname VARCHAR(30) COMMENT '客商描述'
+    , sname VARCHAR(500) COMMENT '客商描述'
     , leibie VARCHAR(30) COMMENT '类别'
     , fanlicurfanli DECIMALV3(27, 9) COMMENT '上月余额'
     , curfanli DECIMALV3(27, 9) COMMENT '当月增加'

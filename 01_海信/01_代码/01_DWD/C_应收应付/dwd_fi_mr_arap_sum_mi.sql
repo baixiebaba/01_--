@@ -15,7 +15,7 @@ SET @dt_month = LEFT(@year_month_day, 6);
 -- 统计截止日期：取参数月份月末，供SMS外围系统SQL使用。
 SET @end_date = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
 -- 以上SET与下方单条INSERT OVERWRITE必须在同一session中依次执行。
-INSERT INTO test.dwd_fi_mr_arap_sum_mi (dt_month) VALUES (@dt_month);
+set enable_auto_create_when_overwrite=true;
 
 -- ============================================================================
 -- 目标表装载：九类来源统一为窄事实接口后合并、汇总并一次覆盖目标分区。

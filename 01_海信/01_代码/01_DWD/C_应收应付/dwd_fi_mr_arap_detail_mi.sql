@@ -23,9 +23,7 @@ SET @fiscal_month = SUBSTR(@year_month_day, 5, 2);
 SET @min_aging_date_sap = '00010101';
 -- 以上SET与下方两段INSERT必须在同一session中依次执行。
 
--- 确保目标月份自动分区已创建；该占位行会被第一段覆盖写入清除。
-INSERT INTO test.dwd_fi_mr_arap_detail_mi (dt_month) VALUES (@dt_month);
-
+set enable_auto_create_when_overwrite=true;
 -- ============================================================================
 -- 第一段：统驭科目凭证行项目。
 -- 仅处理六套SAP的BSID/BSAD/BSIK/BSAK；按参数月覆盖目标月份分区。

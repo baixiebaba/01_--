@@ -15,7 +15,7 @@ SET @dt_month = LEFT(@year_month_day, 6);
 -- 统计截止日期：取参数月份月末，供SMS外围系统SQL使用。
 SET @end_date = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
 -- 以上SET与下方单条INSERT OVERWRITE必须在同一session中依次执行。
-INSERT INTO test.dwd_fi_mr_arap_sms_balance_mi (dt_month) VALUES (@dt_month);
+set enable_auto_create_when_overwrite=true;
 
 INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sms_balance_mi PARTITION (*)
 (
