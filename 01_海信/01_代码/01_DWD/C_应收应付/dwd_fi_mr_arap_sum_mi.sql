@@ -599,7 +599,7 @@ xh_ap_fact AS (
         ON n.nature_company_code = x.ap_bukrs
        AND n.nature_cust_code = CONCAT('XH_', COALESCE(x.ar_bukrs, 'Z001'))
 ),
--- OVERDUE：保持超期款金额为 overdue_amt - overdue_adj_amt。
+-- OVERDUE：start_dt为参数月下月月初，代表参数月数据；金额为 overdue_amt - overdue_adj_amt，并过滤零金额。
 overdue_src AS (
     SELECT ledge_code AS company_code
          , gl_account AS acct_src_code
@@ -609,7 +609,13 @@ overdue_src AS (
          , profit_center_name AS profitcenter_name
          , SUM(COALESCE(overdue_amt, 0) - COALESCE(overdue_adj_amt, 0)) AS amount
       FROM dws.dws_fi_mr_ar_overdue_mi
-     WHERE DATE_FORMAT(start_dt, '%Y%m') = @dt_month
+     WHERE DATE_FORMAT(start_dt, '%Y%m%d') = DATE_FORMAT(
+                               DATE_ADD(
+                                   STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
+                                 , INTERVAL 1 MONTH
+                               )
+                             , '%Y%m%d'
+                         )
      GROUP BY ledge_code
             , gl_account
             , cust_code
@@ -646,7 +652,7 @@ overdue_fact AS (
         ON n.nature_company_code = s.company_code
        AND n.nature_cust_code = s.cust_code
 ),
--- INV_SAMPLE：保持开票样机额度独立来源及 inv_sample_amt 金额口径。
+-- INV_SAMPLE：start_dt为参数月下月月初，代表参数月数据；金额使用 inv_sample_amt，并过滤零金额。
 sample_src AS (
     SELECT ledge_code AS company_code
          , gl_account AS acct_src_code
@@ -656,7 +662,13 @@ sample_src AS (
          , profit_center_name AS profitcenter_name
          , SUM(COALESCE(inv_sample_amt, 0)) AS amount
       FROM dws.dws_fi_mr_ar_overdue_mi
-     WHERE DATE_FORMAT(start_dt, '%Y%m') = @dt_month
+     WHERE DATE_FORMAT(start_dt, '%Y%m%d') = DATE_FORMAT(
+                               DATE_ADD(
+                                   STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
+                                 , INTERVAL 1 MONTH
+                               )
+                             , '%Y%m%d'
+                         )
      GROUP BY ledge_code
             , gl_account
             , cust_code

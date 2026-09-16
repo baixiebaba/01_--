@@ -27,7 +27,7 @@ detail_nature AS (
      GROUP BY company_code
             , cust_code
 ),
--- INV_SAMPLE：按月、公司、科目、客商和利润中心汇总开票样机额度，并过滤零金额。
+-- INV_SAMPLE：start_dt为参数月下月月初，代表参数月数据；按公司、科目、客商和利润中心汇总开票样机额度，并过滤零金额。
 sample_src AS (
     SELECT ledge_code AS company_code
          , gl_account AS acct_src_code
@@ -37,7 +37,13 @@ sample_src AS (
          , profit_center_name AS profitcenter_name
          , SUM(COALESCE(inv_sample_amt, 0)) AS amount
       FROM dws.dws_fi_mr_ar_overdue_mi
-     WHERE DATE_FORMAT(start_dt, '%Y%m') = @dt_month
+     WHERE DATE_FORMAT(start_dt, '%Y%m%d') = DATE_FORMAT(
+                               DATE_ADD(
+                                   STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
+                                 , INTERVAL 1 MONTH
+                               )
+                             , '%Y%m%d'
+                         )
      GROUP BY ledge_code
             , gl_account
             , cust_code

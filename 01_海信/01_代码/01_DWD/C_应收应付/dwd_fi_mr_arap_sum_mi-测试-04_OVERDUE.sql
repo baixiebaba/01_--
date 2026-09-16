@@ -27,7 +27,7 @@ detail_nature AS (
      GROUP BY company_code
             , cust_code
 ),
--- OVERDUE：按月、公司、科目、客商和利润中心汇总超期款净额，并过滤零金额。
+-- OVERDUE：start_dt为参数月下月月初，代表参数月数据；按公司、科目、客商和利润中心汇总超期款净额，并过滤零金额。
 overdue_src AS (
     SELECT ledge_code AS company_code
          , gl_account AS acct_src_code
@@ -37,7 +37,13 @@ overdue_src AS (
          , profit_center_name AS profitcenter_name
          , SUM(COALESCE(overdue_amt, 0) - COALESCE(overdue_adj_amt, 0)) AS amount
       FROM dws.dws_fi_mr_ar_overdue_mi
-     WHERE DATE_FORMAT(start_dt, '%Y%m') = @dt_month
+     WHERE DATE_FORMAT(start_dt, '%Y%m%d') = DATE_FORMAT(
+                               DATE_ADD(
+                                   STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
+                                 , INTERVAL 1 MONTH
+                               )
+                             , '%Y%m%d'
+                         )
      GROUP BY ledge_code
             , gl_account
             , cust_code
