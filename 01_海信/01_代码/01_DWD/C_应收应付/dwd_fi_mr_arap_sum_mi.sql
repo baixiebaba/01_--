@@ -636,28 +636,27 @@ sample_fact AS (
       FROM overdue_sample_src s
      WHERE COALESCE(inv_sample_amount, 0) <> 0
 ),
--- SMS/UREB：使用外围系统 SQL 计算截至参数月末的余额后再汇总。
-sms_ranked AS (
-    SELECT company_code
-         , sales_code
-         , sname
-         , yue
-         , leibie
-      FROM test.dwd_fi_mr_arap_sms_balance_mi
-      WHERE dt_month = @dt_month
-),
 -- SMS/UREB：按最新装载记录聚合各公司、客商和返利类别的余额。
 sms_sum AS (
     SELECT company_code
-         , sales_code
+         , org_map.cod_azienda sales_code
          , sname
+         , SUM(yue) AS amount
          , leibie
-         , SUM(COALESCE(yue, 0)) AS amount
-      FROM sms_ranked
+      FROM test.dwd_fi_mr_arap_sms_balance_mi a 
+      LEFT JOIN (
+                  SELECT DISTINCT TRIM(ent_sap700_code) AS ent_sap700_code
+                       , TRIM(cod_azienda) AS cod_azienda
+                    FROM ods.odsfima_aw_rul_revaaz_000001
+                   WHERE NULLIF(TRIM(ent_sap700_code), '') IS NOT NULL
+                ) org_map
+        ON a.company_code = org_map.ent_sap700_code
+     WHERE dt_month = @dt_month
      GROUP BY company_code
-            , sales_code
+            , org_map.cod_azienda
             , sname
             , leibie
+     HAVING SUM(yue) <> 0
 ),
 -- SMS/UREB：标准化为窄事实接口。
 sms_fact AS (

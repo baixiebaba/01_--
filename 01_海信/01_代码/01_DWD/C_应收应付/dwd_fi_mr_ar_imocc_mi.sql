@@ -282,4 +282,6 @@ SELECT @dt_month AS dt_month
      , imocc_usd_amt
      , 'ads.ads_fi_mr_accounts_rec_di' AS ods_src
      , NOW() AS load_dt
-  FROM imocc_enriched;
+  FROM imocc_enriched
+
+  ;
