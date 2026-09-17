@@ -155,10 +155,10 @@ src_t001 AS (
     SELECT 'S900' AS system_src, bukrs, ktopl, waers
       FROM ods.odss900_t001
 
-    UNION ALL
+    -- UNION ALL
 
-    SELECT 'S610' AS system_src, bukrs, ktopl, waers
-      FROM ods.odss610_t001
+    -- SELECT 'S610' AS system_src, bukrs, ktopl, waers
+    --   FROM ods.odss610_t001
 
     UNION ALL
 
@@ -346,10 +346,10 @@ src_cepct AS (
     SELECT 'S900' AS system_src, prctr, spras, ktext
       FROM ods.odss900_cepct
 
-    UNION ALL
+    -- UNION ALL
 
-    SELECT 'S610' AS system_src, prctr, spras, ktext
-      FROM ods.odss610_cepct
+    -- SELECT 'S610' AS system_src, prctr, spras, ktext
+    --   FROM ods.odss610_cepct
 
     UNION ALL
 
@@ -384,7 +384,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S800' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s800_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -392,7 +392,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s900_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -400,7 +400,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S610' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S610' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
       FROM ods.odss610_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -408,7 +408,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S810' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S810' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s810_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -444,7 +444,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S800' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s800_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -453,7 +453,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s900_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -462,7 +462,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S610' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S610' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odss610_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -471,7 +471,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S810' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S810' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s810_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -862,7 +862,7 @@ ar_profit_mapping AS (
 ar_nf_rule AS (
     SELECT CAST(r.batch_id AS INT) AS batch_id
          , r.company_code
-         , r.channel_l2_code
+         , r.channel_l1_code
          , r.channel_l3_code
          , MAX(r.onoffline_code) AS onoffline_code
          , MAX(r.onoffline_name) AS onoffline_name
@@ -871,7 +871,7 @@ ar_nf_rule AS (
        AND NVL(r.valid_to, '999999') >= @dt_month
      GROUP BY CAST(r.batch_id AS INT)
             , r.company_code
-            , r.channel_l2_code
+            , r.channel_l1_code
             , r.channel_l3_code
 ),
 -- 读取收入模块线上线下规则，并展开公司包含关系；同一匹配键的重复配置使用MAX聚合。
@@ -915,7 +915,7 @@ nf_match_base AS (
                ELSE a.cust_head_code
            END AS cust_code
          , ctp.cp_company_code
-         , ch.com_2nd_code AS channel_l2_code
+         , ch.com_1st_code AS channel_l1_code
          , ch.com_3rd_code AS channel_l3_code
       FROM normalized_items a
       LEFT JOIN customer_dim c
@@ -955,7 +955,7 @@ ar_nf_candidate AS (
         OR (
                r.batch_id = 2
            AND r.company_code = b.company_code
-           AND r.channel_l2_code = b.channel_l2_code
+           AND r.channel_l1_code = b.channel_l1_code
            )
         OR (
                r.batch_id = 3
@@ -1080,6 +1080,7 @@ ar_mapping_base AS (
          , a.acct_map_code
          , a.acct_type_code
          , a.cust_head_code AS cust_code
+         , ch.com_1st_code AS channel_l1_code
          , ch.com_2nd_code AS channel_l2_code
          , ch.country_code
          , pm.profitcenter_code
@@ -1154,7 +1155,6 @@ ar_nature_candidate AS (
         ON r.batch_id = 1
        AND r.company_code = b.company_code
        AND r.acct_map_code = b.acct_src_code
-       AND r.acct_type = b.acct_type_code
        AND r.cust_code = b.cust_code
     UNION ALL
     SELECT b.fact_key
@@ -1178,7 +1178,6 @@ ar_nature_candidate AS (
         ON r.batch_id = 3
        AND r.company_code = b.company_code
        AND r.acct_map_code = b.acct_src_code
-       AND r.acct_type = b.acct_type_code
        AND r.profitcenter_code = b.profitcenter_code
     UNION ALL
     SELECT b.fact_key
@@ -1191,7 +1190,6 @@ ar_nature_candidate AS (
         ON r.batch_id = 4
        AND r.company_code = b.company_code
        AND r.acct_map_code = b.acct_src_code
-       AND r.acct_type = b.acct_type_code
     UNION ALL
     SELECT b.fact_key
          , r.batch_id
@@ -1202,7 +1200,6 @@ ar_nature_candidate AS (
      INNER JOIN ar_nature_rule r
         ON r.batch_id = 5
        AND r.acct_map_code = b.acct_src_code
-       AND r.acct_type = b.acct_type_code
        AND r.cust_code = b.cust_code
 ),
 -- 按最小批次优先原则确定三级性质。

@@ -168,7 +168,7 @@ ex_rate_company_rule AS (
 ),
 -- 汇率评估规则第二匹配方式：按SAP系统和原始科目识别M标识。
 ex_rate_account_rule AS (
-    SELECT system_src
+    SELECT CONCAT('S',system_src) AS system_src
          , acct_src_code
          , 1 AS matched
       FROM dim.dim_rule_fi_mr_ar_ex_rate_eval_range
@@ -181,7 +181,7 @@ ex_rate_account_rule AS (
 -- 读取账龄表进数范围规则，EX类型优先输出N，IN1命中时输出Y。
 apar_range_rule AS (
     SELECT logic_name
-         , system_src
+         , CONCAT('S',system_src) AS system_src
          , company_code
          , acct_src_code
          , cust_code
@@ -229,7 +229,7 @@ ecls_match AS (
 -- 在明细事实粒度计算五个新增字段，保留税率、汇率评估和账龄进数的优先级。
 detail_rule_base AS (
     SELECT d.*
-         , COALESCE(t1.tax_rate, t2.tax_rate, t3.tax_rate) AS tax_rate
+         , COALESCE(t1.tax_rate, t2.tax_rate, t3.tax_rate,0.13) AS tax_rate
          , CASE
                WHEN erc.matched IS NOT NULL AND era.matched IS NOT NULL THEN 'SM'
                WHEN erc.matched IS NOT NULL THEN 'S'
@@ -242,10 +242,10 @@ detail_rule_base AS (
                WHEN in1.logic_name IS NOT NULL THEN 'Y'
            END AS is_apar_flag
          , CASE
-               WHEN d.acct_cert_type = 'zz'
+               WHEN d.acct_cert_type = 'ZZ'
                 AND d.pay_reason_code = '800'
                 AND d.acct_map_code LIKE '1122%' THEN 'UFEE'
-               WHEN d.acct_cert_type = 'zz'
+               WHEN d.acct_cert_type = 'ZZ'
                 AND d.pay_reason_code = '600'
                 AND d.acct_map_code LIKE '1122%' THEN 'UREB'
            END AS ufee_ureb_flag
@@ -1348,24 +1348,6 @@ SELECT dt_month
      , company_code
      , cust_code
      , cust_name
-     , NULL AS cust_head_code
-     , NULL AS cust_head_name
-     , NULL AS cust_branch_code
-     , NULL AS cust_branch_name
-     , NULL AS cp_company_code
-     , NULL AS country_code
-     , NULL AS country_name
-     , NULL AS acct_type_code
-     , '1122000000' AS acct_src_code
-     , '1122000000' AS acct_map_code
-     , NULL AS channel_l1_code
-     , NULL AS channel_l1_name
-     , NULL AS channel_l2_code
-     , NULL AS channel_l2_name
-     , NULL AS channel_l3_code
-     , NULL AS channel_l3_name
-     , NULL AS onoffline_code
-     , NULL AS onoffline_name
      , src_profitcenter_code
      , src_profitcenter_name
      , profitcenter_code
@@ -1409,7 +1391,7 @@ SELECT dt_month
      , 0 AS qcy_13_amt
      , 0 AS qcy_14_amt
      , 0 AS qcy_15_amt
-     , system_src
+     , NULL AS system_src
      , 'EPAY' AS ods_src
      , NULL AS reb_type
      , NULL AS ufee_ureb_flag
