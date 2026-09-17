@@ -1,7 +1,7 @@
 # 数据字典与ER关系知识库
 
 > 生成时间: 2026-07-29
-> 更新时间: 2026-09-10（核对应收应付三张DWD建表语句，统一补充 DWD_FI_MR_ARAP_DETAIL_MI 与 DWD_FI_MR_ARAP_SUM_MI 的 PAYS_TRAN 长度为100）
+> 更新时间: 2026-09-16（读取最新应收应付 Detail、Sum、客户账期和 SMS 返利余额脚本及建表语句，补充 SMS 余额表并修订 Sum 最新来源与执行口径）
 > 历史更新: 2026-09-02（新增 DWD_FI_AR_AGE_DETAIL_MI 应收账龄/坏账计提宽表设计条目，300字段，含修正记录）；2026-08-12（补充 Doris 毛利明细表物理设计，以及 DETAIL → MSUM 字段裁剪、聚合粒度和刷新血缘）
 > 数据来源: 存储过程SQL解析 + TABLE_COL.xlsx数据库导出 + ALLVIEW视图定义
 
@@ -18023,7 +18023,7 @@ CPM_KPI_RESULT (KPI计算结果)
 **数据粒度**: 统驭数据保留 `system_src + company_code + acct_cert_id + acct_cert_item + ods_src` 凭证行项目粒度；非统驭余额按 `system_src + company_code + acct_type_code + acct_src_code + src_profitcenter_code + bus_range_code + qcy_code + ods_src` 汇总。
 **统驭行项目血缘**: 六套 `ods.odss{600/700/800/900/610/810}_{bsid/bsad/bsik/bsak}`；通过对应系统 `ZT...003 → T001 → SKB1` 限定 `MITKZ IN ('D','K')`。各物理源分支直接下推月末快照过滤：未清表限制 `BUDAT <= 参数月末`，已清表另限制 `AUGDT > 参数月末`，并统一排除 `BSTAT IN ('A','S')`；`all_items` 不再重复关联参数或过滤。账龄起算日期按优先级确定：`BLART='AB'` 取 `ZFBDT`；否则 `dim.dim_rule_fi_mr_ar_agingdate` 按有效月份命中来源系统+公司级规则时取 `ZFBDT`；未命中公司级但命中空公司系统级规则时取 `ZFBDT`；其余取 `BLDAT`。配置按归一化 `system_src + company_code` 分组去重，并分别关联公司级和系统级规则，避免复制事实行。`SHKZG='H'` 时本位币和交易币金额取负；客户、供应商及分户编码去前导零，最终客商优先取分户。
 **非统驭余额血缘**: `ods.ods_slt_s600_faglflext`、`ods.ods_slt_s700_faglflext`、`ods.ods_slt_s800_glfunct`、`ods.ods_slt_s900_glfunct`、`ods.ods_slt_s810_faglflext`、`ods.ods_s680_faglflext`；`system_src=CONCAT('S',RCLNT)`。通过六系统 `ZT...003 → T001 → SKB1` 仅保留 `MITKZ` 为空且 `KOART IN ('D','K')` 的科目；金额取 `HSLVT/TSLVT + 01期至参数月累计发生额`，每项空值按0处理，并剔除本位币、交易币均为0的组合。余额行基准日期取参数月末、账龄天数固定为1。
-**维度补充**: 账龄日期配置 `dim.dim_rule_fi_mr_ar_agingdate` 按参数月份过滤有效期，仅使用 `agingdate='基准日期-zfdat'` 的记录；空 `company_code` 表示该来源系统下全部公司使用 `ZFBDT`，非空表示指定公司使用 `ZFBDT`。科目映射按原始科目、来源系统和有效月份取唯一记录；客户/供应商名称分别取 KNA1/LFA1，分户名称按对象类型匹配；国家和客户分类通过 MDG 客商编码关联客户基础维；对方公司取客商映射；本位币取 T001；原始利润中心名称取 `SPRAS='1'` 的 CEPCT。
+**维度补充**: 账龄日期配置 `dim.dim_rule_fi_mr_ar_agingdate` 按参数月份过滤有效期，仅使用 `agingdate='基准日期-zfdat'` 的记录；空 `company_code` 表示该来源系统下全部公司使用 `ZFBDT`，非空表示指定公司使用 `ZFBDT`。科目编码按原始科目、来源系统和有效月份处理：S600 直接使用映射前原始科目，其他 SAP 系统按 `dim.dim_rule_fi_mr_acct_mapping` 取映射后科目；客户/供应商名称分别取 KNA1/LFA1，分户名称按对象类型匹配；国家和客户分类通过 MDG 客商编码关联客户基础维；对方公司取客商映射；本位币取 T001；原始利润中心名称取 `SPRAS='1'` 的 CEPCT。
 **待确认项**: 现有科目余额脚本以 `ods.ods_s680_faglflext` 承载 S610 余额，必须上线前确认该表 `RCLNT=610`；SAP 日期字段需为固定 `YYYYMMDD`；需确认账龄配置表 `valid_fr/valid_to` 支持 `YYYYMM` 字符串比较、空公司语义及 `agingdate='基准日期-zfdat'` 实际值，并治理同一有效月、系统、公司的重叠配置；余额累计当前假定财年期间与自然年月一致；周转渠道、商冷客户群、渠道分组、映射后利润中心、业务范围名称、业务管理单元和账龄段尚无可靠配置表，暂直接使用 `NULL`。
 
 | 字段名 | 类型 | 长度/精度 | 可空 | 含义 |
@@ -18086,6 +18086,32 @@ CPM_KPI_RESULT (KPI计算结果)
 | SYSTEM_SRC | VARCHAR2 | 150 | Y | 来源系统，如S600 |
 | ODS_SRC | VARCHAR2 | 200 | Y | 数据来源，BSID/BSAD/BSIK/BSAK/FAGLFLEXT/GLFUNCT |
 | LOAD_DT | DATE | 7 | Y | 更新时间，使用NOW()写入DATE |
+
+#### DWD_FI_MR_ARAP_SMS_BALANCE_MI
+**说明**: SMS返利余额月报表；DWD 层事实表，为往来账龄汇总表提供 SMS/UREB 来源的返利余额、返利性质和客商余额数据。
+**目标表**: `test.dwd_fi_mr_arap_sms_balance_mi`
+**数仓目录**: 管理财经 → 财报管理 → 应收。
+**更新方式**: 按参数月份全量 `INSERT OVERWRITE`；`@end_date` 取参数月份月末，外围 SQL 分别计算累计返利/已使用/余额、当月增加和当年增加；`load_dt` 使用 `NOW()` 写入，当前物理字段为 DATE。
+**数据粒度**: `dt_month + company_code + sales_code + leibie`；目标表 DUPLICATE KEY 当前为 `dt_month + company_code`，上线前需确认该 Key 是否足以支撑客商和类别粒度，避免同月同组织多行产生覆盖或非预期 DUPLICATE 行。
+**主血缘**: 来源于 `ODSEMP_SMS_HAC_HISE_OTHER_FEE`，关联 `ODSEMP_SMS_HAC_hise_sales_info` 获取客商编码/名称，关联 `ODSEMP_SMS_HAC_hise_dept` 获取分公司，关联 `ODSEMP_SMS_HAC_his_codelist`（`kindvalue='back_fee_type'`）获取返利类别；FH 来源进一步关联 `ODSEMP_SMS_HAC_hise_tr_notice`，仅保留通知状态 `2/3/4/5/6/7`。
+**业务规则**: 普通费用发生额进入 `fanli`；退换货返还按负数冲减 `yishiyong`；FH 来源按费用类别从通知表折算已使用；累计余额 `yue = fanli - yishiyong`；上月余额 `fanlicurfanli = fanli - curfanli`；当月增加按 `action_date` 所在月取值；当年增加按 `action_date` 所在年取值；排除指定 `source_type` 和无效备注/来源条件。
+**Sum 血缘**: `dwd_fi_mr_arap_sum_mi.sql` 读取本表当月 `yue`，按 `company_code + sales_code + sname + leibie` 汇总，写入 `system_src='SMS'`、`ods_src='UREB'`，`leibie` 写入 `reb_type`，金额进入账龄段1；零金额不写入 Sum。
+
+| 字段名 | 类型 | 长度/精度 | 可空 | 含义 |
+|--------|------|-----------|------|------|
+| DT_MONTH | VARCHAR2 | 6 | Y | 年月YYYYMM |
+| COMPANY_CODE | VARCHAR2 | 8 | Y | 组织 |
+| ORGNAME | VARCHAR2 | 20 | Y | 分公司 |
+| SALES_CODE | VARCHAR2 | 30 | Y | 客商编码 |
+| SNAME | VARCHAR2 | 500 | Y | 客商描述 |
+| LEIBIE | VARCHAR2 | 30 | Y | 返利/费用类别 |
+| FANLICURFANLI | DECIMALV3 | 27,9 | Y | 上月余额，累计返利额减当月增加 |
+| CURFANLI | DECIMALV3 | 27,9 | Y | 当月增加，参数月内新增返利 |
+| CURYEARFANLI | DECIMALV3 | 27,9 | Y | 当年增加，参数年内新增返利 |
+| FANLI | DECIMALV3 | 27,9 | Y | 返利额，截止参数月末累计值 |
+| YISHIYONG | DECIMALV3 | 27,9 | Y | 已经使用，截止参数月末累计值 |
+| YUE | DECIMALV3 | 27,9 | Y | 余额，等于 FANLI - YISHIYONG |
+| LOAD_DT | DATE | 7 | Y | 更新时间，使用 NOW() 写入，DATE 类型只保留日期 |
 
 #### DWD_FI_MR_AR_CTERM_MD
 **说明**: 客户账期明细表；DWD 层事实表，根据 SAP 客户主数据相关表单形成每个客户的付款条件明细信息。
@@ -64363,17 +64389,16 @@ WHERE ELEM = :cod_conto;
 
 
 #### DWD_FI_MR_ARAP_SUM_MI
-**说明**: 往来账龄汇总表；DWD 层月度汇总事实表，按统一 82 列接口接收 detail、信汇、超期款、开票样机、SMS 欠付返利、政策欠付返利、国际营销应收占用和核销金额来源。
+**说明**: 往来账龄汇总表；DWD 层月度汇总事实表，将 DETAIL、信汇、超期款、开票样机、SMS、政策返利、国际营销应收占用和核销等来源统一为窄事实后，按完整业务维度汇总 BCY/QCY 账龄金额。
 **目标表**: `test.dwd_fi_mr_arap_sum_mi`
-**更新方式**: 按参数月份重跑；先删除目标月份数据，再由各来源分别执行独立 `INSERT`。本脚本不做跨来源合并，也不使用多次 `INSERT OVERWRITE`，避免后续来源覆盖前面来源。
-**来源接口**: detail 使用 `test.dwd_fi_mr_arap_detail_mi`；信汇使用 `ods.odsmt_fin_bill_view_data`；超期款和开票样机使用 `dws.dws_fi_mr_wtzjcqkmx_mi`；SMS 使用 `dwd_ltc_cem_reportpay_balance_summary_dd`；政策返利使用 `ods.ods_plc_v_hpms_account_gb`；国际营销使用 `ads.ads_fi_mr_accounts_rec_di`；核销使用坏账核销审核及明细表，仅取 `WRITEOFF` 逻辑。
-**付款条件来源**: detail 使用 `test.dwd_fi_mr_ar_cterm_md`，按 `system_src + company_code + cust_code` 左关联；关联前按同一粒度聚合为最多一行，避免一对多关联放大金额。补充来源没有对应账期字段时写 NULL。
-**科目排除**: detail sum 层排除 `acct_map_code IN ('1122000095', '2202000095')`，不修改 detail 明细表；信汇来源独立使用这两个科目，不受 detail 排除条件影响。
-**来源标识**: 通过 `system_src` 与 `ods_src` 区分来源；信汇为 `XH/ORG_XH`，超期款为 `OVERDUE/OVERDUE`，开票样机为 `INV_SAMPLE/INV_SAMPLE`，SMS 为 `SMS/UREB`，政策为 `POLICY/POLICY`，国际营销为 `XS/IMOCC`，核销为 `CWZT/WRITEOFF`。目标表暂不新增来源字段，缺失维度按 NULL 写入。
-**账龄金额规则**: `BCY_0_AMT/QCY_0_AMT` 为来源总金额，`BCY_1_AMT/QCY_1_AMT` 至 `BCY_15_AMT/QCY_15_AMT` 为分账龄金额，并要求 0 桶等于 1 至 15 桶之和。当前非 detail 来源没有精确账龄字段，按确认口径将金额同时写入 0 桶和 1 桶，其余账龄桶为 0；超期款使用 `overdue_amt - overdue_adj_amt`，开票样机使用 `inv_sample_amt`。
-**来源业务规则**: 信汇拆分应收/应付两段独立 INSERT，应收金额为正、应付金额为负，并使用 `XH_` 虚拟客商；SMS 的 `yue` 写金额、`leibie` 写 `reb_type`；政策的 `arrears_amount` 写金额、`policystatename` 写 `ledger_status`；国际营销 `end_amt_cod_m` 写 BCY、`end_amt_cny_m` 写 QCY；核销只纳入已审核且 SAP 凭证号非空的核销金额，不纳入坏账计提。
-**规则字段状态**: 除 SMS 的 `reb_type`、政策的 `ledger_status` 外，补充来源无法取得的 `reb_type`、`ledger_status`、`TAX_RATE`、性质、汇率评估和账龄标识均写 NULL。
-**Doris物理设计**: `ENGINE=OLAP`；`DUPLICATE KEY(dt_month, year, month, company_code, cust_code, acct_type_code, acct_src_code, acct_map_code)`；按 `dt_month` 自动 LIST 分区；`DISTRIBUTED BY HASH(company_code) BUCKETS 10`。DUPLICATE KEY 表重跑必须先清理目标月份。
+**更新方式**: 以当前 `dwd_fi_mr_arap_sum_mi.sql` 为最新执行基线；按参数月份单条 `INSERT OVERWRITE TABLE ... PARTITION (*)` 覆盖写入，执行前需确认自动分区配置。脚本当前开发阶段不新增修改历史，后续上线变更再补正式记录。
+**来源接口**: DETAIL 使用 `test.dwd_fi_mr_arap_detail_mi`；信汇使用 `ods.odsmt_fin_bill_view_data`，按 `SIGN_DATE` 计算账龄；超期款和开票样机共用 `dws.dws_fi_mr_ar_overdue_mi`，按 `start_dt` 下月月初匹配参数月份；SMS 使用 `test.dwd_fi_mr_arap_sms_balance_mi`；政策返利使用 `dwd.dwd_mrs_mc_report_reward_account_detail_new_hi`；国际营销使用 `ads.ads_fi_mr_accounts_rec_di`；核销使用坏账核销审核及明细 ODS 表，仅取已审核且有 SAP 凭证号的 `WRITEOFF` 逻辑。
+**付款条件来源**: 使用 `test.dwd_fi_mr_ar_cterm_md`，按 `system_src + company_code + cust_code` 在最终汇总后关联；关联前按同一粒度去重，避免一对多放大金额。
+**科目排除与 Sum 输出**: DETAIL 排除 `acct_map_code IN ('1122000095', '2202000095')`，两个信汇科目独立构造；当前 Sum 结果不再输出 `pays_tran`，但 DETAIL 的 ECLS 标识仍按 `acct_map_code + cust_code + pays_tran` 进行内部匹配。
+**信汇账龄规则**: 按应收公司、应付公司和 `SIGN_DATE` 汇总；`SIGN_DATE` 为空时 `aging_days=1`，否则 `aging_days=月末最后一天-SIGN_DATE+1`；再按 `dim.dim_rule_fi_mr_ar_aging_seg` 的有效账龄区间匹配 `aging_seg_code`，匹配不到时沿用9段兜底；应收金额为正，应付金额为负。
+**超期款规则**: `dws.dws_fi_mr_ar_overdue_mi.start_dt` 为参数月份下月月初，例如 `start_dt='20260901'` 代表 `202608` 数据；超期款使用 `overdue_adj_after_amt`，开票样机使用 `inv_sample_amt`，两类金额共用一次来源聚合后分别进入事实。
+**SMS规则**: SMS余额脚本先按参数月末计算累计返利、已使用、余额、当月增加和当年增加并覆盖 `test.dwd_fi_mr_arap_sms_balance_mi`；Sum 读取当月 `yue`，写入 `system_src='SMS'`、`ods_src='UREB'`，`leibie` 写入 `reb_type`，金额进入账龄段1，零金额排除。
+**新增标识**: DETAIL 计算税率、汇率评估标识、账龄是否进数、返利/费用标识和电商零售标识；非 DETAIL 来源缺少稳定匹配字段的新增标识按当前脚本保持 NULL。
 
 | 字段名 | 类型 | 长度/精度 | 可空 | 含义 |
 |--------|------|-----------|------|------|
@@ -64444,18 +64469,20 @@ WHERE ELEM = :cod_conto;
 | QCY_13_AMT | DECIMALV3 | 27,9 | Y | 交易币金额-账龄区间段13 |
 | QCY_14_AMT | DECIMALV3 | 27,9 | Y | 交易币金额-账龄区间段14 |
 | QCY_15_AMT | DECIMALV3 | 27,9 | Y | 交易币金额-账龄区间段15 |
-| PAYS_TRAN | VARCHAR2 | 100 | Y | 付款服务商的付款编号 |
+| PAYS_TRAN | VARCHAR2 | 100 | Y | 付款服务商的付款编号；物理表保留该字段，当前 Sum INSERT 不输出/不写入，但 DETAIL 的 ECLS 逻辑内部仍按该字段匹配 |
 | SYSTEM_SRC | VARCHAR2 | 150 | Y | 来源系统 |
 | ODS_SRC | VARCHAR2 | 200 | Y | 数据来源 |
-| LOAD_DT | DATE | 7 | Y | 更新时间 |
-| REB_TYPE | VARCHAR2 | 50 | Y | 返利性质，本期NULL |
-| LEDGER_STATUS | VARCHAR2 | 4 | Y | 台账状态，本期NULL |
-| ACCT_CERT_TYPE | VARCHAR2 | 20 | Y | 凭证类型，继承detail并参与分组 |
-| TAX_RATE | DECIMALV3 | 27,9 | Y | 税率，本期NULL |
-| NATURE_L1_NAME | VARCHAR2 | 30 | Y | 一级性质名称，本期NULL |
-| NATURE_L2_NAME | VARCHAR2 | 30 | Y | 二级性质名称，本期NULL |
-| NATURE_L3_NAME | VARCHAR2 | 30 | Y | 三级性质名称，本期NULL |
-| EXCHANGE_RATE_EVAL_FLAG | VARCHAR2 | 200 | Y | 汇率评估标识，本期NULL |
-| IS_APAR_FLAG | VARCHAR2 | 30 | Y | 账龄是否进数，本期NULL |
-| PAY_TERM_CODE | VARCHAR2 | 24 | Y | 付款条件代码，来自客户账期表 |
-| PAY_TERM_DESC | VARCHAR2 | 300 | Y | 付款条件描述，来自客户账期表 |
+| REB_TYPE | VARCHAR2 | 50 | Y | 返利性质；SMS 来源取 LEIBIE |
+| UFEE_UREB_FLAG | VARCHAR2 | 30 | Y | 返利/费用标识；DETAIL 按凭证类型、付款原因和科目规则计算 |
+| ECLS_FLAG | VARCHAR2 | 30 | Y | 电商零售标识；DETAIL 按电商客户、付款原因、科目、客商和付款服务商编号规则计算 |
+| LEDGER_STATUS | VARCHAR2 | 4 | Y | 台账状态；政策返利来源取 POLICY 状态字段 |
+| ACCT_CERT_TYPE | VARCHAR2 | 20 | Y | 凭证类型；DETAIL 来源保留，其他来源按实际来源为空 |
+| TAX_RATE | DECIMALV3 | 27,9 | Y | 税率；DETAIL 按公司+主户、公司+利润中心、公司三级优先级匹配 |
+| NATURE_L1_NAME | VARCHAR2 | 30 | Y | 一级性质名称；DETAIL 直接取明细，其他来源按当前脚本口径处理 |
+| NATURE_L2_NAME | VARCHAR2 | 30 | Y | 二级性质名称；DETAIL 直接取明细，其他来源按当前脚本口径处理 |
+| NATURE_L3_NAME | VARCHAR2 | 30 | Y | 三级性质名称；DETAIL 直接取明细，其他来源按当前脚本口径处理 |
+| EXCHANGE_RATE_EVAL_FLAG | VARCHAR2 | 200 | Y | 汇率评估标识；DETAIL 按公司+客商及系统+原始科目规则计算 |
+| IS_APAR_FLAG | VARCHAR2 | 30 | Y | 账龄是否进数；DETAIL 按 EX1/EX2/EX3/IN1 规则计算 |
+| PAY_TERM_CODE | VARCHAR2 | 24 | Y | 付款条件代码，最终按来源系统、组织和客商关联客户账期表 |
+| PAY_TERM_DESC | VARCHAR2 | 300 | Y | 付款条件描述，最终按来源系统、组织和客商关联客户账期表 |
+| LOAD_DT | DATE | 7 | Y | 更新时间，使用 NOW() 写入；当前 DATE 类型只保留日期 |
