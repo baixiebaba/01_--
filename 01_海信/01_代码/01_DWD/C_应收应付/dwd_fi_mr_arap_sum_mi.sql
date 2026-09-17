@@ -12,8 +12,8 @@
 SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
--- 统计截止日期：取参数月份月末，供SMS外围系统SQL使用。
-SET @end_date = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
+-- 统计截止日期：取参数月份月末，供EPAY基准日期判断。
+SET @last_day = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
 -- 以上SET与下方单条INSERT OVERWRITE必须在同一session中依次执行。
 set enable_auto_create_when_overwrite=true;
 
@@ -1209,3 +1209,221 @@ SELECT p.dt_month
 -- 7. WRITEOFF仍限定已审核、有SAP凭证号及指定科目范围，并按有效期取科目映射；上线前核对其物理表名。另需核对SMS源表dt_month/load_dt及IMOCC month_dt格式。
 -- 8. 付款条件在最终金额汇总后，按system_src + company_code + cust_code左关联cterm_dedup，避免关联放大金额。
 -- ============================================================================
+
+-- ============================================================================
+-- EPAY：提前回款来源。
+-- 使用DETAIL已装载的BSID/BSAD数据，按付款原因、科目、基准日期和正负金额计算提前回款。
+-- 本段必须在前面的Sum覆盖装载完成后执行。
+-- ============================================================================
+INSERT INTO test.dwd_fi_mr_arap_sum_mi
+(
+      dt_month                 -- 年月
+    , `year`                   -- 年份
+    , `month`                  -- 月份
+    , company_code             -- 组织
+    , cust_code                -- 客商编码
+    , cust_name                -- 客商名称
+    , src_profitcenter_code    -- 原始利润中心编码
+    , src_profitcenter_name    -- 原始利润中心名称
+    , profitcenter_code        -- 映射后利润中心编码
+    , profitcenter_name        -- 映射后利润中心名称
+    , bus_range_code           -- 业务范围编码
+    , bus_range_name           -- 业务范围名称
+    , marketing_dept_code      -- 业务管理单元编码
+    , marketing_dept_name      -- 业务管理单元名称
+    , pay_reason_code          -- 付款原因代码
+    , bcy_code                 -- 本位币币种
+    , qcy_code                 -- 交易币币种
+    , bcy_0_amt                -- 本位币提前回款净额
+    , bcy_1_amt                -- 本位币金额-账龄区间段1
+    , bcy_2_amt                -- 本位币金额-账龄区间段2
+    , bcy_3_amt                -- 本位币金额-账龄区间段3
+    , bcy_4_amt                -- 本位币金额-账龄区间段4
+    , bcy_5_amt                -- 本位币金额-账龄区间段5
+    , bcy_6_amt                -- 本位币金额-账龄区间段6
+    , bcy_7_amt                -- 本位币金额-账龄区间段7
+    , bcy_8_amt                -- 本位币金额-账龄区间段8
+    , bcy_9_amt                -- 本位币金额-账龄区间段9
+    , bcy_10_amt               -- 本位币金额-账龄区间段10
+    , bcy_11_amt               -- 本位币金额-账龄区间段11
+    , bcy_12_amt               -- 本位币金额-账龄区间段12
+    , bcy_13_amt               -- 本位币金额-账龄区间段13
+    , bcy_14_amt               -- 本位币金额-账龄区间段14
+    , bcy_15_amt               -- 本位币金额-账龄区间段15
+    , qcy_0_amt                -- 交易币提前回款净额
+    , qcy_1_amt                -- 交易币金额-账龄区间段1
+    , qcy_2_amt                -- 交易币金额-账龄区间段2
+    , qcy_3_amt                -- 交易币金额-账龄区间段3
+    , qcy_4_amt                -- 交易币金额-账龄区间段4
+    , qcy_5_amt                -- 交易币金额-账龄区间段5
+    , qcy_6_amt                -- 交易币金额-账龄区间段6
+    , qcy_7_amt                -- 交易币金额-账龄区间段7
+    , qcy_8_amt                -- 交易币金额-账龄区间段8
+    , qcy_9_amt                -- 交易币金额-账龄区间段9
+    , qcy_10_amt               -- 交易币金额-账龄区间段10
+    , qcy_11_amt               -- 交易币金额-账龄区间段11
+    , qcy_12_amt               -- 交易币金额-账龄区间段12
+    , qcy_13_amt               -- 交易币金额-账龄区间段13
+    , qcy_14_amt               -- 交易币金额-账龄区间段14
+    , qcy_15_amt               -- 交易币金额-账龄区间段15
+    , system_src               -- 来源系统
+    , ods_src                  -- 数据来源
+    , reb_type                 -- 返利性质
+    , ufee_ureb_flag           -- 返利/费用标识
+    , ecls_flag                -- 电商零售标识
+    , ledger_status            -- 台账状态
+    , acct_cert_type           -- 凭证类型
+    , tax_rate                 -- 税率
+    , nature_l1_name           -- 一级性质
+    , nature_l2_name           -- 二级性质
+    , nature_l3_name           -- 三级性质
+    , exchange_rate_eval_flag  -- 汇率评估标识
+    , is_apar_flag             -- 账龄是否进数
+    , pay_term_code            -- 付款条件代码
+    , pay_term_desc            -- 付款条件描述
+    , load_dt                  -- 更新时间
+)
+WITH
+-- EPAY：从Detail读取BSID/BSAD数据，按付款原因、科目和月末基准日期筛选。
+epay_detail AS (
+    SELECT  d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
+          , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
+          , SUM(COALESCE(bcy_amt, 0)) AS bcy_amt
+      FROM test.dwd_fi_mr_arap_detail_mi d
+     WHERE d.dt_month = @dt_month
+       AND d.ods_src IN ('BSID', 'BSAD')
+       AND d.pay_reason_code = '400'
+       AND d.acct_map_code LIKE '1122%'
+       AND d.baseline_dt <= @last_day
+     GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
+            , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
+     HAVING SUM(COALESCE(bcy_amt, 0)) > 0
+
+    UNION ALL
+
+    SELECT d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
+          , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
+          , SUM(COALESCE(bcy_amt, 0)) AS bcy_amt
+      FROM test.dwd_fi_mr_arap_detail_mi d
+     WHERE d.dt_month = @dt_month
+       AND d.ods_src IN ('BSID', 'BSAD')
+       AND d.pay_reason_code = '400'
+       AND d.acct_map_code LIKE '1122%'
+     GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
+            , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
+     HAVING SUM(COALESCE(bcy_amt, 0)) < 0
+),
+-- EPAY：按当前需要的业务维度汇总正负金额，计算提前回款净额。
+epay_sum AS (
+    SELECT dt_month
+         , `year`
+         , `month`
+         , company_code
+         , cust_code
+         , cust_name
+         , acct_src_code
+         , acct_map_code
+         , src_profitcenter_code
+         , src_profitcenter_name
+         , profitcenter_code
+         , profitcenter_name
+         , SUM(COALESCE(bcy_amt, 0)) AS bcy_net_amt
+      FROM epay_detail
+     GROUP BY dt_month
+            , `year`
+            , `month`
+            , company_code
+            , cust_code
+            , cust_name
+            , acct_src_code
+            , acct_map_code
+            , src_profitcenter_code
+            , src_profitcenter_name
+            , profitcenter_code
+            , profitcenter_name
+    HAVING SUM(COALESCE(bcy_amt, 0)) < 0
+)
+SELECT dt_month
+     , `year`
+     , `month`
+     , company_code
+     , cust_code
+     , cust_name
+     , NULL AS cust_head_code
+     , NULL AS cust_head_name
+     , NULL AS cust_branch_code
+     , NULL AS cust_branch_name
+     , NULL AS cp_company_code
+     , NULL AS country_code
+     , NULL AS country_name
+     , NULL AS acct_type_code
+     , '1122000000' AS acct_src_code
+     , '1122000000' AS acct_map_code
+     , NULL AS channel_l1_code
+     , NULL AS channel_l1_name
+     , NULL AS channel_l2_code
+     , NULL AS channel_l2_name
+     , NULL AS channel_l3_code
+     , NULL AS channel_l3_name
+     , NULL AS onoffline_code
+     , NULL AS onoffline_name
+     , src_profitcenter_code
+     , src_profitcenter_name
+     , profitcenter_code
+     , profitcenter_name
+     , NULL AS bus_range_code
+     , NULL AS bus_range_name
+     , NULL AS marketing_dept_code
+     , NULL AS marketing_dept_name
+     , '400' AS pay_reason_code
+     , 'CNY' AS bcy_code
+     , 'CNY' AS qcy_code
+     , bcy_net_amt AS bcy_0_amt
+     , bcy_net_amt AS bcy_1_amt
+     , 0 AS bcy_2_amt
+     , 0 AS bcy_3_amt
+     , 0 AS bcy_4_amt
+     , 0 AS bcy_5_amt
+     , 0 AS bcy_6_amt
+     , 0 AS bcy_7_amt
+     , 0 AS bcy_8_amt
+     , 0 AS bcy_9_amt
+     , 0 AS bcy_10_amt
+     , 0 AS bcy_11_amt
+     , 0 AS bcy_12_amt
+     , 0 AS bcy_13_amt
+     , 0 AS bcy_14_amt
+     , 0 AS bcy_15_amt
+     , bcy_net_amt AS qcy_0_amt
+     , bcy_net_amt AS qcy_1_amt
+     , 0 AS qcy_2_amt
+     , 0 AS qcy_3_amt
+     , 0 AS qcy_4_amt
+     , 0 AS qcy_5_amt
+     , 0 AS qcy_6_amt
+     , 0 AS qcy_7_amt
+     , 0 AS qcy_8_amt
+     , 0 AS qcy_9_amt
+     , 0 AS qcy_10_amt
+     , 0 AS qcy_11_amt
+     , 0 AS qcy_12_amt
+     , 0 AS qcy_13_amt
+     , 0 AS qcy_14_amt
+     , 0 AS qcy_15_amt
+     , system_src
+     , 'EPAY' AS ods_src
+     , NULL AS reb_type
+     , NULL AS ufee_ureb_flag
+     , NULL AS ecls_flag
+     , NULL AS ledger_status
+     , NULL AS acct_cert_type
+     , NULL AS tax_rate
+     , NULL AS nature_l1_name
+     , NULL AS nature_l2_name
+     , NULL AS nature_l3_name
+     , NULL AS exchange_rate_eval_flag
+     , NULL AS is_apar_flag
+     , NULL AS pay_term_code
+     , NULL AS pay_term_desc
+     , NOW() AS load_dt
+  FROM epay_sum;
