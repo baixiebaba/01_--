@@ -602,7 +602,7 @@ overdue_fact AS (
          , NULL AS bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
-         , 'OVERDUE' AS system_src, 'OVERDUE' AS ods_src
+         , 'FM_WTZJ' AS system_src, 'OVERDUE' AS ods_src
          , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
          , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
@@ -628,7 +628,7 @@ sample_fact AS (
          , NULL AS bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
-         , 'INV_SAMPLE' AS system_src, 'INV_SAMPLE' AS ods_src
+         , 'FM_WTZJ' AS system_src, 'INV_SAMPLE' AS ods_src
          , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
          , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
@@ -800,7 +800,7 @@ writeoff_fact AS (
          , bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
-         , 'CWZT' AS system_src, 'WRITEOFF' AS ods_src
+         , 'FM' AS system_src, 'WRITEOFF' AS ods_src
          , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
          , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
@@ -1223,6 +1223,8 @@ INSERT INTO test.dwd_fi_mr_arap_sum_mi
     , company_code             -- 组织
     , cust_code                -- 客商编码
     , cust_name                -- 客商名称
+    , acct_src_code            -- 原始科目编码
+    , acct_map_code            -- 映射后科目编码
     , src_profitcenter_code    -- 原始利润中心编码
     , src_profitcenter_name    -- 原始利润中心名称
     , profitcenter_code        -- 映射后利润中心编码
@@ -1289,6 +1291,7 @@ epay_detail AS (
     SELECT  d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
           , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
           , SUM(COALESCE(bcy_amt, 0)) AS bcy_amt
+          , system_src
       FROM test.dwd_fi_mr_arap_detail_mi d
      WHERE d.dt_month = @dt_month
        AND d.ods_src IN ('BSID', 'BSAD')
@@ -1297,6 +1300,7 @@ epay_detail AS (
        AND d.baseline_dt <= @last_day
      GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
             , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
+            , system_src
      HAVING SUM(COALESCE(bcy_amt, 0)) > 0
 
     UNION ALL
@@ -1304,6 +1308,7 @@ epay_detail AS (
     SELECT d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
           , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
           , SUM(COALESCE(bcy_amt, 0)) AS bcy_amt
+          , system_src
       FROM test.dwd_fi_mr_arap_detail_mi d
      WHERE d.dt_month = @dt_month
        AND d.ods_src IN ('BSID', 'BSAD')
@@ -1311,6 +1316,7 @@ epay_detail AS (
        AND d.acct_map_code LIKE '1122%'
      GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
             , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
+            , system_src
      HAVING SUM(COALESCE(bcy_amt, 0)) < 0
 ),
 -- EPAY：按当前需要的业务维度汇总正负金额，计算提前回款净额。
@@ -1328,6 +1334,7 @@ epay_sum AS (
          , profitcenter_code
          , profitcenter_name
          , SUM(COALESCE(bcy_amt, 0)) AS bcy_net_amt
+         , system_src
       FROM epay_detail
      GROUP BY dt_month
             , `year`
@@ -1341,6 +1348,7 @@ epay_sum AS (
             , src_profitcenter_name
             , profitcenter_code
             , profitcenter_name
+            , system_src
     HAVING SUM(COALESCE(bcy_amt, 0)) < 0
 )
 SELECT dt_month
@@ -1349,6 +1357,8 @@ SELECT dt_month
      , company_code
      , cust_code
      , cust_name
+     , acct_src_code
+     , acct_map_code
      , src_profitcenter_code
      , src_profitcenter_name
      , profitcenter_code
@@ -1392,7 +1402,7 @@ SELECT dt_month
      , 0 AS qcy_13_amt
      , 0 AS qcy_14_amt
      , 0 AS qcy_15_amt
-     , NULL AS system_src
+     , system_src AS system_src
      , 'EPAY' AS ods_src
      , NULL AS reb_type
      , NULL AS ufee_ureb_flag
