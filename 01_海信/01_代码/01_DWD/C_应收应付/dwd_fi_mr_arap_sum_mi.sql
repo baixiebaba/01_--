@@ -7,7 +7,7 @@
 --   20260915 ADD BY shiqingfeng.ex 新增
 -- ============================================================================
 */
- 
+
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
 --SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
 SET @year_month_day = '20260801';
@@ -743,7 +743,10 @@ writeoff_sum AS (
          , LTRIM(SUBSTRING_INDEX(cus.fnumber, '(', 1), '0') AS cust_code
          , cus.fname AS cust_name
          , a.fnumber AS acct_src_code
-         , MAX(am.acct_map_code) AS acct_map_code
+         , CASE WHEN R.fk_hifi_sap_version = 'SAP600'
+                  THEN a.fnumber
+                ELSE am.acct_map_code
+            END AS acct_map_code
          , LTRIM(pf.fnumber, '0') AS profitcenter_code
          , biz.fnumber AS bus_range_code
          , SUM(COALESCE(s.fk_hifi_local_lossmoneys, 0)) AS bcy_amt
@@ -751,6 +754,8 @@ writeoff_sum AS (
       FROM ods.odsfmfi_tk_hifi_baddebtverify v
       LEFT JOIN ods.odsfmtss_t_org_org o
         ON o.fid = v.fk_hifi_accountorg
+      LEFT JOIN ods.odsfmsecd_tk_hifi_orgs_ref r
+        ON o.fid = r.fk_hifi_org_id
       LEFT JOIN ods.odsfmfi_t_bd_period p
         ON p.fid = v.fk_hifi_accountdate
       INNER JOIN ods.odsfmfi_tk_hifi_baddebtverifysub s
@@ -780,6 +785,10 @@ writeoff_sum AS (
             , SUBSTRING_INDEX(cus.fnumber, '(', 1)
             , cus.fname
             , a.fnumber
+            , CASE WHEN R.fk_hifi_sap_version = 'SAP600'
+                    THEN a.fnumber
+                  ELSE am.acct_map_code
+              END
             , pf.fnumber
             , biz.fnumber
 ),
