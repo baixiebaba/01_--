@@ -8,7 +8,8 @@
 -- ============================================================================
 */
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
-SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 账龄关键日期：参数月月末DATE。
@@ -1707,10 +1708,10 @@ src_t001 AS (
     SELECT 'S900' AS system_src, bukrs, ktopl, waers
       FROM ods.odss900_t001
 
-    UNION ALL
+    -- UNION ALL
 
-    SELECT 'S610' AS system_src, bukrs, ktopl, waers
-      FROM ods.odss610_t001
+    -- SELECT 'S610' AS system_src, bukrs, ktopl, waers
+    --   FROM ods.odss610_t001
 
     UNION ALL
 
@@ -1772,10 +1773,10 @@ src_cepct AS (
     SELECT 'S900' AS system_src, prctr, spras, ktext
       FROM ods.odss900_cepct
 
-    UNION ALL
+    -- UNION ALL
 
-    SELECT 'S610' AS system_src, prctr, spras, ktext
-      FROM ods.odss610_cepct
+    -- SELECT 'S610' AS system_src, prctr, spras, ktext
+    --   FROM ods.odss610_cepct
 
     UNION ALL
 

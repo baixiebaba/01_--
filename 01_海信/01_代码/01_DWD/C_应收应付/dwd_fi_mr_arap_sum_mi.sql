@@ -9,7 +9,8 @@
 */
 
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
-SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 统计截止日期：取参数月份月末，供EPAY基准日期判断。

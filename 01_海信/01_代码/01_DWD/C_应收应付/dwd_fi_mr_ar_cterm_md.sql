@@ -64,9 +64,9 @@ src_t052u AS (
 
     UNION ALL
 
-    SELECT 'S610' AS sap_system, zterm, text1 FROM ods.odss610_t052u WHERE spras = '1'
+    -- SELECT 'S610' AS sap_system, zterm, text1 FROM ods.odss610_t052u WHERE spras = '1'
 
-    UNION ALL
+    -- UNION ALL
 
     SELECT 'S810' AS sap_system, zterm, text1 FROM ods.odss810_t052u WHERE spras = '1'
 ),

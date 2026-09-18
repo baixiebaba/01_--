@@ -3,23 +3,25 @@
 -- ============================================================================
 -- 最新版修改记录： 20260917 ADD BY shiqingfeng.ex 新增
 -- 上一版修改记录：
--- 目标表：国际营销应收占用明细表 dwd.dwd_fi_mr_ar_imocc_mi
+-- 目标表：国际营销应收占用明细表 test.dwd_fi_mr_ar_imocc_mi
 -- 修改记录：最新修改记录放最上面
 --   20260917 ADD BY shiqingfeng.ex 新增
 -- ============================================================================
 */
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
-SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 以上SET与下方INSERT OVERWRITE必须在同一session中执行。
 set enable_auto_create_when_overwrite=true;
 
-INSERT OVERWRITE TABLE dwd.dwd_fi_mr_ar_imocc_mi PARTITION (*)
+INSERT OVERWRITE TABLE test.dwd_fi_mr_ar_imocc_mi PARTITION (*)
 (
       dt_month                 -- 年月
     , `year`                   -- 年份
     , `month`                  -- 月份
+    , company_src_code         -- 原始组织
     , company_code             -- 组织
     , region_code              -- 大区编码
     , region_name              -- 大区名称
@@ -49,8 +51,6 @@ INSERT OVERWRITE TABLE dwd.dwd_fi_mr_ar_imocc_mi PARTITION (*)
     , channel_l3_name          -- 三级公司分类名称
     , bus_range_code           -- 业务范围编码
     , bus_range_name           -- 业务范围名称
-    , src_profitcenter_code    -- 原始利润中心编码
-    , src_profitcenter_name    -- 原始利润中心名称
     , profitcenter_code        -- 利润中心编码
     , profitcenter_name        -- 利润中心名称
     , bcy_code                 -- 本位币币种
@@ -176,7 +176,7 @@ imocc_source AS (
 -- 补充国际营销大区、区组、产品线、账期、客商和对方公司属性。
 imocc_enriched AS (
     SELECT a.month_dt
-         , a.bukrs AS company_code
+         , a.bukrs AS company_src_code
          , g.rgn_zh AS region_name
          , a.rgn AS region_code
          , CASE WHEN a.type = '8002' THEN '欧洲海外' ELSE g.grp_zh END AS area_group_name
@@ -242,7 +242,13 @@ imocc_enriched AS (
 SELECT @dt_month AS dt_month
      , LEFT(@dt_month, 4) AS `year`
      , RIGHT(@dt_month, 2) AS `month`
-     , company_code
+     , company_src_code
+     , CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+              THEN '2080'
+            WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+              THEN '1740'
+            ELSE '8010'
+       END AS company_code
      , region_code
      , region_name
      , region_flag
@@ -271,17 +277,44 @@ SELECT @dt_month AS dt_month
      , channel_l3_name
      , bus_range_code
      , bus_range_name
-     , src_profitcenter_code
-     , src_profitcenter_name
-     , profitcenter_code
-     , profitcenter_name
+     , CASE WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080' AND cust_name LIKE '%119项目%'
+              THEN 'X00000002'
+            WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080'
+              THEN '101008002'
+            ELSE 'ZZZZ'
+        END AS profitcenter_code
+     , CASE WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080' AND cust_name LIKE '%119项目%'
+              THEN '商显大项目'
+            WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080'
+              THEN '海信商用显示-触控平板-会议'
+            ELSE '缺省'
+        END profitcenter_name
      , bcy_code
      , qcy_code
      , imocc_cny_amt
      , imocc_con_amt
      , imocc_usd_amt
-     , 'ads.ads_fi_mr_accounts_rec_di' AS ods_src
+     , 'IMOCC' AS ods_src
      , NOW() AS load_dt
   FROM imocc_enriched
-
   ;
