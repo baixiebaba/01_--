@@ -7,7 +7,7 @@
 --   20260915 ADD BY shiqingfeng.ex 新增
 -- ============================================================================
 */
-
+ 
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
 --SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
 SET @year_month_day = '20260801';
