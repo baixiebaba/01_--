@@ -7,6 +7,7 @@ AS
 
   /***************************************************
   最后更新时间：202060824 13:44  BY XIAOYACHAO.EX
+  上一版本信息：
   名        称：CPM_SP_D2M_REV_M-DWM->DWS
   用        途：DWD->DWM数据抽取
   源        表：TGK_FIMA_DEV.DWD_FI_MR_GP_MSUM_MI

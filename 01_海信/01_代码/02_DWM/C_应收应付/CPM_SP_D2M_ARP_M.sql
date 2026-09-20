@@ -1,0 +1,491 @@
+CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M(
+    P_SCENARIO  IN VARCHAR2
+  , P_PERIODO   IN VARCHAR2
+  , P_AZIENDA   IN VARCHAR2
+  , SESSION_USER IN VARCHAR2
+) AS
+  /**************************************************************************
+  最后更新时间：
+  上一版本信息：
+  名称：CPM_SP_D2M_ARP_M
+  用途：DWD->DWM往来账龄数据抽取
+  源表：DWD_FI_MR_ARAP_SUM_MI、AW_MR9_REVM01_000001
+  目标表：AW_MR9_ARPM01_000001
+  逻辑文档地址: https://hisenseex.feishu.cn/sheets/JVJsssmEqh9Uk6tSffEci4khnIf?from=from_copylink&sheet=jNeukA
+  特殊逻辑：仅取DWD_STANDARD和M01_FACT两个数据包
+
+  版本信息：最新修改记录放最上面
+    
+    20260920 SHIQINGFENG.EX 新增
+
+  手工执行：CALL CPM_SP_D2M_ARP_M('2025ACT','06','6700','USER');
+  **************************************************************************/
+  V_SCENARIO      VARCHAR2(30);
+  V_PERIODO       VARCHAR2(30);
+  V_YEARMONTH     VARCHAR2(10);
+  V_LAST_DAY      DATE;
+  V_AZIENDA       VARCHAR2(4000);
+  V_SESSION_ID    NUMBER;
+  V_ERROR_COD     NUMBER;
+  V_ERROR_MSG     VARCHAR2(4000);
+BEGIN
+
+  V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
+  /* 删除本session的参数公司，防止再同一个窗口跑中止后接着跑，之后出现公司范围扩大 */
+  DELETE FROM SESSION_AZIENDA_LIST
+   WHERE SESSION_ID = V_SESSION_ID;
+  DELETE FROM SESSION_V_REF_AZIENDA
+   WHERE SESSION_ID = V_SESSION_ID;
+
+  INSERT INTO SESSION_V_REF_AZIENDA(
+      SESSION_ID
+    , HIE
+    , NODE
+    , ELEM
+  )
+  SELECT V_SESSION_ID
+       , HIE
+       , NODE
+       , ELEM
+    FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
+
+  /* 时间参数初始化 */
+  V_SCENARIO := P_SCENARIO;
+  V_PERIODO := LPAD(P_PERIODO, 2, '0');
+
+  V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
+  V_LAST_DAY := LAST_DAY(TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD'));
+
+  /* 组织参数初始化 */
+  INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
+  SELECT DISTINCT V_SESSION_ID
+       , ELEM
+    FROM SESSION_V_REF_AZIENDA
+   WHERE HIE = '10'
+     AND (
+           INSTR(',' || P_AZIENDA || ',', ',' || ELEM || ',') > 0
+        OR INSTR(',' || P_AZIENDA || ',', ',' || NODE || ',') > 0
+        OR P_AZIENDA = 'ALL'
+     )
+     /*需要再抽取范围内的公司才抽数*/
+     AND ELEM IN (SELECT COD_AZIENDA
+                    FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
+                   WHERE ARP_FLAG = 'Y'
+                     AND VALID_FR <= V_YEARMONTH
+                     AND NVL(VALID_TO,'999999') >= V_YEARMONTH
+                     AND COD_CONTO = 'ZAW_D2M_IN'
+                  )
+    /*排除锁定公司*/
+     AND ELEM NOT IN (
+           SELECT COD_AZIENDA
+             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
+            WHERE ARP_FLAG = 'Y'
+              AND T.COD_SCENARIO = V_SCENARIO
+              AND T.COD_PERIODO = V_PERIODO
+              AND T.COD_CONTO = 'ZAW_D2M_LOCK'
+     );
+  /* 获取所有跑的公司列表，供日志插入使用 */
+  SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
+    INTO V_AZIENDA
+    FROM (
+      SELECT DISTINCT ELEM
+        FROM SESSION_AZIENDA_LIST
+       WHERE SESSION_ID = V_SESSION_ID
+    );
+
+  INSERT INTO ZTAB_CPM_LOG(
+      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+  ) VALUES (
+      'CPM_SP_D2M_ARP_M', 'BEGIN 开始执行', SYSDATE, SESSION_USER,
+      V_SCENARIO, V_PERIODO, V_AZIENDA
+  );
+  COMMIT;
+
+  /* 删除当前批次，保证增量重跑不产生重复数据 */
+  DELETE FROM AW_MR9_ARPM01_000001
+   WHERE COD_SCENARIO = V_SCENARIO
+     AND COD_PERIODO = V_PERIODO
+     AND COD_AZIENDA IN (
+           SELECT ELEM
+             FROM SESSION_AZIENDA_LIST
+            WHERE SESSION_ID = V_SESSION_ID
+     );
+
+  INSERT INTO ZTAB_CPM_LOG(
+      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+  ) VALUES (
+      'CPM_SP_D2M_ARP_M', '当前批次删除完成', SYSDATE, SESSION_USER,
+      V_SCENARIO, V_PERIODO, V_AZIENDA
+  );
+
+  /* 统一标准事实接口并写入目标表 */
+  INSERT /*+ APPEND PARALLEL(2) */ INTO AW_MR9_ARPM01_000001(
+      OID
+    , COD_SCENARIO
+    , COD_PERIODO
+    , COD_AZIENDA
+    , COD_CATEGORIA
+    , SRC_DETAIL
+    , CUST_CODE
+    , CUST_NAME
+    , CUST_HEAD_CODE
+    , CUST_HEAD_NAME
+    , CUST_BRANCH_CODE
+    , CUST_BRANCH_NAME
+    , COD_AZI_CTP
+    , COUNTRY_CODE
+    , COUNTRY_NAME
+    , ACCT_SRC_CODE
+    , LE_AGE_FLAG
+    , ME_AGE_FLAG
+    , MB_AGE_FLAG
+    , GRP_SCOPE
+    , D_CHANNEL
+    , D_ONOFFLINE
+    , COD_DEST2
+    , COD_DEST3
+    , D_SALE_DEPT
+    , COD_VALUTA
+    , COD_VALUTA_ORIGINARIA
+    , BCY_0_AMT
+    , BCY_1_AMT
+    , BCY_2_AMT
+    , BCY_3_AMT
+    , BCY_4_AMT
+    , BCY_5_AMT
+    , BCY_6_AMT
+    , BCY_7_AMT
+    , BCY_8_AMT
+    , BCY_9_AMT
+    , BCY_10_AMT
+    , BCY_11_AMT
+    , BCY_12_AMT
+    , BCY_13_AMT
+    , BCY_14_AMT
+    , BCY_15_AMT
+    , QCY_0_AMT
+    , QCY_1_AMT
+    , QCY_2_AMT
+    , QCY_3_AMT
+    , QCY_4_AMT
+    , QCY_5_AMT
+    , QCY_6_AMT
+    , QCY_7_AMT
+    , QCY_8_AMT
+    , QCY_9_AMT
+    , QCY_10_AMT
+    , QCY_11_AMT
+    , QCY_12_AMT
+    , QCY_13_AMT
+    , QCY_14_AMT
+    , QCY_15_AMT
+    , SYSTEM_SRC
+    , D_ADJ_TYPE
+  )
+  WITH
+  /* DWD普通账龄：读取源表并直接转换为目标事实接口 */
+  DWD_STANDARD AS (
+    SELECT V_SCENARIO AS COD_SCENARIO
+         , V_PERIODO AS COD_PERIODO
+         , COMPANY_CODE AS COD_AZIENDA
+         , 'ZAMOUNT' AS COD_CATEGORIA
+         , NVL(ODS_SRC, 'DWD') AS SRC_DETAIL
+         , CUST_CODE
+         , CUST_NAME
+         , CUST_HEAD_CODE
+         , CUST_HEAD_NAME
+         , CUST_BRANCH_CODE
+         , CUST_BRANCH_NAME
+         , CP_COMPANY_CODE AS COD_AZI_CTP
+         , COUNTRY_CODE
+         , COUNTRY_NAME
+         , ACCT_SRC_CODE
+         , CAST(NULL AS VARCHAR2(30)) AS LE_AGE_FLAG
+         , CAST(NULL AS VARCHAR2(30)) AS ME_AGE_FLAG
+         , CAST(NULL AS VARCHAR2(30)) AS MB_AGE_FLAG
+         , CAST(NULL AS VARCHAR2(30)) AS GRP_SCOPE
+         , CHANNEL_L3_CODE AS D_CHANNEL
+         , ONOFFLINE_CODE AS D_ONOFFLINE
+         , PROFITCENTER_CODE AS COD_DEST2
+         , BUS_RANGE_CODE AS COD_DEST3
+         , MARKETING_DEPT_CODE AS D_SALE_DEPT
+         , BCY_CODE AS COD_VALUTA
+         , QCY_CODE AS COD_VALUTA_ORIGINARIA
+         , NVL(BCY_0_AMT, 0) AS BCY_0_AMT
+         , NVL(BCY_1_AMT, 0) AS BCY_1_AMT
+         , NVL(BCY_2_AMT, 0) AS BCY_2_AMT
+         , NVL(BCY_3_AMT, 0) AS BCY_3_AMT
+         , NVL(BCY_4_AMT, 0) AS BCY_4_AMT
+         , NVL(BCY_5_AMT, 0) AS BCY_5_AMT
+         , NVL(BCY_6_AMT, 0) AS BCY_6_AMT
+         , NVL(BCY_7_AMT, 0) AS BCY_7_AMT
+         , NVL(BCY_8_AMT, 0) AS BCY_8_AMT
+         , NVL(BCY_9_AMT, 0) AS BCY_9_AMT
+         , NVL(BCY_10_AMT, 0) AS BCY_10_AMT
+         , NVL(BCY_11_AMT, 0) AS BCY_11_AMT
+         , NVL(BCY_12_AMT, 0) AS BCY_12_AMT
+         , NVL(BCY_13_AMT, 0) AS BCY_13_AMT
+         , NVL(BCY_14_AMT, 0) AS BCY_14_AMT
+         , NVL(BCY_15_AMT, 0) AS BCY_15_AMT
+         , NVL(QCY_0_AMT, 0) AS QCY_0_AMT
+         , NVL(QCY_1_AMT, 0) AS QCY_1_AMT
+         , NVL(QCY_2_AMT, 0) AS QCY_2_AMT
+         , NVL(QCY_3_AMT, 0) AS QCY_3_AMT
+         , NVL(QCY_4_AMT, 0) AS QCY_4_AMT
+         , NVL(QCY_5_AMT, 0) AS QCY_5_AMT
+         , NVL(QCY_6_AMT, 0) AS QCY_6_AMT
+         , NVL(QCY_7_AMT, 0) AS QCY_7_AMT
+         , NVL(QCY_8_AMT, 0) AS QCY_8_AMT
+         , NVL(QCY_9_AMT, 0) AS QCY_9_AMT
+         , NVL(QCY_10_AMT, 0) AS QCY_10_AMT
+         , NVL(QCY_11_AMT, 0) AS QCY_11_AMT
+         , NVL(QCY_12_AMT, 0) AS QCY_12_AMT
+         , NVL(QCY_13_AMT, 0) AS QCY_13_AMT
+         , NVL(QCY_14_AMT, 0) AS QCY_14_AMT
+         , NVL(QCY_15_AMT, 0) AS QCY_15_AMT
+         , SYSTEM_SRC
+         , 'ZZZZ' AS D_ADJ_TYPE
+      FROM DWD_FI_MR_ARAP_SUM_MI
+     WHERE DT_MONTH = V_YEARMONTH
+       /* 限制需要进数范围的公司和客商，在D打标为Y或为空的 */
+       AND NVL(IS_APAR_FLAG, 'Y') = 'Y'
+       AND COMPANY_CODE IN (
+             SELECT ELEM
+               FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+       )
+  ),
+
+  /* M01：出库未开、退货未办，BCY_REV写入本位币0/1桶，ORG_REV写入交易币0/1桶 */
+  M01_FACT AS (
+    SELECT V_SCENARIO AS COD_SCENARIO
+         , V_PERIODO AS COD_PERIODO
+         , T.COD_AZIENDA
+         , 'ZAMOUNT' AS COD_CATEGORIA
+         , CASE WHEN T.COD_CONTO LIKE 'S600101%' THEN 'ZTSO04_CK'
+                WHEN T.COD_CONTO LIKE 'S600102%' THEN 'ZTSO04_TH' END AS SRC_DETAIL
+         , T.CUST_CODE
+         , T.CUST_NAME
+         , CAST(NULL AS VARCHAR2(30)) AS CUST_HEAD_CODE
+         , CAST(NULL AS VARCHAR2(200)) AS CUST_HEAD_NAME
+         , CAST(NULL AS VARCHAR2(30)) AS CUST_BRANCH_CODE
+         , CAST(NULL AS VARCHAR2(200)) AS CUST_BRANCH_NAME
+         , T.COD_AZI_CTP
+         , CAST(NULL AS VARCHAR2(30)) AS COUNTRY_CODE
+         , CAST(NULL AS VARCHAR2(200)) AS COUNTRY_NAME
+         , T.COD_CONTO AS ACCT_SRC_CODE
+         , CAST(NULL AS VARCHAR2(30)) AS LE_AGE_FLAG
+         , CAST(NULL AS VARCHAR2(30)) AS ME_AGE_FLAG
+         , CAST(NULL AS VARCHAR2(30)) AS MB_AGE_FLAG
+         , CAST(NULL AS VARCHAR2(30)) AS GRP_SCOPE
+         , T.D_CHANNEL
+         , T.D_ONOFFLINE
+         , T.COD_DEST2
+         , T.COD_DEST3
+         , T.D_SALE_DEPT
+         , T.COD_VALUTA
+         , T.COD_VALUTA_ORIGINARIA
+         , T.BCY_REV AS BCY_0_AMT
+         , T.BCY_REV AS BCY_1_AMT
+         , 0 AS BCY_2_AMT, 0 AS BCY_3_AMT, 0 AS BCY_4_AMT
+         , 0 AS BCY_5_AMT, 0 AS BCY_6_AMT, 0 AS BCY_7_AMT
+         , 0 AS BCY_8_AMT, 0 AS BCY_9_AMT, 0 AS BCY_10_AMT
+         , 0 AS BCY_11_AMT, 0 AS BCY_12_AMT, 0 AS BCY_13_AMT
+         , 0 AS BCY_14_AMT, 0 AS BCY_15_AMT
+         , T.ORG_REV AS QCY_0_AMT
+         , T.ORG_REV AS QCY_1_AMT
+         , 0 AS QCY_2_AMT, 0 AS QCY_3_AMT, 0 AS QCY_4_AMT
+         , 0 AS QCY_5_AMT, 0 AS QCY_6_AMT, 0 AS QCY_7_AMT
+         , 0 AS QCY_8_AMT, 0 AS QCY_9_AMT, 0 AS QCY_10_AMT
+         , 0 AS QCY_11_AMT, 0 AS QCY_12_AMT, 0 AS QCY_13_AMT
+         , 0 AS QCY_14_AMT, 0 AS QCY_15_AMT
+         , 'TA' AS SYSTEM_SRC
+         , NVL(T.D_ADJ_TYPE, 'ZZZZ') AS D_ADJ_TYPE
+      FROM AW_MR9_REVM01_000001 T
+     WHERE T.COD_SCENARIO = V_SCENARIO
+       AND T.COD_PERIODO = V_PERIODO
+       AND T.COD_AZIENDA IN (
+             SELECT ELEM
+               FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+       )
+       AND (T.COD_CONTO LIKE 'S600101%' OR T.COD_CONTO LIKE 'S600102%')
+  ),
+  STANDARD_FACT AS (
+    SELECT * FROM DWD_STANDARD
+    UNION ALL
+    SELECT * FROM M01_FACT
+  ),
+  AGG_FACT AS (
+    SELECT COD_SCENARIO
+         , COD_PERIODO
+         , COD_AZIENDA
+         , COD_CATEGORIA
+         , SRC_DETAIL
+         , CUST_CODE
+         , CUST_NAME
+         , CUST_HEAD_CODE
+         , CUST_HEAD_NAME
+         , CUST_BRANCH_CODE
+         , CUST_BRANCH_NAME
+         , COD_AZI_CTP
+         , COUNTRY_CODE
+         , COUNTRY_NAME
+         , ACCT_SRC_CODE
+         , LE_AGE_FLAG
+         , ME_AGE_FLAG
+         , MB_AGE_FLAG
+         , GRP_SCOPE
+         , D_CHANNEL
+         , D_ONOFFLINE
+         , COD_DEST2
+         , COD_DEST3
+         , D_SALE_DEPT
+         , COD_VALUTA
+         , COD_VALUTA_ORIGINARIA
+         , SUM(BCY_0_AMT) AS BCY_0_AMT
+         , SUM(BCY_1_AMT) AS BCY_1_AMT
+         , SUM(BCY_2_AMT) AS BCY_2_AMT
+         , SUM(BCY_3_AMT) AS BCY_3_AMT
+         , SUM(BCY_4_AMT) AS BCY_4_AMT
+         , SUM(BCY_5_AMT) AS BCY_5_AMT
+         , SUM(BCY_6_AMT) AS BCY_6_AMT
+         , SUM(BCY_7_AMT) AS BCY_7_AMT
+         , SUM(BCY_8_AMT) AS BCY_8_AMT
+         , SUM(BCY_9_AMT) AS BCY_9_AMT
+         , SUM(BCY_10_AMT) AS BCY_10_AMT
+         , SUM(BCY_11_AMT) AS BCY_11_AMT
+         , SUM(BCY_12_AMT) AS BCY_12_AMT
+         , SUM(BCY_13_AMT) AS BCY_13_AMT
+         , SUM(BCY_14_AMT) AS BCY_14_AMT
+         , SUM(BCY_15_AMT) AS BCY_15_AMT
+         , SUM(QCY_0_AMT) AS QCY_0_AMT
+         , SUM(QCY_1_AMT) AS QCY_1_AMT
+         , SUM(QCY_2_AMT) AS QCY_2_AMT
+         , SUM(QCY_3_AMT) AS QCY_3_AMT
+         , SUM(QCY_4_AMT) AS QCY_4_AMT
+         , SUM(QCY_5_AMT) AS QCY_5_AMT
+         , SUM(QCY_6_AMT) AS QCY_6_AMT
+         , SUM(QCY_7_AMT) AS QCY_7_AMT
+         , SUM(QCY_8_AMT) AS QCY_8_AMT
+         , SUM(QCY_9_AMT) AS QCY_9_AMT
+         , SUM(QCY_10_AMT) AS QCY_10_AMT
+         , SUM(QCY_11_AMT) AS QCY_11_AMT
+         , SUM(QCY_12_AMT) AS QCY_12_AMT
+         , SUM(QCY_13_AMT) AS QCY_13_AMT
+         , SUM(QCY_14_AMT) AS QCY_14_AMT
+         , SUM(QCY_15_AMT) AS QCY_15_AMT
+         , SYSTEM_SRC
+         , D_ADJ_TYPE
+      FROM STANDARD_FACT
+     GROUP BY COD_SCENARIO, COD_PERIODO, COD_AZIENDA, COD_CATEGORIA, SRC_DETAIL
+            , CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
+            , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
+            , ACCT_SRC_CODE, LE_AGE_FLAG, ME_AGE_FLAG, MB_AGE_FLAG, GRP_SCOPE
+            , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+            , COD_VALUTA, COD_VALUTA_ORIGINARIA, SYSTEM_SRC, D_ADJ_TYPE
+  )
+  SELECT NEWID()
+       , COD_SCENARIO
+       , COD_PERIODO
+       , COD_AZIENDA
+       , COD_CATEGORIA
+       , SRC_DETAIL
+       , CUST_CODE
+       , CUST_NAME
+       , CUST_HEAD_CODE
+       , CUST_HEAD_NAME
+       , CUST_BRANCH_CODE
+       , CUST_BRANCH_NAME
+       , COD_AZI_CTP
+       , COUNTRY_CODE
+       , COUNTRY_NAME
+       , ACCT_SRC_CODE
+       , LE_AGE_FLAG
+       , ME_AGE_FLAG
+       , MB_AGE_FLAG
+       , GRP_SCOPE
+       , D_CHANNEL
+       , D_ONOFFLINE
+       , COD_DEST2
+       , COD_DEST3
+       , D_SALE_DEPT
+       , COD_VALUTA
+       , COD_VALUTA_ORIGINARIA
+       , BCY_0_AMT
+       , BCY_1_AMT
+       , BCY_2_AMT
+       , BCY_3_AMT
+       , BCY_4_AMT
+       , BCY_5_AMT
+       , BCY_6_AMT
+       , BCY_7_AMT
+       , BCY_8_AMT
+       , BCY_9_AMT
+       , BCY_10_AMT
+       , BCY_11_AMT
+       , BCY_12_AMT
+       , BCY_13_AMT
+       , BCY_14_AMT
+       , BCY_15_AMT
+       , QCY_0_AMT
+       , QCY_1_AMT
+       , QCY_2_AMT
+       , QCY_3_AMT
+       , QCY_4_AMT
+       , QCY_5_AMT
+       , QCY_6_AMT
+       , QCY_7_AMT
+       , QCY_8_AMT
+       , QCY_9_AMT
+       , QCY_10_AMT
+       , QCY_11_AMT
+       , QCY_12_AMT
+       , QCY_13_AMT
+       , QCY_14_AMT
+       , QCY_15_AMT
+       , SYSTEM_SRC
+       , D_ADJ_TYPE
+    FROM AGG_FACT;
+
+  INSERT INTO ZTAB_CPM_LOG(
+      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+  ) VALUES (
+      'CPM_SP_D2M_ARP_M', '目标表装载完成', SYSDATE, SESSION_USER,
+      V_SCENARIO, V_PERIODO, V_AZIENDA
+  );
+  COMMIT;
+
+  /* 4.1 清理当前会话数据 */
+  DELETE FROM SESSION_AZIENDA_LIST
+   WHERE SESSION_ID = V_SESSION_ID;
+  DELETE FROM SESSION_V_REF_AZIENDA
+   WHERE SESSION_ID = V_SESSION_ID;
+
+  INSERT INTO ZTAB_CPM_LOG(
+      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+  ) VALUES (
+      'CPM_SP_D2M_ARP_M', 'END 执行完成', SYSDATE, SESSION_USER,
+      V_SCENARIO, V_PERIODO, V_AZIENDA
+  );
+  COMMIT;
+/*
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK;
+    DELETE FROM SESSION_AZIENDA_LIST
+     WHERE SESSION_ID = V_SESSION_ID;
+    DELETE FROM SESSION_V_REF_AZIENDA
+     WHERE SESSION_ID = V_SESSION_ID;
+    V_ERROR_COD := SQLCODE;
+    V_ERROR_MSG := SUBSTR(SQLERRM, 1, 4000);
+    INSERT INTO ZTAB_CPM_LOG(
+        CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+    ) VALUES (
+        'CPM_SP_D2M_ARP_M', 'ERROR 执行报错', V_ERROR_COD || ':' || V_ERROR_MSG,
+        SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_AZIENDA
+    );
+    COMMIT;
+    RAISE;*/
+END CPM_SP_D2M_ARP_M;
+/
