@@ -243,7 +243,7 @@ SELECT @dt_month AS dt_month
      , LEFT(@dt_month, 4) AS `year`
      , RIGHT(@dt_month, 2) AS `month`
      , company_src_code
-     , CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+     , CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
               THEN '2080'
             WHEN product_line_code = '0207' AND region_flag = '产品线大区'
               THEN '1740'
@@ -277,14 +277,14 @@ SELECT @dt_month AS dt_month
      , channel_l3_name
      , bus_range_code
      , bus_range_name
-     , CASE WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
                         THEN '2080'
                       WHEN product_line_code = '0207' AND region_flag = '产品线大区'
                         THEN '1740'
                       ELSE '8010'
                   END = '2080' AND cust_name LIKE '%119项目%'
               THEN 'X00000002'
-            WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
                         THEN '2080'
                       WHEN product_line_code = '0207' AND region_flag = '产品线大区'
                         THEN '1740'
@@ -293,14 +293,14 @@ SELECT @dt_month AS dt_month
               THEN '101008002'
             ELSE 'ZZZZ'
         END AS profitcenter_code
-     , CASE WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
                         THEN '2080'
                       WHEN product_line_code = '0207' AND region_flag = '产品线大区'
                         THEN '1740'
                       ELSE '8010'
                   END = '2080' AND cust_name LIKE '%119项目%'
               THEN '商显大项目'
-            WHEN CASE WHEN product_line_code = '01A0' AND region_flag = 'B2B业务拓展部'
+            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
                         THEN '2080'
                       WHEN product_line_code = '0207' AND region_flag = '产品线大区'
                         THEN '1740'
