@@ -329,7 +329,7 @@ detail_fact AS (
          , bcy_code
          , qcy_code
          , system_src
-         , ods_src
+         , 'ORG_ZZT003' AS ods_src
          , NULL AS reb_type
          , ufee_ureb_flag
          , ecls_flag
