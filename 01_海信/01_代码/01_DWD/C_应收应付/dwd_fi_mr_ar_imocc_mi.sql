@@ -94,6 +94,16 @@ s810_customer_dim AS (
          , MAX(zkunnr_mdg) AS zkunnr_mdg
       FROM ods.odsslt_s810_kna1
      GROUP BY kunnr
+
+     UNION ALL
+
+    SELECT saknr
+         , MAX(txt20) AS name1
+         , '' AS zkunnr_mdg
+      FROM ods.odsslt_s810_skat
+     WHERE MANDT = '810'
+       AND SPRAS = '1'
+     GROUP BY saknr
 ),
 -- 汇总MDG客商基础信息，提供国家和一至三级公司分类。
 customer_base_dim AS (
