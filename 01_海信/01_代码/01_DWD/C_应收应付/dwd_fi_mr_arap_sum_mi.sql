@@ -221,11 +221,12 @@ ecls_match AS (
      WHERE d.dt_month = @dt_month
        AND d.pay_reason_code = '400'
        AND d.acct_map_code LIKE '1122%'
+       AND d.ods_src <> 'BSAD_EPAY'
      GROUP BY d.acct_map_code
             , d.cust_code
             , d.pays_tran
     HAVING SUM(COALESCE(d.bcy_amt, 0)) > 0
-       AND MIN(d.baseline_dt) > LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
+       AND MIN(d.netrcp_dt) > LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
 ),
 -- 在明细事实粒度计算五个新增字段，保留税率、汇率评估和账龄进数的优先级。
 detail_rule_base AS (
@@ -288,6 +289,7 @@ detail_rule_base AS (
        AND em.cust_code = d.cust_code
        AND COALESCE(em.pays_tran, '') = COALESCE(d.pays_tran, '')
      WHERE d.dt_month = @dt_month
+       AND d.ods_src <> 'BSAD_EPAY'
 ),
 -- DETAIL：保留明细表真实账龄段，排除由信汇单独构造的两个映射科目。
 detail_fact AS (
@@ -1303,10 +1305,10 @@ epay_detail AS (
           , system_src
       FROM test.dwd_fi_mr_arap_detail_mi d
      WHERE d.dt_month = @dt_month
-       AND d.ods_src IN ('BSID', 'BSAD')
+       AND d.ods_src IN ('BSID', 'BSAD', 'BSAD_EPAY')
        AND d.pay_reason_code = '400'
        AND d.acct_map_code LIKE '1122%'
-       AND d.baseline_dt <= @last_day
+       AND d.netrcp_dt <= @last_day
      GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
             , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
             , system_src
@@ -1320,7 +1322,7 @@ epay_detail AS (
           , system_src
       FROM test.dwd_fi_mr_arap_detail_mi d
      WHERE d.dt_month = @dt_month
-       AND d.ods_src IN ('BSID', 'BSAD')
+       AND d.ods_src IN ('BSID', 'BSAD', 'BSAD_EPAY')
        AND d.pay_reason_code = '400'
        AND d.acct_map_code LIKE '1122%'
      GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name

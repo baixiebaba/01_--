@@ -1,9 +1,11 @@
 /*
 -- ============================================================================
--- 最新版修改记录：20260910 ADD BY shiqingfeng.ex 新增
--- 上一版修改记录：
+-- 最新版修改记录：20260921 MODIFY 更正净收付日期借贷方向逻辑
+-- 上一版修改记录：20260921 ADD 新增净收付日期 netrcp_dt
 -- 目标表：往来账龄明细表 test.dwd_fi_mr_arap_detail_mi
 -- 修改记录：最新修改记录放最上面
+--   20260921 MODIFY 更正净收付日期借贷方向逻辑
+--   20260921 ADD 新增净收付日期 netrcp_dt
 --   20260910 ADD BY shiqingfeng.ex 新增
 -- ============================================================================
 */
@@ -42,6 +44,7 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_detail_mi PARTITION (*)
     , voucher_dt               -- 凭证日期
     , posting_dt               -- 凭证过账日期
     , baseline_dt              -- 账龄起算日期
+    , netrcp_dt                -- 净收付日期
     , clearing_dt              -- 清账日期
     , cust_code                -- 客商编码
     , cust_name                -- 客商名称
@@ -367,7 +370,7 @@ src_bsid AS (
                ELSE TRIM(bukrs)
            END
            ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
       FROM ods.odsslt_s600_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -375,7 +378,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S700' AS system_src, 'BSID' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.kunnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, b.rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
+    SELECT 'S700' AS system_src, 'BSID' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.kunnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, b.rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
       FROM ods.odsslt_s700_bsid b
       LEFT JOIN s700_company_map hm
         ON hm.ent_sap700_code = TRIM(b.bukrs)
@@ -385,7 +388,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S800' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s800_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -393,7 +396,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s900_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -401,7 +404,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S610' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
+    SELECT 'S610' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
       FROM ods.odss610_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -409,7 +412,7 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S810' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S810' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s810_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -425,7 +428,7 @@ src_bsad AS (
                ELSE TRIM(bukrs)
            END
            ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
       FROM ods.odsslt_s600_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -434,7 +437,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S700' AS system_src, 'BSAD' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.kunnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, b.rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
+    SELECT 'S700' AS system_src, 'BSAD' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.kunnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, b.rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
       FROM ods.odsslt_s700_bsad b
       LEFT JOIN s700_company_map hm
         ON hm.ent_sap700_code = TRIM(b.bukrs)
@@ -445,7 +448,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    SELECT 'S800' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s800_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -454,7 +457,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s900_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -463,7 +466,7 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S610' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    SELECT 'S610' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odss610_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -472,12 +475,83 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S810' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    SELECT 'S810' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s810_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+
+    UNION ALL
+    -- 提前回款部分取已清表BSAD，清账日期限制在参数月份首日至月末。
+    SELECT 'S600' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, CASE
+           WHEN TRIM(bukrs) = '6000' THEN CASE TRIM(gsber)
+               WHEN '200' THEN '6000A'
+               WHEN '400' THEN '6000B'
+               WHEN '500' THEN '6000C'
+               ELSE TRIM(bukrs)
+           END
+           ELSE gsber
+       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+      FROM ods.odsslt_s600_bsad
+     WHERE augdt >= @year_month_day
+       AND augdt <= @key_date_sap
+       AND COALESCE(bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+       AND COALESCE(rstgr,'|') = '400'
+
+    UNION ALL
+
+    SELECT 'S700' AS system_src, 'BSAD_EPAY' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.kunnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, b.rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
+      FROM ods.odsslt_s700_bsad b
+      LEFT JOIN s700_company_map hm
+        ON hm.ent_sap700_code = TRIM(b.bukrs)
+     WHERE augdt >= @year_month_day
+       AND augdt <= @key_date_sap
+       AND COALESCE(bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+       AND COALESCE(rstgr,'|') = '400'
+
+    UNION ALL
+
+    SELECT 'S800' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+      FROM ods.odsslt_s800_bsad
+     WHERE augdt >= @year_month_day
+       AND augdt <= @key_date_sap
+       AND COALESCE(bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+       AND COALESCE(rstgr,'|') = '400'
+
+    UNION ALL
+
+    SELECT 'S900' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+      FROM ods.odsslt_s900_bsad
+     WHERE augdt >= @year_month_day
+       AND augdt <= @key_date_sap
+       AND COALESCE(bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+       AND COALESCE(rstgr,'|') = '400'
+
+    UNION ALL
+
+    SELECT 'S610' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+      FROM ods.odss610_bsad
+     WHERE augdt >= @year_month_day
+       AND augdt <= @key_date_sap
+       AND COALESCE(bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+       AND COALESCE(rstgr,'|') = '400'
+
+    UNION ALL
+
+    SELECT 'S810' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+      FROM ods.odsslt_s810_bsad
+     WHERE augdt >= @year_month_day
+       AND augdt <= @key_date_sap
+       AND COALESCE(bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+       AND COALESCE(rstgr,'|') = '400'
+
 ),
 -- 供应商未清项目：仅保留参数月末前已过账且非A/S状态的记录。
 src_bsik AS (
@@ -489,7 +563,7 @@ src_bsik AS (
                ELSE TRIM(bukrs)
            END
            ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s600_bsik
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -497,7 +571,7 @@ src_bsik AS (
 
     UNION ALL
 
-    SELECT 'S700' AS system_src, 'BSIK' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.lifnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, NULL AS rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
+    SELECT 'S700' AS system_src, 'BSIK' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.lifnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, NULL AS rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
       FROM ods.odsslt_s700_bsik b
       LEFT JOIN s700_company_map hm
         ON hm.ent_sap700_code = TRIM(b.bukrs)
@@ -507,7 +581,7 @@ src_bsik AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S800' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odss800_bsik
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -515,7 +589,7 @@ src_bsik AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odss900_bsik
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -523,7 +597,7 @@ src_bsik AS (
 
     UNION ALL
 
-    SELECT 'S610' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S610' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odss610_bsik
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -531,7 +605,7 @@ src_bsik AS (
 
     UNION ALL
 
-    SELECT 'S810' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S810' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s810_bsik
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -547,7 +621,7 @@ src_bsak AS (
                ELSE TRIM(bukrs)
            END
            ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s600_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -556,7 +630,7 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S700' AS system_src, 'BSAK' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.lifnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, NULL AS rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
+    SELECT 'S700' AS system_src, 'BSAK' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.lifnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, NULL AS rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
       FROM ods.odsslt_s700_bsak b
       LEFT JOIN s700_company_map hm
         ON hm.ent_sap700_code = TRIM(b.bukrs)
@@ -567,7 +641,7 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S800' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s800_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -576,7 +650,7 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s900_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -585,7 +659,7 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S610' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S610' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odss610_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -594,7 +668,7 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S810' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S810' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odss810_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -665,6 +739,7 @@ all_items AS (
          , b.budat
          , b.bldat
          , b.zfbdt
+         , b.zbd1t
          , b.augdt
          , b.shkzg
          , b.dmbtr
@@ -742,6 +817,17 @@ normalized_items AS (
          , STR_TO_DATE(NULLIF(TRIM(a.bldat), ''), '%Y%m%d') AS voucher_dt
          , STR_TO_DATE(NULLIF(TRIM(a.budat), ''), '%Y%m%d') AS posting_dt
          , STR_TO_DATE(NULLIF(TRIM(a.aging_date_sap), ''), '%Y%m%d') AS baseline_dt
+         , CASE
+               WHEN NULLIF(TRIM(a.aging_date_sap), '') IS NULL
+                   THEN NULL
+               WHEN a.shkzg = 'H'
+                   THEN STR_TO_DATE(NULLIF(TRIM(a.aging_date_sap), ''), '%Y%m%d')
+               WHEN NULLIF(TRIM(a.zbd1t), '') IS NOT NULL
+                   THEN DATE_ADD(
+                            STR_TO_DATE(NULLIF(TRIM(a.aging_date_sap), ''), '%Y%m%d')
+                          , INTERVAL CAST(NULLIF(TRIM(a.zbd1t), '') AS INT) DAY
+                        )
+           END AS netrcp_dt
          , STR_TO_DATE(NULLIF(TRIM(a.augdt), ''), '%Y%m%d') AS clearing_dt
          , LTRIM(COALESCE(a.cust_head_code, ''), '0') AS cust_head_code
          , LTRIM(COALESCE(a.filkd, ''), '0') AS cust_branch_code
@@ -1425,6 +1511,7 @@ SELECT @dt_month
      , a.voucher_dt
      , a.posting_dt
      , a.baseline_dt
+     , a.netrcp_dt
      , a.clearing_dt
      , CASE
            WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
@@ -1594,6 +1681,7 @@ INSERT INTO test.dwd_fi_mr_arap_detail_mi
     , voucher_dt               -- 凭证日期
     , posting_dt               -- 凭证过账日期
     , baseline_dt              -- 账龄起算日期
+    , netrcp_dt                -- 净收付日期
     , clearing_dt              -- 清账日期
     , cust_code                -- 客商编码
     , cust_name                -- 客商名称
@@ -1975,6 +2063,7 @@ SELECT @dt_month
      , NULL AS voucher_dt
      , NULL AS posting_dt
      , @key_date AS baseline_dt
+     , NULL AS netrcp_dt
      , NULL AS clearing_dt
      , NULL AS cust_code
      , NULL AS cust_name
@@ -2070,7 +2159,8 @@ SELECT @dt_month
 --    映射后利润中心仅对第一段电商零售类客户生效：按新旧利润中心映射规则将原始利润中心映射为目标利润中心；未命中客户范围或映射规则时保持NULL，第二段余额保持NULL。
 --    onoffline对第一段客户和供应商行均生效：先按应收规则表batch 1→2→3匹配，未命中再按收入规则表batch 5→2→1匹配，均未命中默认020_OFF_002（零售-传统零售）；第二段余额保持NULL。
 -- 5. 第一段保留BELNR + BUZEI凭证行粒度；需确认六系统BUZEI、BSTAT、BUDAT、BLDAT、
---    ZFBDT、AUGDT、ZLSCH、PAYS_TRAN、SGTXT均已稳定入湖，且日期字段格式为YYYYMMDD。
+--    ZFBDT、ZBD1T、AUGDT、ZLSCH、PAYS_TRAN、SGTXT均已稳定入湖，且日期字段格式为YYYYMMDD。
+--    netrcp_dt按最终账龄基准日期计算：shkzg='H'时ZBD1T按0天处理，其他借贷方向使用ZBD1T天数；非统驭科目余额无行项目付款条件，netrcp_dt为空。
 -- 6. 账龄日期配置dim.dim_rule_fi_mr_ar_agingdate需确认valid_fr/valid_to可按YYYYMM比较，
 --    空company_code表示系统级规则；同一有效月、系统、公司存在重叠记录时SQL会按归一化键去重，
 --    但仍需由维表侧治理重复配置。

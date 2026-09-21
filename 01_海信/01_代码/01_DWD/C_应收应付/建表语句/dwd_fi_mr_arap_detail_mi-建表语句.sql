@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_detail_mi (
     , voucher_dt DATE COMMENT '凭证日期'
     , posting_dt DATE COMMENT '过账日期'
     , baseline_dt DATE COMMENT '账龄基准日期'
+    , netrcp_dt DATE COMMENT '净收付日期：基准日期加ZBD1T天数'
     , clearing_dt DATE COMMENT '清账日期'
     , cust_code VARCHAR(30) COMMENT '客商编码：优先分户，否则主户'
     , cust_name VARCHAR(200) COMMENT '客商名称：优先分户，否则主户'
