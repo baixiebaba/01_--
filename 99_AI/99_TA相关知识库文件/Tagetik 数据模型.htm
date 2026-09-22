@@ -1,0 +1,6043 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<!-- saved from url=(0073)http://10.7.8.124:20500/tagetikcpm/datamodel -->
+<HTML><HEAD><META content="IE=5.0000" http-equiv="X-UA-Compatible">
+
+<META http-equiv="Content-Type" 
+content="text/html; charset=utf-8"><TITLE>Tagetik 数据模型</TITLE>
+<STYLE>table {  border-collapse: collapse; } table, th, td { border: 1px solid black; } </STYLE>
+
+<META name="GENERATOR" content="MSHTML 11.00.10570.1001"></HEAD>
+<BODY style="margin: 20px; padding: 0px; font-family: Helvetica,Arial,sans-serif;">
+<DIV style="text-align: center;">
+<H1><SPAN style="color: rgb(49, 128, 195);">Tagetik 数据模型</SPAN></H1></DIV>
+<DIV style="text-align: center;">
+<H3>5.3.14.201</H3></DIV>
+<DIV style="text-align: center;">
+<H3>Tagetik 数据模型</H3></DIV>
+<H4>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModel.html#abstract">抽象</A></DIV>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModel.html#app_metadata_tables">元数据表</A></DIV>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModel.html#app_aggregation_criteria">汇总条件</A></DIV>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModel.html#app_user_views_limitations">用户视图/限制</A></DIV>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModel.html#app_data_tables">数据表</A></DIV>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModel.html#app_appendix_a">附录 
+A</A></DIV></H4>
+<DIV id="abstract" style="text-align: center;">
+<H4>抽象</H4></DIV>
+<DIV>此文档介绍 Tagetik 数据库中包含的元数据和数据表。<BR>当某个字段以“COD_”开头时，请记住这表示维度的代码，例如， 
+COD_SCENARIO 是场景的代码（而不是其描述）。<BR>当某个字段以“FLAG_”开头时，请记住其值为 0 或 1。<BR>在 Tagetik 
+中，“表语言”表示在多语言表中，要素的描述所使用的 语言。大部分元数据表都采用多语言。在多语言表中， 您可以管理多达 4 种不同的语言，并且始终提供语言 0 
+的描述。<BR>在每个表中，包含以下字段： 
+<UL>
+  <LI>Origin (PROVENIENZA)：指定数据的来源。手动添加的记录将“INPUT_WEB”作为来源。有关 Tagetik 
+  中来源的完整列表，请参阅附录 A</LI>
+  <LI>Userupd (USERUPD)：指定执行了最后修改或者添加了新记录的用户；</LI>
+  <LI>Dateupd (DATEUPD)：执行上次修改或添加新记录的日期。 此字段始终由系统进行管理</LI></UL><BR>
+在本文档中，忽略被认为与报告目的无关的表字段。</DIV>
+<DIV id="app_metadata_tables" style="text-align: center;">
+<H3>元数据表</H3></DIV>
+<DIV id="PERIODO">Table name: 
+<B>PERIODO</B><BR><B>PERIODO</B><BR>期间表示将一个财政年度划分为若干时间段的方法。一个期间通常表示一个月、一个季度或半年<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。可能值从 01 到 13。也有可能管理从任意月份开始的期间（例如，为 6 月设置 01）</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_PERIODO0</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_PERIODO1</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_PERIODO2</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_PERIODO3</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_MESE0</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：在报告每个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_MESE1</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：在报告每个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_MESE2</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：在报告每个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_MESE3</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：在报告每个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_TRIMESTRE0</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：在报告每季度值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_TRIMESTRE1</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：在报告每季度值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_TRIMESTRE2</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：在报告每季度值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_TRIMESTRE3</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：在报告每季度值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_QUADRIMESTRE0</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：在报告四个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_QUADRIMESTRE1</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：在报告四个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_QUADRIMESTRE2</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：在报告四个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_QUADRIMESTRE3</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：在报告四个月值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SEMESTRE0</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：在报告半年值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SEMESTRE1</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：在报告半年值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SEMESTRE2</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：在报告半年值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SEMESTRE3</TD>
+    <TD>varchar(80)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：在报告半年值时使用的期间的描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_NUM_PERIODO</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>DESC_NUM_PERIODO</B><BR>这是一个非编码的自由属性，可供报表使用。在交替管理与日历月相关的期间时，此属性特别有用。<BR>例如，如果在此字段中，代码为 
+      01 的期间为 4 月，则可能插入 04。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="SCENARIO">Table name: 
+<B>SCENARIO</B><BR><B>SCENARIO</B><BR>该表包含所有工作场景。有两种不同的场景：
+<UL>
+  <LI>原始场景：包括这两个概念：财政年度和数据版本。例如，我们可能有：
+  <UL>
+    <LI>一个 2008ACT 场景，用于指定 2008 财年的实际数字</LI>
+    <LI>一个 2009B1 场景，用于指定 2009 财年预算的第一个版本</LI>
+    <LI>一个 2009F6 场景，用于指定 6 月关账后所做的 2009 
+  财年预算</LI></UL></LI>需要在原始场景中录入以下所有数据：金额、预合并和合并调整。<BR>
+  <LI>合并场景：表示系统在其上执行合并数据流程的场景。合并场景与原始场景相关，并使用合并范围进行定义。在此场景中，“合并”数据已被系统记住，不能手动修改</LI></UL><BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_SCENARIO</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_SCENARIO</B><BR>场景的类型。可能的值为：
+      <UL>
+        <LI>O（原始）</LI>
+        <LI>C（合并）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_ORIGINARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD><B>COD_SCENARIO_ORIGINARIO</B><BR>表示与合并场景相关的原始场景。<BR>仅针对“合并”场景。<BR></TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>DESC_SCENARIO</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>场景描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_PREC</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD>上一个场景代码</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_SUCC</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD>下一个场景代码</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_RIF1</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD>参考场景 1：此场景可用于报表中，例如指示与实际数据相关的预算数据或者预测数据；可选。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_RIF2</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD>参考场景 2：此场景可用于报表中，例如指示与实际数据相关的预算数据或者预测数据；可选。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_RIF3</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD>参考场景 3：此场景可用于报表中，例如指示与实际数据相关的预算数据或者预测数据；可选。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_RIF4</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD>参考场景 4：此场景可用于报表中，例如指示与实际数据相关的预算数据或者预测数据；可选。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_RIF5</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD>参考场景 5：此场景可用于报表中，例如指示与实际数据相关的预算数据或者预测数据；可选。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_AZI_CAPOGRUPPO</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_AZI_CAPOGRUPPO</B><BR>合并的控股实体的代码。<BR>仅针对“合并”场景<BR></TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_VALUTA</B><BR>应用于计算合并的货币的代码。<BR>仅针对“合并”场景<BR></TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_GERARCHIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>COD_CATEGORIA_GERARCHIA</B><BR>类别分组。该字段始终设置为“$”<BR>仅针对“合并”场景<BR></TD>
+    <TD>No</TD>
+    <TD>CATEGORIA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_CATEGORIA_ELEGER</B><BR>类别分组节点的代码，该节点指定要加载到合并场景的类别上的筛选器。<BR>仅针对“合并”场景。<BR></TD>
+    <TD>No</TD>
+    <TD>CATEGORIA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>FLAG_ATTIVO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定场景是否包含无关但用户不想删除的数据。此信息不影响已锁定的数据。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_ESERCIZIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD><B>COD_ESERCIZIO</B><BR>非编码的自由属性。允许显示该场景所引用的财政年度。<BR>仅针对“原始”场景。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_VERSIONE</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>自由非编码属性。允许显示该场景所引用的版本</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_RIF_CAMBI</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD><B>COD_SCENARIO_RIF_CAMBI</B><BR>仅针对合并场景<BR>指定在转换步骤中读取外汇汇率的原始场景。<BR></TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_CONTO_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_CONTO_GERARCHIA</B><BR>科目分组。该字段始终设置为“$”<BR>仅针对“合并”场景<BR></TD>
+    <TD>No</TD>
+    <TD>CONTO_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_CONTO_ELEGER</B><BR>科目分组节点的代码，该节点指定要加载到合并场景的科目上的筛选器。<BR>仅针对“合并”场景。<BR></TD>
+    <TD>No</TD>
+    <TD>CONTO_GERARCHIA</TD></TR>
+  <TR>
+    <TD>ATTRIBUTO1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO1</B><BR>属性 1：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO2</B><BR>属性 2：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO3</B><BR>属性 3：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO4</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO4</B><BR>属性 4：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO5</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO5</B><BR>属性 5：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO6</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO6</B><BR>属性 6：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO7</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO7</B><BR>属性 7：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO8</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO8</B><BR>属性 8：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO9</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO9</B><BR>属性 9：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO10</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO10</B><BR>属性 10：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_SCENARIO’。<BR>通过分配名称，系统可管理该属性<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="SCENARIO_PERIODO">Table name: 
+<B>SCENARIO_PERIODO</B><BR>该表包含了特定场景下的所有工作期间。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码</TD>
+    <TD>Yes</TD>
+    <TD>PERIODO</TD></TR>
+  <TR>
+    <TD>TIPO_SCENARIO</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_SCENARIO</B><BR>场景的类型<BR>可能的值为：
+      <UL>
+        <LI>O（原始）</LI>
+        <LI>C（合并）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_INIZIO</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>期间开始日期。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_FINE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>期间结束日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_BLOCCATO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定场景/期间是否锁定。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_RACCOLTA</TD>
+    <TD>varchar(15)</TD>
+    <TD>No</TD>
+    <TD><B>COD_RACCOLTA</B><BR>与场景/期间相关的流程。<BR>仅针对“原始”场景。<BR></TD>
+    <TD>No</TD>
+    <TD>RACCOLTA</TD></TR>
+  <TR>
+    <TD>FLAG_STORICIZZATO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定与场景/期间相关的数据是否已存档</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="CATEGORIA">Table name: 
+<B>CATEGORIA</B><BR>此表包含用于对数据进行分类的所有类别，特别是调整</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA0</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_FIGLIA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>此类别始终与其参考类别一起处理和诊断。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_CATEGORIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_CATEGORIA</B><BR>类别类型。可能的值为：
+      <UL>
+        <LI>SA（金额）</LI>
+        <LI>RP（预合并调整）</LI>
+        <LI>RC（合并调整）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_CONTRIBUTOR</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定类别是由贡献者管理还是仅由合并者管理</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_RIF</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>这是子类别的参考类别 (flag_figlia=true)。</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>FLAG_SALDO_RETTIFICA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定技术上属于“金额”类别的类别是否必须作为“调整”类别处理</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_ELABORAZIONE</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否必须处理类别</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_PERIODICO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定是否必须以定期模式管理日记账。</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="VALUTA">Table name: <B>VALUTA</B><BR>该表包含所有货币</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>货币代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_VALUTA</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>货币描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA1</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>货币备用代码 1</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA2</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>货币备用代码 2</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>NUM_DECIMALI</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>小数位数。可能出现的值为 0、1、2、3</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA_RIF</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>使用衍生货币时的参考货币：例如，使用不同的计量单位，甚至仅仅是不同的小数位数</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>COEFFICIENTE_RIF</TD>
+    <TD>numeric(21)</TD>
+    <TD>No</TD>
+    <TD>将一种货币转换为其衍生货币时的转换系数。</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="AZIENDA">Table name: 
+<B>AZIENDA</B><BR><B>AZIENDA</B><BR>此表包含“实体”。<BR>Tagetik 
+中的实体维度可用于表示合法实体（因为法律结构通过“实体”之间的关系表示）和/或标识要在数据收集过程中提交的实体。一般来说：
+<UL>
+  <LI>如果必须运行合并流程，则应将实体或实体的“部分”添加到实体维度中</LI>
+  <LI>否则，可以在实体维度上添加要提交的实体的列表</LI></UL><BR>该维度的名称在 CONFIGURAZIONE 表中指定，并对应于 
+COD_INFORMAZIONE = ‘NOME_AZIENDA'。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>RAGIONE_SOCIALE</TD>
+    <TD>varchar(600)</TD>
+    <TD>No</TD>
+    <TD>企业名称</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_AZIENDA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_AZIENDA</B><BR>告知该实体是一个部门还是一个真正的法律实体。可能的值为：
+      <UL>
+        <LI>1 实体是一个真正的法律实体</LI>
+        <LI>0 实体是一个部门</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>SEDE_LEGALE</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>法定总部</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>SEDE_AMMINISTRATIVA</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>行政市</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_COSTITUZIONE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>成立日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_CONSOLIDAMENTO</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_CONSOLIDAMENTO</B><BR>合并类型。可能的值为：
+      <UL>
+        <LI>I（逐行）</LI>
+        <LI>P（比例）</LI>
+        <LI>C（成本）</LI>
+        <LI>E（权益）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>PERC_PROPORZIONALE</TD>
+    <TD>numeric(15)</TD>
+    <TD>No</TD>
+    <TD>% 成比例</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>EMAIL</TD>
+    <TD>varchar(150)</TD>
+    <TD>No</TD>
+    <TD>参考电子邮件地址</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TELEFONO</TD>
+    <TD>varchar(128)</TD>
+    <TD>No</TD>
+    <TD>参考电话号码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>RESPONSABILE</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>负责管理的人</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_INIZIO</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>实体有效性起始日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_FINE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>实体有效性结束日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_SOLO_CTP</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>如果设置，该实体只能在公司间声明中承认为交易对手</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_AUT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>如果在调整时未托管自定义维度，则系统将使用默认自定义维度要素。</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2_AUT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>如果在调整时未托管自定义维度，则系统将使用默认自定义维度要素。</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3_AUT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>如果在调整时未托管自定义维度，则系统将使用默认自定义维度要素。</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4_AUT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>如果在调整时未托管自定义维度，则系统将使用默认自定义维度要素。</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5_AUT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>如果在调整时未托管自定义维度，则系统将使用默认自定义维度要素。</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>ATTRIBUTO1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>属性 1：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 CONFIGURAZIONE 
+      表中指定，并对应于 COD_INFORMAZIONE = 
+    ‘NOME_ATTRIBUTO1_AZIENDA’。<BR>通过分配名称，系统可管理该属性。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>属性 2：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 CONFIGURAZIONE 
+      表中指定，并对应于 COD_INFORMAZIONE = 
+    ‘NOME_ATTRIBUTO2_AZIENDA’。<BR>通过分配名称，系统可管理该属性。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>属性 3：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 CONFIGURAZIONE 
+      表中指定，并对应于 COD_INFORMAZIONE = 
+    ‘NOME_ATTRIBUTO3_AZIENDA’。<BR>通过分配名称，系统可管理该属性。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO4</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>属性 4：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。该属性的名称在 CONFIGURAZIONE 表中指定，并对应于 
+      COD_INFORMAZIONE = ‘NOME_ATTRIBUTO4_AZIENDA’。通过分配名称，系统可管理该属性。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO5</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO5</B><BR>属性 5：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_AZIENDA’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_CESSIONE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>实体分配日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA0</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：实体描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>DESC_AZIENDA1</B><BR>表语言 1：实体描述。<BR>该字段仅在 CONFIGURAZIONE 
+      表中管理，“CAMPO_NUMERO”字段的值对应于 COD_INFORMAZIONE = 
+      “TRANSLATE_DESCRIPTION_AZIENDA”等于 1。<BR>另外，该字段始终等于 DESC_AZIENDA0。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>DESC_AZIENDA2</B><BR>表语言 2：实体描述。<BR>该字段仅在 CONFIGURAZIONE 
+      表中管理，“CAMPO_NUMERO”字段的值对应于 COD_INFORMAZIONE = 
+      “TRANSLATE_DESCRIPTION_AZIENDA”等于 1。<BR>另外，该字段始终等于 DESC_AZIENDA0。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>DESC_AZIENDA3</B><BR>表语言 3：实体描述。<BR>该字段仅在 CONFIGURAZIONE 
+      表中管理，“CAMPO_NUMERO”字段的值对应于 COD_INFORMAZIONE = 
+      “TRANSLATE_DESCRIPTION_AZIENDA”等于 1。<BR>另外，该字段始终等于 DESC_AZIENDA0。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD2_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>其他实体代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_SOLO_CONSOLIDATORE</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>它用于指定在实体上用户是否可以插入所有数据类型，或仅在合并者类别上插入数据。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_DECONSOLIDAMENTO</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_DECONSOLIDAMENTO</B><BR>
+      <UL>
+        <LI>0 = 不拆分</LI>
+        <LI>1 = 仅拆分期初余额</LI>
+        <LI>2 = 从上一期间拆分（系统在同一场景的上一期间之前重新提议损益和差异科目）</LI>
+        <LI>3 = 从当前期间拆分</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DEST1">Table name: <B>DEST1</B><BR><B>DEST1</B><BR>Tagetik 
+允许定义和管理多达五个物理维度，以支持业务模型的特定特征。它们可以代表产品、客户、成本中心…<BR>对于它们中的每一个，都可以定义无限数量的逻辑和独立元素。<BR>该自定义维度的名称在 
+CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+‘NOME_DEST1'。<BR>通过分配名称，系统可管理该自定义维度。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>自定义维度要素代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST10</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST11</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST12</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST13</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO1</B><BR>属性 1：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_DEST1’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO2</B><BR>属性 2：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO2_DEST1’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO3</B><BR>属性 3：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO3_DEST1’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO4</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO4</B><BR>属性 4：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO4_DEST1’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO5</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO5</B><BR>属性 5：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO5_DEST1’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_FINE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD><B>DATA_FINE</B><BR>当系统确定属于某流程的自定义维度 1 
+      时，将利用此信息，因为系统只提议对由目标场景/期间确定的时间空间有效的自定义维度 1。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_INIZIO</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD><B>DATA_INIZIO</B><BR>当系统确定属于某流程的自定义维度 1 
+      时，将利用此信息，因为系统只提议对由目标场景/期间确定的时间空间有效的自定义维度 1。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="CONTO">Table name: <B>CONTO</B><BR>此表包含各科目及其属性。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO0</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC2_CONTO0</TD>
+    <TD>varchar(600)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：替代科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC2_CONTO1</TD>
+    <TD>varchar(600)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：替代科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC2_CONTO2</TD>
+    <TD>varchar(600)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：替代科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC2_CONTO3</TD>
+    <TD>varchar(600)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：替代科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>NATURA_CONTO</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>NATURA_CONTO</B><BR>科目性质。可能的值为：
+      <UL>
+        <LI>E（损益）</LI>
+        <LI>P（资产负债表）</LI>
+        <LI>O（担保和承诺）</LI>
+        <LI>A（其他差异 - 通常是指“损益”数量的统计金额）</LI>
+        <LI>B（其他库存 - 通常是指“资产负债表”数量的统计金额）</LI>
+        <LI>F（财务计划）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_CONTO</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_CONTO</B><BR>科目类型。可能的值为：
+      <UL>
+        <LI>N（正常）</LI>
+        <LI>D（明细）</LI>
+        <LI>F（差异）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_CONVERSIONE</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_CONVERSIONE</B><BR>用于任何转换的交换类型。可能的值为：
+      <UL>
+        <LI>0（无）</LI>
+        <LI>1（最终外汇汇率）</LI>
+        <LI>2（损益外汇汇率）</LI>
+        <LI>3（之前的最终外汇汇率）</LI>
+        <LI>4（之前的损益外汇汇率）</LI>
+        <LI>5（历史外汇汇率）</LI>
+        <LI>6（平均外汇汇率）</LI>
+        <LI>7（期间平均外汇汇率）</LI>
+        <LI>B（期初余额外汇汇率）</LI>
+        <LI>C（增量外汇汇率）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_IC</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定科目是否管理公司间的值。可能的值为：
+      <UL>
+        <LI>1（是：科目可以同时具有公司间金额和总金额）</LI>
+        <LI>0（否：科目不可以具有公司间的值）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO1</B><BR>属性 1：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO1_CONTO’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO2</B><BR>属性 2：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO2_CONTO’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO3</B><BR>属性 3：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO3_CONTO’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO4</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO4</B><BR>属性 4：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO4_CONTO’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ATTRIBUTO5</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD><B>ATTRIBUTO5</B><BR>属性 5：这是一种非编码的自由属性，可用于特定分类、条件格式设置等报表。<BR>该属性的名称在 
+      CONFIGURAZIONE 表中指定，并对应于 COD_INFORMAZIONE = 
+      ‘NOME_ATTRIBUTO5_CONTO’。<BR>通过分配名称，系统可管理该属性。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_RATEO_DARE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用于生成手动插入的损益行的交易对手进入的科目</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_CONTO_RATEO_AVERE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用于生成手动插入的损益行的交易对手退出的科目</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>TIPO_PARAMETRIZZAZIONE</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_PARAMETRIZZAZIONE</B><BR>指定科目是否用于金融投资和权益账户的参数化。可能的值为：
+      <UL>
+        <LI>X（无）</LI>
+        <LI>P（法律结构）</LI>
+        <LI>N（权益净额）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_INIZIO</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>科目有效期开始日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_FINE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>科目有效期结束日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_NUM_MAX_DECIMALE</TD>
+    <TD>smallint(2)</TD>
+    <TD>Yes</TD>
+    <TD>指定用户是否可以针对“其他库存”或“其他差异科目”执行包含 9 位小数的编辑。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_VALUTA_TRANSAZIONE</TD>
+    <TD>smallint(2)</TD>
+    <TD>Yes</TD>
+    <TD><B>FLAG_VALUTA_TRANSAZIONE</B><BR>指定科目是否管理交易货币。可能的值为：
+      <UL>。
+        <LI>1（是：科目可以同时具有公司间金额和总金额）</LI>
+        <LI>0（否：科目不可以具有公司间的值）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="app_aggregation_criteria" style="text-align: center;">
+<H3>汇总条件</H3></DIV>
+<DIV>
+<P><SPAN>Tagetik 定义一组用于按不同方式分组维度的汇总条件，以便协助其管理。</SPAN>    </P>
+<UL>
+  <LI><B><SPAN>分组</SPAN></B><SPAN>：对于单词“分组”，Tagetik 定义了具有下列功能的汇总结构：</SPAN>      
+  </LI>
+  <UL>
+    <LI><B><SPAN>多级</SPAN></B><SPAN>：该组由多个级别组成。对于每个级别，有多个要素</SPAN>        </LI>
+    <LI><B><SPAN>多父级</SPAN></B><SPAN>：一个要素可以有多个父级</SPAN> </LI>
+    <LI><B><SPAN>有且</SPAN></B><SPAN><B>仅有一个</B>：只能有一个组</SPAN><SPAN></SPAN></LI></UL></UL>
+<UL>
+  <LI><B><SPAN> 层级</SPAN></B><SPAN>：对于单词“层级”，Tagetik 定义了具有下列功能的汇总结构：</SPAN> 
+</LI>
+  <UL>
+    <LI><B><SPAN>多级</SPAN></B><SPAN>：该组由多个级别组成。对于每个级别，有多个要素</SPAN>        </LI>
+    <LI><B><SPAN>单父级</SPAN></B><SPAN>：一个要素只能有一个父级</SPAN> </LI>
+    <LI><B><SPAN>可以有多个：</SPAN></B><SPAN> 可以创建多个层级</SPAN> </LI></UL></UL>
+<P><SPAN> 层级用于汇总实体、科目和自定义维度。</SPAN></P>
+<P><SPAN>仅限支持其他类型的汇总结构的科目，这是财务报表模板。</SPAN> </P></DIV>
+<DIV>场景 - 分组</DIV>
+<DIV id="SCENARIO_GERARCHIA">Table name: 
+<B>SCENARIO_GERARCHIA</B><BR>此表包含分组结构的定义。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO_GERARCHIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>场景分组代码。此字段始终设置为“$”。</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>节点代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_SCENARIO_ELEGER</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_SCENARIO_ELEGER</B><BR>节点类型。可能的值为：
+      <UL>
+        <LI>R（节点是分组的根节点）</LI>
+        <LI>N（节点是分组的通用节点）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_GERARCHIA_PADRE</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD>父节点的分组代码（必须与 COD_SCENARIO_GERARCHIA 相同）。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_ELEGER_PADRE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>父节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCENARIO_ELEGER0</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCENARIO_ELEGER1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCENARIO_ELEGER2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCENARIO_ELEGER3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="SCENARIO_GERARCHIA_ABBIM">Table name: 
+<B>SCENARIO_GERARCHIA_ABBIM</B><BR>此表包含场景和第一级父分组节点之间的关系</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_GERARCHIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>场景分组代码。该字段始终设置为“$”</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>节点代码</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_GERARCHIA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>类别 - 分组</DIV>
+<DIV id="CATEGORIA_GERARCHIA">Table name: 
+<B>CATEGORIA_GERARCHIA</B><BR>此表包含分组结构的定义。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CATEGORIA_GERARCHIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>类别分组代码。此字段始终设置为“$”</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>节点代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_GERARCHIA_PADRE</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD>父节点的分组代码（必须与 COD_CATEGORIA_GERARCHIA 相同）</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER_PADRE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>父节点代码</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>FLAG_GENERA_FLAT</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定是否必须保持扁平结构。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER0</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>父节点的分组代码（必须与 COD_CATEGORIA_GERARCHIA 相同）</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="CATEGORIA_GERARCHIA_ABBIM">Table name: 
+<B>CATEGORIA_GERARCHIA_ABBIM</B><BR>此表包含类别与第一级父分组节点之间的关系</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码</TD>
+    <TD>Yes</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_GERARCHIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>类别分组代码。此字段始终设置为“$”</TD>
+    <TD>Yes</TD>
+    <TD>CATEGORIA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>节点代码</TD>
+    <TD>Yes</TD>
+    <TD>CATEGORIA_GERARCHIA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="CATEGORIA_GERARCHIA_FLAT">Table name: 
+<B>CATEGORIA_GERARCHIA_FLAT</B><BR><B>CATEGORIA_GERARCHIA_FLAT</B><BR>此表包含与上面两个表对应的平面分组表。<BR>此表是系统执行转换的结果：原始结构现在以水平和扁平方式显示（之前是垂直方式）。<BR>仅在指定扁平结构必须保持对齐的类别分组时，此表才会填满 
+(CATEGORIA_GERARCHIA.FLAG_GENERA_FLAT = 1)<BR>始终将根添加到节点 
+8，因此某些初始字段可能保持为空。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>类别代码</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA0</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：类别描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_GERARCHIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD>类别分组代码。此字段始终设置为“$”。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>类别代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>[TODO: 
+      cpm.datamodelxml.CATEGORIA_GERARCHIA_FLAT.DESC_CATEGORIA_ELEGER1]</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER4</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER5</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER6</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER6</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER7</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER7</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA_ELEGER8</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CATEGORIA_ELEGER8</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>实体 - 层级</DIV>
+<DIV id="AZIENDA_GERARCHIA">Table name: 
+<B>AZIENDA_GERARCHIA</B><BR>此表包含层级结构的定义。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_AZIENDA_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>实体层级代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>节点代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_AZIENDA_ELEGER</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_AZIENDA_ELEGER</B><BR>节点类型。可能的值为：
+      <UL>
+        <LI>R（节点是层级的根节点）</LI>
+        <LI>N（节点是层级的通用节点）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_GERARCHIA_PADRE</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>父节点的层级代码（必须与 COD_AZIENDA_GERARCHIA 相同）</TD>
+    <TD>No</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER_PADRE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>父节点代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>FLAG_ORGANIZZAZIONE</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定层级是否是一个组织</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_TV</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_TV</B><BR>指定层级是否是取决于时间。<BR>如果维度的各个元素与层级节点之间的关系不是固定的，而是取决于场景/期间，则层级定义为与时间相关。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_GENERA_FLAT</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定是否必须保持扁平结构。仅限与时间无关的层级</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER0</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="AZIENDA_GERARCHIA_ABBI">Table name: 
+<B>AZIENDA_GERARCHIA_ABBI</B><BR>此表包含实体和与时间无关的层级的第一级父节点之间的关系。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>Yes</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>实体层级代码。仅限与时间无关的层级</TD>
+    <TD>Yes</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="AZIENDA_GERARCHIA_ABBI_TV">Table name: 
+<B>AZIENDA_GERARCHIA_ABBI_TV</B><BR>此表包含实体和与时间无关的层级的第一级父节点之间的关系。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>Yes</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>实体层级代码。仅限与时间相关的层级</TD>
+    <TD>Yes</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="AZIENDA_GERARCHIA_FLAT">Table name: 
+<B>AZIENDA_GERARCHIA_FLAT</B><BR><B>AZIENDA_GERARCHIA_FLAT</B><BR>此表包含与上面两个表对应的平面层级表。此表是系统执行转换的结果：原始结构现在以水平和扁平方式显示（在垂直之前）。<BR><BR>仅在指定扁平结构必须保持对齐的层级时，此表才会填满 
+(AZIENDA_GERARCHIA.FLAG_GENERA_FLAT = 1)<BR>始终将根添加到节点 8，因此某些初始字段可能保持为空<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>层级代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER4</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA_GERARCHIA</TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER5</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER6</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>[TODO: cpm.datamodelxml.AZIENDA_GERARCHIA_FLAT.COD_AZIENDA_ELEGER6]</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER6</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER7</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER7</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA_ELEGER8</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA_ELEGER8</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA0</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：实体描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>DESC_AZIENDA1</B><BR>表语言 1：实体描述。该字段仅在 CONFIGURAZIONE 
+      表中管理，“CAMPO_NUMERO”字段的值对应于 COD_INFORMAZIONE = 
+      “TRANSLATE_DESCRIPTION_AZIENDA”等于 1。<BR>另外，该字段始终等于 DESC_AZIENDA0。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>DESC_AZIENDA2</B><BR>表语言 2：实体描述。该字段仅在 CONFIGURAZIONE 
+      表中管理，“CAMPO_NUMERO”字段的值对应于 COD_INFORMAZIONE = 
+      “TRANSLATE_DESCRIPTION_AZIENDA”等于 1。<BR>另外，该字段始终等于 DESC_AZIENDA0。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_AZIENDA3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD><B>DESC_AZIENDA3</B><BR>表语言 3：实体描述。该字段仅在 CONFIGURAZIONE 
+      表中管理，“CAMPO_NUMERO”字段的值对应于 COD_INFORMAZIONE = 
+      “TRANSLATE_DESCRIPTION_AZIENDA”等于 1。<BR>另外，该字段始终等于 DESC_AZIENDA0。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>自定义维度 - 层级</DIV>
+<DIV id="DEST1_GERARCHIA">Table name: 
+<B>DEST1_GERARCHIA</B><BR>此表包含层级结构的定义</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_DEST1_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>自定义维度 1 层级代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>节点代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_DEST1_ELEGER</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_ELEGER</B><BR>节点类型。可能的值为：
+      <UL>
+        <LI>R（节点是层级的根节点）</LI>
+        <LI>N（节点是层级的通用节点）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_GERARCHIA_PADRE</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>父节点的层级代码（必须与 COD_DESTx_GERARCHIA 相同）</TD>
+    <TD>No</TD>
+    <TD>DEST1_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER_PADRE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>父节点代码</TD>
+    <TD>No</TD>
+    <TD>DEST1_GERARCHIA</TD></TR>
+  <TR>
+    <TD>FLAG_TV</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_TV</B><BR>指定层级是否是取决于时间。<BR>如果维度的各个元素与层级节点之间的关系不是固定的，而是取决于场景/期间，则层级定义为与时间相关。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_GENERA_FLAT</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定是否必须保持扁平结构。仅限与时间无关的层级。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER0</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DEST1_GERARCHIA_ABBI">Table name: 
+<B>DEST1_GERARCHIA_ABBI</B><BR>自定义维度要素代码</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>自定义维度要素代码</TD>
+    <TD>Yes</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST1_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>层级代码。仅限与时间无关的层级</TD>
+    <TD>Yes</TD>
+    <TD>DEST1_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD>DEST1_GERARCHIA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DEST1_GERARCHIA_ABBI_TV">Table name: 
+<B>DEST1_GERARCHIA_ABBI_TV</B><BR>此表包含自定义维度要素和与时间相关的层级的第一级父节点之间的关系。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>自定义维度要素代码</TD>
+    <TD>Yes</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间。</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_DEST1_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>层级代码。仅限与时间无关的层级</TD>
+    <TD>Yes</TD>
+    <TD>DEST1_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD>DEST1_GERARCHIA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DEST1_GERARCHIA_FLAT">Table name: 
+<B>DEST1_GERARCHIA_FLAT</B><BR><B>DEST1_GERARCHIA_FLAT</B><BR>此表包含与上面两个表对应的平面层级表。<BR>此表是系统执行转换的结果：原始结构现在以水平和扁平方式显示（之前是垂直方式）。<BR><BR>仅在指定扁平结构必须保持对齐的层级时，此表才会填满 
+(DEST1_GERARCHIA.FLAG_GENERA_FLAT = 1)<BR><BR>始终将根添加到节点 
+8，因此某些初始字段可能保持为空。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>DESC_DEST10</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：自定义维度要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST11</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：自定义维度要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST12</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：自定义维度要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST13</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：自定义维度要素描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>层级代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER4</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER5</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER6</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER6</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER7</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER7</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DEST1_ELEGER8</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DEST1_ELEGER8</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>科目 - 层级</DIV>
+<DIV id="CONTO_GERARCHIA">Table name: 
+<B>CONTO_GERARCHIA</B><BR>此表包含层级结构的定义。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CONTO_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>科目层级代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>节点代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_GERARCHIA_PADRE</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>父节点的层级代码（必须与 COD_CONTO_GERARCHIA 相同）</TD>
+    <TD>No</TD>
+    <TD>CONTO_GERARCHIA</TD></TR>
+  <TR>
+    <TD>TIPO_CONTO_ELEGER</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_CONTO_ELEGER</B><BR>节点类型。可能的值为：
+      <UL>
+        <LI>R（节点是层级的根节点）</LI>
+        <LI>N（节点是层级的通用节点）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER_PADRE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>父节点代码</TD>
+    <TD>No</TD>
+    <TD>CONTO_GERARCHIA</TD></TR>
+  <TR>
+    <TD>FLAG_GENERA_FLAT</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定是否必须保持扁平结构</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER0</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="CONTO_GERARCHIA_ABBI">Table name: 
+<B>CONTO_GERARCHIA_ABBI</B><BR>此表包含科目与第一级父节点之间的关系。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>Yes</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_CONTO_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>科目层级代码</TD>
+    <TD>Yes</TD>
+    <TD>CONTO_GERARCHIA</TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD>CONTO_GERARCHIA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="CONTO_GERARCHIA_FLAT">Table name: 
+<B>CONTO_GERARCHIA_FLAT</B><BR><B>CONTO_GERARCHIA_FLAT</B><BR>此表包含与上面两个表对应的平面层级表。此表是系统执行转换的结果：原始结构现在以水平和扁平方式显示（之前是垂直方式）。<BR><BR>仅在指定扁平结构必须保持对齐的层级时，此表才会填满 
+(CONTO_GERARCHIA.FLAG_GENERA_FLAT = 1)<BR><BR>始终将根添加到节点 
+8，因此某些初始字段可能保持为空。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>DESC_CONTO0</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：科目描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_GERARCHIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>科目层级代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER1</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER2</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER3</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER4</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER5</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER6</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER6</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER7</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER7</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CONTO_ELEGER8</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>节点代码</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_CONTO_ELEGER8</TD>
+    <TD>varchar(330)</TD>
+    <TD>No</TD>
+    <TD>节点描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>科目 - 财务报表模板</DIV>
+<DIV id="VOCE_SCHEMA">Table name: <B>VOCE_SCHEMA</B><BR>此表包含财务报表模板的列表 
+(F.S.T.)。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCHEMA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>财务报表模板代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCHEMA0</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：财务报表模板描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCHEMA1</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：财务报表模板描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCHEMA2</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：财务报表模板描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_SCHEMA3</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：财务报表模板描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_CONTO</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否使用科目维度定义 FST 项目</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_DEST1</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否使用自定义维度 1 定义 FST 项目。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_DEST2</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否使用自定义维度 2 定义 FST 项目。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_DEST3</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否使用自定义维度 3 定义 FST 项目。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_DEST4</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否使用自定义维度 4 定义 FST 项目。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_DEST5</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否使用自定义维度 5 定义 FST 项目。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_ABBINAMENTO_MULTIPLO</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定该维度可以与多个 FST 项目关联</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="VOCE">Table name: <B>VOCE</B><BR>该表包含 F.S.T. 行</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCHEMA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>F.S.T. 代码</TD>
+    <TD>Yes</TD>
+    <TD>VOCE_SCHEMA</TD></TR>
+  <TR>
+    <TD>COD_VOCE</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>F.S.T. 行代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_VOCE0</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 0：F.S.T. 行描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_VOCE1</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 1：F.S.T. 行描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_VOCE2</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 2：F.S.T. 行描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_VOCE3</TD>
+    <TD>varchar(2000)</TD>
+    <TD>No</TD>
+    <TD>表语言 3：F.S.T. 行描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_VOCE</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_VOCE</B><BR>指定 F.S.T. 行的类型。可能的值为：
+      <UL>
+        <LI>A（父行）</LI>
+        <LI>F（公式）</LI>
+        <LI>D（描述）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FORMULA_VOCE</TD>
+    <TD>varchar(max)(-1)</TD>
+    <TD>No</TD>
+    <TD>如果 F.S.T. 行是一个公式，在此处（使用特定语法）指定公式。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>ORDINAMENTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>它指示 F.S.T. 项目在报告中显示时必须使用的顺序</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_CAMBIA_SEGNO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>它指示父行是否必须带有反转标志。仅针对“父”行</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="VOCE_CONTO_ABBI">Table name: <B>VOCE_CONTO_ABBI</B><BR>此表包含 F.S.T. 和 
+F.S.T. 行中所涉及要素维度间的关系。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCHEMA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>F.S.T. 代码</TD>
+    <TD>No</TD>
+    <TD>VOCE</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1 要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2 要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VOCE</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>F.S.T. 行代码。仅针对 A 类（父行）</TD>
+    <TD>No</TD>
+    <TD>VOCE</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3 要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4 要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5 要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="app_user_views_limitations" style="text-align: center;">
+<H3>用户视图/限制</H3></DIV>
+<DIV id="UTENTE">Table name: 
+<B>UTENTE</B><BR>对于启用了应用程序数据库的每个用户，此表包含数据可见性的限制。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户代码</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_UTENTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>用户描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_AZIENDA</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_AZIENDA</B><BR>指定用户管理的实体是否存在任何限制。可能值包括： 
+      <UL>
+        <LI>X：表中存在的所有实体对用户可见。在这种情况下，部署的表 UTENTE_LIM_AZIENDA 为空</LI>
+        <LI>00：对用户可见的实体受限并在表 UTENTE_LIM_AZIENDA 中列出</LI>
+        <LI>X = 插入、提交和显示中不受限</LI>
+        <LI>XV = 插入和提交中受限，但显示中不受限</LI>
+        <LI>XP = 按区域配置文件</LI>
+        <LI>VP = 在插入和提交中受限，按区域配置文件显示</LI>
+        <LI>00 = 受限</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_DEST1</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_DEST1</B><BR>指定用户可管理的自定义维度元素是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 用户可管理表中显示的所有自定义维度元素。在这种情况下，已部署的表 UTENTE_LIM_DEST1 为空</LI>
+        <LI>&lt;&gt;X 用户可管理的自定义维度元素受到限制，并在 UTENTE_LIM_DEST1 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_DEST2</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_DEST2</B><BR>指定用户可管理的自定义维度元素是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 用户可管理表中显示的所有自定义维度元素。在这种情况下，已部署的表 UTENTE_LIM_DEST2 为空</LI>
+        <LI>&lt;&gt;X 用户可管理的自定义维度元素受到限制，并在 UTENTE_LIM_DEST2 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_DEST3</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_DEST3</B><BR>指定用户可管理的自定义维度元素是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 用户可管理表中显示的所有自定义维度元素。在这种情况下，已部署的表 UTENTE_LIM_DEST3 为空</LI>
+        <LI>&lt;&gt;X 用户可管理的自定义维度元素受到限制，并在 UTENTE_LIM_DEST3 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_DEST4</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_DEST4</B><BR>指定用户可管理的自定义维度元素是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 用户可管理表中显示的所有自定义维度元素。在这种情况下，已部署的表 UTENTE_LIM_DEST4 为空</LI>
+        <LI>&lt;&gt;X 用户可管理的自定义维度元素受到限制，并在 UTENTE_LIM_DEST4 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_DEST5</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_DEST5</B><BR>指定用户可管理的自定义维度元素是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 用户可管理表中显示的所有自定义维度元素。在这种情况下，已部署的表 UTENTE_LIM_DEST5 为空</LI>
+        <LI>&lt;&gt;X 用户可管理的自定义维度元素受到限制，并在 UTENTE_LIM_DEST5 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_SCENARIO</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_SCENARIO</B><BR>指定用户可管理的原始场景是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 用户可管理表中显示的所有原始场景。在这种情况下，已部署的表 UTENTE_LIM_SCENARIO 为空</LI>
+        <LI>&lt;&gt;X 用户可管理的原始场景受到限制，并在 UTENTE_LIM_SCENARIO 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_SCENARIO_CONS</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_SCENARIO_CONS</B><BR>指定用户可见的合并场景是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 表中显示的所有合并场景对用户都是可见的。在这种情况下，已部署的表 UTENTE_LIM_SCENARIO_CONS 为空</LI>
+        <LI>&lt;&gt;X 对用户可见的合并场景受到限制，并在 UTENTE_LIM_SCENARIO_CONS 
+    表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_CATEGORIA</TD>
+    <TD>varchar(2)</TD>
+    <TD>No</TD>
+    <TD><B>TIPO_LIM_CATEGORIA</B><BR>指定用户可见的类别是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 表中显示的所有类别对用户都是可见的。在这种情况下，已部署的表 UTENTE_LIM_CATEGORIA 为空</LI>
+        <LI>&lt;&gt;X 对用户可见的类别受到限制，并在 UTENTE LIM CATEGORIA 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_CONTO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD><B>TIPO_LIM_CONTO</B><BR>指定用户可管理的科目是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 用户可管理表中显示的所有科目。在这种情况下，已部署的表 UTENTE_LIM_CONTO 为空</LI>
+        <LI>&lt;&gt;X 用户可管理的科目受到限制，并在 UTENTE_LIM_CONTO 表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_LIM_WFM_FASE</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD><B>TIPO_LIM_WFM_FASE</B><BR>指定用户可见的类别是否存在任何限制。可能的值为：
+      <UL>
+        <LI>X 表中显示的所有类别对用户都是可见的。在这种情况下，已部署的表 UTENTE_LIM_WFM_TASK_DEF 为空</LI>
+        <LI>&lt;&gt;X 对用户可见的类别受到限制，并在 UTENTE_LIM_WFM_TASK_DEF 
+表中列出</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="UTENTE_LIM_AZIENDA">Table name: 
+<B>UTENTE_LIM_AZIENDA</B><BR>对于在实体维度上有限制的各个用户，此表包含对用户可见的实体列表。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户代码</TD>
+    <TD>Yes</TD>
+    <TD>UTENTE</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>Yes</TD>
+    <TD>AZIENDA</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="UTENTE_LIM_DEST1">Table name: <B>UTENTE_LIM_DEST1</B><BR>对于在自定义维度 1 
+上有限制的各个用户，此表包含可由用户管理的要素列表。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户代码</TD>
+    <TD>Yes</TD>
+    <TD>UTENTE</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>自定义维度 1 要素代码</TD>
+    <TD>Yes</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>FLAG_SOLO_VISUALIZZA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_SOLO_VISUALIZZA</B><BR>指定自定义维度元素是否对用户可见但不可由用户编辑。<BR>可能的值为：
+      <UL>
+        <LI>(1) 该元素不可编辑并仅对用户可见</LI>
+        <LI>(0) 该元素可编辑并对用户可见。</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="UTENTE_LIM_SCENARIO">Table name: 
+<B>UTENTE_LIM_SCENARIO</B><BR>对于在原始场景上有限制的各个用户，此表包含对用户可见的原始场景列表。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户代码</TD>
+    <TD>Yes</TD>
+    <TD>UTENTE</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>原始场景代码</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>FLAG_SOLO_VISUALIZZA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_SOLO_VISUALIZZAZIONE</B><BR>指定原始场景是否对用户可见但不可由用户编辑。可能值为：
+      <UL>
+        <LI>(1) 要素不可编辑，仅对用户可见</LI>
+        <LI>(0) 要素可编辑并对用户可见。</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="UTENTE_LIM_SCENARIO_CONS">Table name: 
+<B>UTENTE_LIM_SCENARIO_CONS</B><BR>[TODO: 
+cpm.datamodelxml.UTENTE_LIM_SCENARIO_CONS]</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户代码</TD>
+    <TD>Yes</TD>
+    <TD>UTENTE</TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>合并场景代码</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="UTENTE_LIM_CATEGORIA">Table name: 
+<B>UTENTE_LIM_CATEGORIA</B><BR>对于在类别维度设定限制的各个用户，此表包含对用户可见的类别的列表。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户代码</TD>
+    <TD>Yes</TD>
+    <TD>UTENTE</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码</TD>
+    <TD>Yes</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>FLAG_SOLO_VISUALIZZA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_SOLO_VISUALIZZA</B><BR>指定类别是否对用户可见但不可由用户编辑。<BR>可能的值为：
+      <UL>
+        <LI>(1) 该元素不可编辑并对用户隐藏</LI>
+        <LI>(0) 该元素可编辑并对用户可见。</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>[TODO: undefined]</DIV>
+<DIV id="app_data_tables" style="text-align: center;">
+<H3>数据表</H3></DIV>
+<DIV>Tagetik 允许存储离线数据表，这些数据表的量（就记录数量而言）可能会随着时间而增加。这可以避免处理数据的组件出现性能问题。<BR><BR> 在 
+SCENARIO_PERIOD 表中，FLAG_STORICIZZATO 标志指定是否离线存储特定场景/期间的数据。<BR><BR>
+将离线存储的数据移至特殊表中，这些表的名称相当于其“在线”竞争对手，但可以添加“H_”前缀。例如：<BR>
+<UL>
+  <LI>在线表 = DATI_SALDI_LORDI</LI>
+  <LI>离线表 = H_DATI_SALDI_LORDI</LI></UL></DIV>
+<DIV>汇率</DIV>
+<DIV id="DATI_CAMBIO">Table name: 
+<B>DATI_CAMBIO</B><BR><B>DATI_CAMBIO</B><BR>此表包含外汇汇率。<BR>此表中没有衍生货币（如千欧元）的外汇汇率。<BR>将根据系数和参考货币外汇汇率计算外汇汇率（千欧元 
+= 欧元汇率 * 1.000）<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>Yes</TD>
+    <TD>货币代码</TD>
+    <TD>Yes</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>CAMBIO_MEDIO</TD>
+    <TD>numeric(21)</TD>
+    <TD>No</TD>
+    <TD>累计平均汇率</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>CAMBIO_PERIODO</TD>
+    <TD>numeric(21)</TD>
+    <TD>No</TD>
+    <TD>期间平均外汇汇率</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>CAMBIO_FINALE</TD>
+    <TD>numeric(21)</TD>
+    <TD>No</TD>
+    <TD>期末汇率</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>金额</DIV>
+<DIV id="DATI_SALDI_LORDI">Table name: 
+<B>DATI_SALDI_LORDI</B><BR>此表包含原始总金额。这些金额包括少数股东权益和公司间配额。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>OID_DATI_SALDI_LORDI</TD>
+    <TD>varchar(36)</TD>
+    <TD>Yes</TD>
+    <TD>OID_DATI_SALDI_LORDI</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景。</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码。这是一个“金额”类别</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以实体货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO_VALUTA_ORIGINARIA</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以交易货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA_ORIGINARIA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>交易货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>注释</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>公司间</DIV>
+<DIV id="DATI_SALDI_IC">Table name: <B>DATI_SALDI_IC</B><BR>此表包含公司间条目</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>OID_DATI_SALDI_IC</TD>
+    <TD>varchar(36)</TD>
+    <TD>Yes</TD>
+    <TD>OID_DATI_SALDI_IC</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>申报实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码。这是一个“金额”类别</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>交易对手实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA_DOC</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>交易货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO_VALUTA_DOC</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以交易货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以实体货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>[TODO: cpm.datamodel.data_tables.consolidated_amounts]</DIV>
+<DIV id="DATI_SALDI_CONS_1">Table name: 
+<B>DATI_SALDI_CONS_1</B><BR>此表包含在比例金额类型上与合并金额相关的数据</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效合并场景</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码。这是一个“金额”类别</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>交易对手实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA_DOC</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>交易货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO_VALUTA_DOC</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以交易货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以实体货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA3</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DATI_SALDI_CONS_2">Table name: 
+<B>DATI_SALDI_CONS_2</B><BR>此表包含在转换金额类型上与合并金额相关的数据</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效合并场景</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码。这是一个“金额”类别</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>交易对手实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA_DOC</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>交易货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO_VALUTA_DOC</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以交易货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>合并货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以合并货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA3</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DATI_SALDI_CONS_3">Table name: 
+<B>DATI_SALDI_CONS_3</B><BR>此表包含在可合并金额类型上与合并金额相关的数据</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效合并场景</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码。这是一个“金额”类别</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>交易对手实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA_DOC</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>交易货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO_VALUTA_DOC</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以交易货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>合并货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD>以合并货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA3</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>调整</DIV>
+<DIV id="DATI_RETT">Table name: 
+<B>DATI_RETT</B><BR><B>DATI_RETT</B><BR>此表包含预合并和合并调整的表头。
+<UL>
+  <LI>预合并调整：通常，它们是对单个实体的会计标准的调整，目的是通过合并流程的会计标准使其统一。预合并调整的例子有：
+  <UL>
+    <LI>折旧百分比修改</LI>
+    <LI>成本分配标准修改</LI>
+    <LI>库存修改</LI></UL></LI>
+  <LI>通常，合并调整是必须插入的会计分录，以便生成合并财务报表。通常涉及合并场景的一个或两个实体</LI></UL><BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景。</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>NUM_RETTIFICA</TD>
+    <TD>varchar(200)</TD>
+    <TD>Yes</TD>
+    <TD>调整数</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>预合并调整的实体代码。合并调整的第一个实体的代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST21</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作实体 1 调整交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>第二个实体的代码。仅用于合并调整</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST22</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作实体 2 调整交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>调整描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>类别代码。指定调整类型</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>FLAG_DOCUMENTO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_DOCUMENTO</B><BR>指定日记账是否附加了文档。<BR>
+      <UL>
+        <LI>0 = 日记账还没有附加文档 </LI>
+        <LI>1 = 日记账已经附加了文档</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_PERIODICO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定是否必须以定期模式管理日记账</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_DRAFT</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>[TODO: null]</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DATI_RETT_RIGA">Table name: 
+<B>DATI_RETT_RIGA</B><BR>此表包含所有可手动或由系统自动生成的调整行。</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>OID_DATI_RETT_RIGA</TD>
+    <TD>varchar(36)</TD>
+    <TD>Yes</TD>
+    <TD>OID_DATI_RETT_RIGA</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景。</TD>
+    <TD>Yes</TD>
+    <TD>DATI_RETT</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间。</TD>
+    <TD>Yes</TD>
+    <TD>DATI_RETT</TD></TR>
+  <TR>
+    <TD>NUM_RETTIFICA</TD>
+    <TD>varchar(200)</TD>
+    <TD>Yes</TD>
+    <TD>调整数</TD>
+    <TD>Yes</TD>
+    <TD>DATI_RETT</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD><B>COD_AZIENDA</B><BR>预合并调整的实体代码（必须与 DATI_RETT.COD_AZIENDA1 
+      相同）<BR>合并调整的申报实体代码<BR></TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码。（必须与 DATI_RETT.COD_CATEGORIA 相同）</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的实体要素的代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的自定义维度 2 要素的代码。</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_AZI_CTP_SEGMENT</B><BR>分段 CTP 
+      实体代码。<BR>如果日记账表头的“多对多关系”<B></B>字段为“否”<B></B>，则在保存时：<BR>如果申报实体对应表头的实体 
+      1，则系统将此字段设置为表头的实体 2；如果申报实体对应表头的实体 2，则系统将此字段设置为表头的实体 1<BR></TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_DEST2_CTP_SEGMENT</B><BR>分段 CTP 自定义维度 2 
+      代码。<BR>如果日记账表头的“多对多关系”<B></B>字段为“否”<B></B>，则在保存时：<BR>如果申报实体对应表头的实体 
+      1，则系统将此字段设置为表头的 CTP 2 自定义维度 2；如果申报实体对应表头的实体 2，则系统将此字段设置为表头的 CTP 1 自定义维度 
+      2<BR></TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_VALUTA</B>
+      <UL>
+        <LI><B>实体日记账</B>：</LI>实体货币代码
+        <LI><B>合并日记账</B>：</LI>日记账货币代码</UL></TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD><B>IMPORTO</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>以实体货币表示的金额
+        <LI><B>合并日记账</B></LI>以日记账货币表示的金额</UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA2</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_VALUTA2</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>交易货币代码
+        <LI><B>合并日记账</B></LI>实体货币代码</UL><BR></TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO2</TD>
+    <TD>numeric(27)</TD>
+    <TD>Yes</TD>
+    <TD><B>IMPORTO2</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>以交易货币表示的金额
+        <LI><B>合并日记账</B></LI>以实体货币表示的金额</UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>调整行上的其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_FORZA_CAMBIO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD><B>FLAG_FORZA_CAMBIO</B><BR>指定用户是否需要覆盖外汇汇率，以便在调整行上将金额转换为实体的外汇汇率。<BR>
+      <UL>
+        <LI>0 = 不覆盖记录的外汇汇率。</LI>
+        <LI>1 = 覆盖记录的外汇汇率</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA_TRANSAZIONE</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>[TODO: cpm.datamodelxml.DATI_RETT_RIGA.COD_VALUTA_TRANSAZIONE]</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO_VALUTA_TRANSAZIONE</TD>
+    <TD>numeric(27)</TD>
+    <TD>No</TD>
+    <TD><B>IMPORTO_VALUTA_TRANSAZIONE</B><BR>
+      <UL>
+        <LI><B>实体日记账</B><BR>Null
+        <LI><B>合并日记账</B></LI>以交易货币表示的金额</UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DATI_RETT_RIGA_CONS_1">Table name: 
+<B>DATI_RETT_RIGA_CONS_1</B><BR>此表包含在比例金额类型上与合并调整相关的数据</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效合并场景</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>NUM_RETTIFICA</TD>
+    <TD>varchar(200)</TD>
+    <TD>Yes</TD>
+    <TD>调整数</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的实体要素的代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_AZI_CTP_SEGMENT</B><BR>分段 CTP 
+      实体代码。<BR>如果日记账表头的“多对多关系”<B></B>字段为“否”<B></B>，<BR>则在保存时：如果申报实体对应表头的实体 
+      1，则系统将此字段设置为表头的实体 2；如果申报实体对应表头的实体 2，则系统将此字段设置为表头的实体 1<BR></TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_VALUTA</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>实体货币代码
+        <LI><B>合并日记账</B></LI>日记账货币代码</UL><BR></TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(21)</TD>
+    <TD>Yes</TD>
+    <TD><B>IMPORTO</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>以实体货币表示的金额
+        <LI><B>合并日记账</B></LI>以日记账货币表示的金额</UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA2</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_VALUTA2</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>交易货币代码
+        <LI><B>合并日记账</B></LI>实体货币代码</UL><BR></TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO2</TD>
+    <TD>numeric(21)</TD>
+    <TD>Yes</TD>
+    <TD><B>IMPORTO2</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>以交易货币表示的金额
+        <LI><B>合并</B></LI>以实体货币表示的金额</UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA3</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_VALUTA3</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>实体货币代码
+        <LI><B>合并日记账</B></LI>日记账货币代码</UL><BR></TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>调整行上的其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA_TRANSAZIONE</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD><B>COD_VALUTA_TRANSAZIONE</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>Null
+        <LI><B>合并日记账</B></LI>交易货币代码</UL><BR></TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO_VALUTA_TRANSAZIONE</TD>
+    <TD>numeric(21)</TD>
+    <TD>No</TD>
+    <TD><B>IMPORTO_VALUTA_TRANSAZIONE</B><BR>
+      <UL>
+        <LI><B>实体日记账</B></LI>Null
+        <LI><B>合并日记账</B></LI>以交易货币表示的金额</UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DATI_RETT_RIGA_CONS_2">Table name: 
+<B>DATI_RETT_RIGA_CONS_2</B><BR>此表包含在转换金额类型上与合并调整相关的数据</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效合并场景</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>NUM_RETTIFICA</TD>
+    <TD>varchar(200)</TD>
+    <TD>Yes</TD>
+    <TD>调整数</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的实体要素的代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_AZI_SEGMENT</B><BR>分段 CTP 
+      实体代码。<BR>如果日记账表头的“多对多关系”<B></B>字段为“否”<B></B>，<BR>则在保存时：如果申报实体对应表头的实体 
+      1，则系统将此字段设置为表头的实体 2；如果申报实体对应表头的实体 2，则系统将此字段设置为表头的实体 1<BR></TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_DEST2_CTP_SEGMENT</B><BR>分段 CTP 自定义维度 2 
+      代码。<BR>如果日记账表头的“多对多关系”<B></B>字段为“否”<B></B>，<BR>则在保存时：如果申报实体对应表头的实体 
+      1，则系统将此字段设置为表头的 CTP 2 自定义维度 2；如果申报实体对应表头的实体 2，则系统将此字段设置为表头的 CTP 1 自定义维度 
+      2<BR></TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>合并货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(21)</TD>
+    <TD>Yes</TD>
+    <TD>以合并货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA2</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>交易货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO2</TD>
+    <TD>numeric(21)</TD>
+    <TD>Yes</TD>
+    <TD>以交易货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA3</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>调整行上的其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="DATI_RETT_RIGA_CONS_3">Table name: 
+<B>DATI_RETT_RIGA_CONS_3</B><BR>此表包含在可合并金额类型上与合并调整相关的数据</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效合并场景。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间。</TD>
+    <TD>No</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>NUM_RETTIFICA</TD>
+    <TD>varchar(200)</TD>
+    <TD>Yes</TD>
+    <TD>调整数</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的实体要素的代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作 IC 数据调整交易对手的自定义维度 2 要素的代码。</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_AZI_CTP_SEGMENT</B><BR>分段 CTP 
+      实体代码。<BR>如果日记账表头的“多对多关系”<B></B>字段为“否”<B></B>，<BR>则在保存时：如果申报实体对应表头的实体 
+      1，则系统将此字段设置为表头的实体 2；如果申报实体对应表头的实体 2，则系统将此字段设置为表头的实体 1<BR></TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP_SEGMENT</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD><B>COD_DEST2_CTP_SEGMENT</B><BR>分段 CTP 自定义维度 2 
+      代码。<BR>如果日记账表头的“多对多关系”<B></B>字段为“否”<B></B>，则在保存时：<BR>如果申报实体对应表头的实体 
+      1，则系统将此字段设置为表头的 CTP 2 自定义维度 2；如果申报实体对应表头的实体 2，则系统将此字段设置为表头的 CTP 1 自定义维度 
+      2<BR></TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_VALUTA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>合并货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO</TD>
+    <TD>numeric(21)</TD>
+    <TD>Yes</TD>
+    <TD>以合并货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA2</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>交易货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>IMPORTO2</TD>
+    <TD>numeric(21)</TD>
+    <TD>Yes</TD>
+    <TD>以交易货币表示的金额</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_VALUTA3</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>实体货币代码</TD>
+    <TD>No</TD>
+    <TD>VALUTA</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>调整行上的其他信息</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>注释</DIV>
+<DIV id="DATI_NOTE">Table name: 
+<B>DATI_NOTE</B><BR><B>DATI_NOTE</B><BR>用户可以从报表中插入的注释会存储在此表中。<BR><BR>这些注释不是指插入到上一个表中的特定金额，而是指分配给报表单元格的维度。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>OID_DATI_NOTE</TD>
+    <TD>varchar(36)</TD>
+    <TD>Yes</TD>
+    <TD>OID_DATI_NOTE</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_SCENARIO</TD>
+    <TD>varchar(15)</TD>
+    <TD>Yes</TD>
+    <TD>场景代码。这是一个生效原始场景</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_PERIODO</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>期间代码。这是一个属于场景的期间</TD>
+    <TD>Yes</TD>
+    <TD>SCENARIO_PERIODO</TD></TR>
+  <TR>
+    <TD>COD_AZIENDA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_CONTO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>科目代码</TD>
+    <TD>No</TD>
+    <TD>CONTO</TD></TR>
+  <TR>
+    <TD>COD_DEST1</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 1：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST1</TD></TR>
+  <TR>
+    <TD>COD_DEST2</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 2：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>COD_DEST3</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 3：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST3</TD></TR>
+  <TR>
+    <TD>COD_DEST4</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 4：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST4</TD></TR>
+  <TR>
+    <TD>COD_DEST5</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>自定义维度 5：自定义维度要素代码</TD>
+    <TD>No</TD>
+    <TD>DEST5</TD></TR>
+  <TR>
+    <TD>COD_CATEGORIA</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>类别代码</TD>
+    <TD>No</TD>
+    <TD>CATEGORIA</TD></TR>
+  <TR>
+    <TD>COD_AZI_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>交易对手实体代码</TD>
+    <TD>No</TD>
+    <TD>AZIENDA</TD></TR>
+  <TR>
+    <TD>COD_DEST2_CTP</TD>
+    <TD>varchar(30)</TD>
+    <TD>No</TD>
+    <TD>用作交易对手的自定义维度 2 要素的代码</TD>
+    <TD>No</TD>
+    <TD>DEST2</TD></TR>
+  <TR>
+    <TD>NOTE</TD>
+    <TD>varchar(max)(-1)</TD>
+    <TD>No</TD>
+    <TD>注释</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="app_appendix_a" style="text-align: center;">
+<H3>附录 A</H3></DIV>
+<DIV>Below are listed the values available for the field ORIGIN (present in most 
+of the table):<BR>
+<TABLE border="1">
+  <TBODY>
+  <TR>
+    <TD>
+      <P><B><SPAN>              Scenario Type</SPAN>           </B>         
+    </P></TD>
+    <TD>
+      <P><B><SPAN>              Origin</SPAN>           </B>         </P></TD>
+    <TD>
+      <P><B><SPAN>              Description</SPAN>           </B>         
+  </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            COPY_PERIOD</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - <SPAN>              &nbsp;</SPAN>          
+        Carry forward from previous period<SPAN></SPAN>           </SPAN>        
+       </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            INPUT_WEB</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Manual input - Web windows<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            INPUT_DEFORM</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Manual input – reports<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            MAP_</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            ETL<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            QDL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Quick Data Loader<SPAN></SPAN>           </SPAN>      
+         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            SUB_INPUT_WEB</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Submitted manual input - Web windows<SPAN></SPAN>     
+            </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            SUB_INPUT_DEFORM</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Submitted manual input - Reports<SPAN></SPAN>         
+        </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            SUB_MAP</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Submitted ETL<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            ENV_SYNC</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Standard Tables Update<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            COPY_SEGMENT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Copy Segment<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            COPY_CONSOLIDATED</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Copy consolidated amount on original 
+      amount<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            COPY_GENERAL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Copy amounts and journals<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            COPY_ORIG</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Source origin<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_IC_SPREADING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            IC spreading reallocation<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_IC_SPREADING_CB</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            IC spreading write off<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_IC_BALANCING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            IC - automatic balancing<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_IC_SPREADING_WOFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            IC - spreading - write off<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            DEPLOYMENT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Deployments<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            SUB</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            SUB<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PREL_RESTORE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original – Carry forward<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PREL_COPY_PREVIOUS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Copy from the previous period<SPAN></SPAN> 
+                </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PREL_DECONSOLIDATION12</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Originals - Deconsolidation 1 and 2<SPAN></SPAN>      
+           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_DECONSOLIDATION3</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Deconsolidation 3<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PREL_MERGE12</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Mergers 1 and 2<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_MERGE3</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - mergers 3<SPAN></SPAN>           </SPAN>   
+            </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PREL_REVERSE1</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Reverse journal 1<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PREL_REVERSE2</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Reverse journal 2<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PREL_REVERSE3</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Reverse journal 3<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_FININV_DEPLOY</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Originals – Loading Financial 
+      investments<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_COUNTERPARTY</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Create automatic Ctps<SPAN></SPAN>         
+        </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_DEPRECIATION</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original – Depreciation<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_DEFERRED_TAXES</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Deferred tax<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_CTP_ELIMINATIONS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Eliminations for Ctp<SPAN></SPAN>          
+       </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_FI_ELIMINATIONS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Financial investment eliminations from 
+      ownership            structure</SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_IC_PROFIT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Intragroup assets assignment<SPAN></SPAN>  
+               </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_BALANCING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original – Balancing<SPAN></SPAN>           </SPAN>   
+            </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_CALCULATED_BASIC</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Originals - Basic calculation logics<SPAN></SPAN>     
+            </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_CALCULATED</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Originals - calculation logics<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_FININV_RECL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original – Financial investments 
+      reclassification<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_NETEQUITY_RECL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original – NER<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_CLOSING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Originario - Closing<SPAN></SPAN>           </SPAN>   
+            </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_MONTHLY_SPLIT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Monthly splitting<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_MONTHLY_SPLIT_NEW</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - New Monthly splitting<SPAN></SPAN>         
+        </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_ALG_OPERATIONS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Algebraic operations<SPAN></SPAN>          
+       </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_FORECAST</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Forecast<SPAN></SPAN>           </SPAN>    
+           </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_BDG_FN</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Financial product<SPAN></SPAN>           </SPAN>      
+         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_BDG_DEPRECIATION</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Depreciation<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_RECLASSIFICATION</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Preconsolidation reclassification<SPAN></SPAN>        
+         </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_EPU</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Original - Pick-up</SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            EPU_DEPLOY</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Pick-up loading<SPAN></SPAN>           </SPAN>        
+       </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_BUDGET</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Copy from budget<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_LT_FINANCING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - L/T financing<SPAN></SPAN>           </SPAN>    
+           </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_FIXED_ASSET</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP – Assets<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_BOND</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP – Titles<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_EXCHRATE_COVERAGE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Currency hedging<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_PROJECT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Work order<SPAN></SPAN>           </SPAN>       
+        </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_CASH_IN_OUT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Collection and payments<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_PAYMENT_CALENDAR</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Payment calendar<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_SPLITTING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP – Weights<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_PAYMENT_CALENDAR_WOFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Payments calendar - Write off<SPAN></SPAN>      
+           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_SPLITTING_WOFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Weights - Write off<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_VAT_DOWN_PAYMENT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - VAT – Down payment<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_VAT_ACCOUNTING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - VAT – Accounting<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_CORRISPETTIVI_WOFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Consideration - Write off<SPAN></SPAN>          
+       </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_VAT_PAYMENT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - VAT – Payment<SPAN></SPAN>           </SPAN>    
+           </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_VAT_TRANS_ACCOUNT_WOFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - VAT - Transitory write off account<SPAN></SPAN> 
+                </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_PAYMENT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Taxes – Payment<SPAN></SPAN>           </SPAN>  
+             </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_DOWN_PAYMENT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Taxes - Down payment<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_DOWN_PAYMENT_WOFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Taxes - Down payment account<SPAN></SPAN>       
+          </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_FINAL_EXCHRATE_EVAL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Evaluation at final FX rate<SPAN></SPAN>        
+         </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_PL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP – P&amp;L Taxes<SPAN></SPAN>           </SPAN>    
+           </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_ACC</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP – Taxes<SPAN></SPAN>           </SPAN>         
+      </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_DOWN_PAYMENT_DEBT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Taxes - Debit Down payment<SPAN></SPAN>         
+        </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_DEFERRED</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Deferred taxes<SPAN></SPAN>           </SPAN>   
+            </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAXES_DEFERRED_WOFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Deferred taxes - Write off down 
+      payment<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_TAX_CREDIT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Tax credit<SPAN></SPAN>           </SPAN>       
+        </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_CQNC</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP – CNQC<SPAN></SPAN>           </SPAN>         
+    </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_FINANCIAL_RULE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Financial policy<SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_INTEREST_PL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - P&amp;L interests<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_INTEREST_ACC</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Interests – Accounting<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_GROUP_CASH_POOLING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Cash Pooling<SPAN></SPAN>           </SPAN>     
+          </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_GROUP_VAT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Group VAT<SPAN></SPAN>           </SPAN>        
+       </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Cash Flow Planning<SPAN></SPAN>           </SPAN>     
+          </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            RULE_DEPLOYMENT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Rules distribution<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            EVENT_RULE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Create events by a rule<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            EVENT_RULE_MIXED</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Create events by hybrid rule<SPAN></SPAN>       
+          </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            DIAGNOSTIC</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Diagnostic<SPAN></SPAN>           </SPAN>         
+    </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            USER_LIM_WIZARD</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Basic admin - User Rights - Simplified 
+      management<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_TAXES</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Taxes</SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PC_COSTS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Production Control: Costs<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PC_VALUES</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Production Control: Values<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PC_MOVEMENTS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Production Control: Stock transactions<SPAN></SPAN>   
+              </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            BREAK_BACK</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Form - Break Back<SPAN></SPAN>           </SPAN>      
+         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PROC_DIVIDENDS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Dividends<SPAN></SPAN>           </SPAN>         
+    </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            ELAB_DEADLINES</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Generate Submission deadline dates<SPAN></SPAN>       
+          </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Original</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP_DIVIDENDS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP - Dividends<SPAN></SPAN>           </SPAN>        
+       </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            INPUT</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Input</SPAN>         </P>
+      <P><SPAN>            Derived from INPUT_WEB, INPUT_DEFORM, SUB_INPUT_WEB,  
+                SUB_INPUT_DEFORM on original scenarios</SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            MAP</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            ETL</SPAN>         </P>
+      <P><SPAN>            Derived from SUB_MAP or from one of the possible 
+      origins            starting with ETL_ on original scenarios<SPAN></SPAN>   
+              </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PRCO_RESTORE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation – Carry forward<SPAN></SPAN>           
+      </SPAN>         </P>
+      <P><SPAN>            Derived from PREL_RESTORE on original 
+      scenarios<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            PRCO_PERC_CHANGE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - percentage change<SPAN></SPAN>        
+         </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_BALANCING</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation – Balancing<SPAN></SPAN>           
+      </SPAN>         </P>
+      <P><SPAN>            Derived from PROC_BALANCING on original 
+      scenarios<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_GENEXCHRATE_DEPLOY</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_GENEXCHRATE_DEPLOY<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_CALCULATED</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Calculation rule<SPAN></SPAN>         
+        </SPAN>         </P>
+      <P><SPAN>            Derived from PROC_CALCULATED on original scenarios 
+      <SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_CONVERSION_CONV</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation – Conversion<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_CONVERSION_DIFF</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - FX rate differences<SPAN></SPAN>      
+           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_CONVERSION_DIFF_PROP_CHANGE</SPAN>         
+    </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Conversion - Consolidation percentage 
+      change FX rate differences</SPAN>                               </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_CONVERSION_DIFF_RESTORE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Conversion - Carry forward FX rate 
+      differences<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_CONVERSION_HIST</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Conversion at historical FX 
+      rate<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_EQUITYEVAL_CALC</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Evaluation with equity 
+      method<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_EQUITYEVAL_CHANGE</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Equity FX rate<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_NETEQUITY_RECL</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Net equity accounts reclassification 
+      (NER)<SPAN></SPAN>           </SPAN>         </P>
+      <P><SPAN>            Derived from PROC_NETEQUITY_RECL on original 
+      scenarios<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_MINORITY</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation – Minorities<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_MINORITY_COPY_PERIOD</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Minorities interest - Copy previous 
+      period<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_DECONSOLIDATION</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation – Deconsolidation<SPAN></SPAN>          
+       </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_DECONSOLIDATION_2</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Deconsolidation on converted 
+      amount<SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_COPY_PREVIOUS</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Copy from previous 
+      period<SPAN></SPAN>           </SPAN>         </P>
+      <P><SPAN>            Derived from PREL_COPY_PREVIOUS on original scenarios 
+      <SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_EXCHRATE_DEPLOY</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Loading FX rates on Consolidation scenarios</SPAN>    
+           </P>
+      <P><SPAN>            Derived from PROC_EXCHRATE_DEPLOY on original 
+      scenarios <SPAN></SPAN>           </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CFP</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Cash Flow Planning</SPAN>         </P>
+      <P><SPAN>            Derived from one of the possible origins starting 
+      with CFP_ on            original scenarios <SPAN></SPAN>           </SPAN> 
+              </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_FORCE_1</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Override Proportional amount type<SPAN></SPAN>        
+         </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_FORCE_2</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Override Converted amount type<SPAN></SPAN>           
+      </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_FORCE_3</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Override Consolidable amount type<SPAN></SPAN>        
+         </SPAN>         </P></TD></TR>
+  <TR>
+    <TD>
+      <P><SPAN>            Consolidation</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            CONS_RECLASSIFICATION</SPAN>         </P></TD>
+    <TD>
+      <P><SPAN>            Consolidation - Preconsolidation 
+      reclassification<SPAN></SPAN>           </SPAN>         
+</P></TD></TR></TBODY></TABLE></DIV></BODY></HTML>

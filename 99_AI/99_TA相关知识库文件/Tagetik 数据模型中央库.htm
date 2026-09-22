@@ -1,0 +1,544 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<!-- saved from url=(0083)http://10.7.8.124:20500/tagetikcpm/datamodel -->
+<HTML><HEAD><META content="IE=5.0000" http-equiv="X-UA-Compatible">
+
+<META http-equiv="Content-Type" 
+content="text/html; charset=utf-8"><TITLE>Tagetik 数据模型中央库</TITLE>
+<STYLE>table {  border-collapse: collapse; } table, th, td { border: 1px solid black; } </STYLE>
+
+<META name="GENERATOR" content="MSHTML 11.00.10570.1001"></HEAD>
+<BODY style="margin: 20px; padding: 0px; font-family: Helvetica,Arial,sans-serif;">
+<DIV style="text-align: center;">
+<H1><SPAN style="color: rgb(49, 128, 195);">Tagetik 数据模型中央库</SPAN></H1></DIV>
+<DIV style="text-align: center;">
+<H3>5.3.14.201</H3></DIV>
+<DIV style="text-align: center;">
+<H3>Tagetik 数据模型中央库</H3></DIV>
+<H4>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModelRepository.html#abstract">抽象</A></DIV>
+<DIV><A href="http://10.7.8.124:20500/tagetikcpm/datamodel?manual=TagetikDataModelRepository.html#fwk_tables">中央库表</A></DIV></H4>
+<DIV id="abstract" style="text-align: center;">
+<H4>抽象</H4></DIV>
+<DIV>本文档将描述包含在 Tagetik 中央库中的数据表。<BR>当字段以“COD_”开头时，请记住它代表维度的代码；例如，COD_UTENTE 
+是用户的代码（而不是其描述）。<BR>当某个字段以“FLAG_”开头时，请记住其值为 0 或 1。</DIV>
+<DIV id="fwk_tables" style="text-align: center;">
+<H3>中央库表</H3></DIV>
+<DIV>数据库</DIV>
+<DIV id="REP_DB">Table name: <B>REP_DB</B><BR>管理数据库的要素表。Tagetik 的单个安装包括：
+<UL>
+  <LI>一个单一的集中式中央库数据库，可在该数据库中管理用户及其角色（用户可以在 Tagetik 中执行的活动）</LI>
+  <LI>用于存储数据和数据模型维度以及管理应用程序进程的一个或多个应用程序数据库。</LI></UL><BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_DB</TD>
+    <TD>varchar(50)</TD>
+    <TD>Yes</TD>
+    <TD>唯一的数据库标识符。系统使用数据库的相同唯一标识符代码自动引用中央库数据库 
+      [!]。无法将其删除。<BR><BR>必填字段。它必须与“数据库连接状态”中记录的代码一致，可以从位于主页下半部分的用户菜单中的“信息”菜单中访问该代码。<BR></TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DB</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>数据库描述。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_DB_APPOGGIO</TD>
+    <TD>varchar(50)</TD>
+    <TD>No</TD>
+    <TD>源引用数据库的代码。对于用户设置自己环境的标准环境，或者当两个环境可用且用户希望将数据从一个部分复制到另一个部分时，它非常有用<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_DB_APPOGGIO</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>源引用数据库的描述。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>角色</DIV>
+<DIV id="REP_RUOLO">Table name: <B>REP_RUOLO</B><BR>Tagetik 
+提供了一些预定义的角色，这些角色基本上涵盖了向不同用户分配角色的大多数情况。用户不能修改或删除其定义。<BR><BR>如果需要定义不同于系统角色期望的活动，Tagetik 
+将允许用户定义自定义角色。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_RUOLO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>角色的唯一标识符。<BR><BR><B>对于系统角色</B>：每个系统角色都由带有 $ 
+      字符前缀的代码标识。<BR><BR><B>对于自定义角色</B>：必填字段。代码的第一个字符不能是 $，因为这是保留的系统角色。在 Tagetik 
+      中，有效字符是介于 33 到 126 之间的 ASCII 
+      代码，但不包括以下字符：61、124、44、39、96、34、47、92、58、42、63、60 和 62。有关 Tagetik 
+      中有效字符的详细信息，请从主页中通过问号图标“？”来查阅用户手册。<BR></TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_RUOLO</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>角色描述<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_BASE</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>0=对于自定义角色<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>启用功能和引用角色</DIV>
+<DIV id="REP_RUOLO_PADRE">Table name: 
+<B>REP_RUOLO_PADRE</B><BR>该表包含用于定义所选角色的“参考角色”。<BR><BR>可以从其他角色（不一定是标准角色）的总和中定义角色。角色所依赖的角色称为父角色。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_RUOLO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>角色代码<BR></TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_RUOLO_PADRE</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD><B>COD_RUOLO_PADRE</B> 参考角色代码。</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="REP_RUOLO_FUNZIONE">Table name: 
+<B>REP_RUOLO_FUNZIONE</B><BR>对于每个角色，它包含可用功能列表。由已部署表选项卡中的角色部署生成的表。此表列出了与角色相关的所有功能。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_RUOLO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>角色代码<BR></TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_FUNZIONE</TD>
+    <TD>varchar(7)</TD>
+    <TD>Yes</TD>
+    <TD>与角色相关的功能代码。<BR></TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>AZIONE</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD>0=已禁用<BR>1=只读（仅适用于表）<BR>2=已启用<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV>用户</DIV>
+<DIV id="REP_UTENTE">Table name: 
+<B>REP_UTENTE</B><BR>包含可以访问该应用程序的一组用户的表。每个用户只能从一个工作站访问该应用程序<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户的唯一 ID。这是用户必须在登录初始窗口中的“用户名”字段中插入的代码，以便访问 Tagetik。<BR></TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DESC_UTENTE</TD>
+    <TD>varchar(1000)</TD>
+    <TD>No</TD>
+    <TD>用户描述</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>EMAIL</TD>
+    <TD>varchar(300)</TD>
+    <TD>No</TD>
+    <TD>用户电子邮件地址。如果在中央库配置中，将“邮件会话自定义”指定为发送电子邮件步骤中使用的 SMTP 
+      会话，将“用户”指定为“邮件来自”规则，则系统将此地址用作电子邮件发件人地址。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>EMAIL_USER</TD>
+    <TD>varchar(200)</TD>
+    <TD>No</TD>
+    <TD>如果在中央库配置中，将“邮件会话自定义”指定为发送电子邮件步骤中使用的 SMTP 
+      会话，将“用户”指定为“邮件来自”规则，则为邮件服务器的身份验证过程中使用的用户名。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>EMAIL_PWD</TD>
+    <TD>varchar(160)</TD>
+    <TD>No</TD>
+    <TD>如果在中央库配置中，将“邮件会话自定义”指定为发送电子邮件步骤中使用的 SMTP 
+      会话，将“用户”指定为“邮件来自”规则，则为邮件服务器的身份验证过程中使用的密码。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TELEFONO</TD>
+    <TD>varchar(300)</TD>
+    <TD>No</TD>
+    <TD>用户的电话号码。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_BLOCCATO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>1 = 不论用户是否可以访问系统，均不能访问 systemSpecifies。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_CAMBIO_PWD</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>上次修改密码的日期。系统使用该日期验证密码是否已过期。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_PWD_REGOLA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>与用户相关的密码规则</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>NUM_FALLIMENTI</TD>
+    <TD>numeric(2)</TD>
+    <TD>No</TD>
+    <TD>用户可以执行的连续失败访问尝试的最大数目。它用于系统检查是否有必要禁用用户</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>LINGUA_DESCRIZIONE</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>显示应用程序（菜单项，标题，管理字段，消息文本）的语言。如果该语言不可用，则应用程序将以默认应用程序语言显示。创建新用户时，该字段由应用程序使用用户默认值向导的值进行预定义：中央库配置的本地化区域中存在应用程序语言字段。如果该字段未定义，则默认值为英语<BR><BR>0 
+      = 意大利语<BR><BR>1 = 英语<BR><BR>2 = 法语<BR><BR>3 = 德语<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_NAZIONALITA</TD>
+    <TD>varchar(5)</TD>
+    <TD>No</TD>
+    <TD>用户语言/国家/地区。这个信息指导 Tagetik 的日期和金额格式。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_PWD_FROM_ADMIN</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定用户在首次访问时必须更改其密码。一旦用户完成此操作，系统将自动重置该字段的值。<BR>仅当与用户相关的密码规则中的“最小长度”和“有效天数”字段不是 
+      0 时，才采用“是”值。如果验证系统不是中央库的验证系统，则系统不会考虑该字段的值。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>TIPO_UTENTE</TD>
+    <TD>varchar(1)</TD>
+    <TD>No</TD>
+    <TD>允许通过不是“默认身份验证（中央库）”的登录检查来区分可以访问该应用程序的用户。可能的值为：
+      <UL>
+        <LI>E = 外部用户可通过不是“默认身份验证（中央库）”的登录检查程序访问该应用程序</LI>
+        <LI>L = 本地用户可通过“默认身份验证（中央库）”登录检查程序访问该应用程序</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_UTENTE_DOMINIO</TD>
+    <TD>varchar(255)</TD>
+    <TD>No</TD>
+    <TD>如果 LDAP/JAAS 认证机制启用，此字段包含用于访问 LDAP 服务的用户名</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_EREDITA_RUOLO_DB</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定用户是否与参考用户列表相关。可能的值为：
+      <UL>
+        <LI>1 = 
+        是，在这种情况下，用户可以在数据库上访问的功能由用户可以为角色分配访问的功能和给定数据库上参考用户集可用的所有功能之和表示。参考用户的定义从“操作”菜单执行：通过选择“参考用户”选项。请注意，如果在数据库中直接为用户分配了角色，或者至少有一个参考用户在该数据库中具有角色，则该用户可以访问数据库</LI>
+        <LI>0 = 否（默认值）</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_UTENTE_RIFERIMENTO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定用户是否可以被其他用户引用以继承该用户有权使用的角色和数据库。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_PROFILO_AREA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>指定来自其他用户的“区域配置文件”是否与用户相关。可能的值为：
+      <UL>
+        <LI>1 = 是，在这种情况下，用户必须管理应用程序的可能性取决于与其相关的区域配置文件</LI>
+        <LI>0 = 否（默认值）。</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_PROFILO_AREA</TD>
+    <TD>varchar(255)</TD>
+    <TD>No</TD>
+    <TD>用户的父组。如果用户是“区域配置文件”并且该字段已定义，则必须与用户代码相匹配。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>LINGUA_CAPTION</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>显示应用程序（菜单项，标题，管理字段，消息文本）的语言。如果该语言不可用，则应用程序将以<B>默认应用程序语言</B>显示。<BR>创建新用户时，该字段由应用程序使用<B>用户默认值向导</B>的值进行预定义：<BR>中央库配置的本地化区域中存在应用程序语言字段。如果该字段未定义，则默认值为英语<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_VISUALIZZAZIONE_SIMBOLICA</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>允许用户配置 Tagetik 
+      在显示不同窗口的指示器时使用的符号集（例如，突出显示编辑数据窗口中的不平衡量、某些表的管理窗口中存在重写量或了解/管理 IC 
+      匹配关系中的关系状态）。可能的值为：
+      <UL>
+        <LI>1 = 是，在这种情况下，所使用的指示器是黑白符号，其中格式非常重要</LI>
+        <LI>0 = 否（默认值）在这种情况下使用的指示器是具有相同格式的符号，其中颜色很重要</LI></UL><BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>LINGUA_CAPTION_DEFAULT</TD>
+    <TD>varchar(2)</TD>
+    <TD>Yes</TD>
+    <TD>显示应用程序（菜单项，标题，管理字段，消息文本）的语言。因此，为了决定以何种语言呈现应用程序，系统使用以下规则检查默认应用程序语言是否可用：
+      <UL>
+        <LI>如果默认语言不可用，则以英语显示应用程序；</LI>
+        <LI>如果英语也不可用，那么它将以意大利语呈现应用程序。</LI></UL></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_INIZIO</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD><B>开始日期</B><BR>用户无法再访问其可见的应用程序数据库的日期。如果在有效期开始日期之前访问登录数据，系统将不显示为用户分配角色的应用程序数据库。如果未定义该字段，则在禁用“暂时阻止”选项的情况下，用户可以在获得分配角色后立即访问应用程序数据库。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_FINE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>用户无法再访问其可见的应用程序数据库的数据。<BR>如果在有效期结束日期之后登录数据，系统将不显示为用户分配角色的应用程序数据库。<BR>如果未定义该字段，则在禁用“暂时阻止”选项的情况下，用户可以在获得分配角色后立即访问应用程序数据库。<BR></TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>GIVENNAME</TD>
+    <TD>varchar(710)</TD>
+    <TD>No</TD>
+    <TD>用户名</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>SURNAME</TD>
+    <TD>varchar(710)</TD>
+    <TD>No</TD>
+    <TD>用户的姓</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COMPANY</TD>
+    <TD>varchar(710)</TD>
+    <TD>No</TD>
+    <TD>公司名称</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DEPARTMENT</TD>
+    <TD>varchar(710)</TD>
+    <TD>No</TD>
+    <TD>部门名称</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_ELIMINATO</TD>
+    <TD>varchar(1)</TD>
+    <TD>Yes</TD>
+    <TD>用户必须被删除，因此其不能访问应用程序，没有任何角色和限制</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="REP_UTENTE_RIFERIMENTO">Table name: 
+<B>REP_UTENTE_RIFERIMENTO</B><BR>包含用户关系。<BR>用户可以从一个或多个用户（参考用户）继承角色。<BR>此表的内容仅考虑启用了 
+FLAG_EREDITA_RUOLO_DB 的用户。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>从引用用户继承角色的用户代码</TD>
+    <TD>Yes</TD>
+    <TD>REP_UTENTE</TD></TR>
+  <TR>
+    <TD>COD_UTENTE_RIFERIMENTO</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>引用用户代码</TD>
+    <TD>Yes</TD>
+    <TD>REP_UTENTE</TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="REP_UTENTE_DB">Table name: 
+<B>REP_UTENTE_DB</B><BR>该表包含用户可以工作的数据库列表，并指示每个数据库的访问是否被阻止</DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>COD_UTENTE</TD>
+    <TD>Yes</TD>
+    <TD>REP_UTENTE</TD></TR>
+  <TR>
+    <TD>COD_DB</TD>
+    <TD>varchar(50)</TD>
+    <TD>Yes</TD>
+    <TD>COD_DB</TD>
+    <TD>Yes</TD>
+    <TD>REP_DB</TD></TR>
+  <TR>
+    <TD>FLAG_BLOCCATO</TD>
+    <TD>numeric(1)</TD>
+    <TD>No</TD>
+    <TD>1 = 阻止用户。被阻止的用户无法访问数据库<BR>该阻止是手动的。</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_INIZIO</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>数据库访问的有效开始日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>DATA_FINE</TD>
+    <TD>datetime(8)</TD>
+    <TD>No</TD>
+    <TD>数据库访问的有效结束日期</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_MULTI_RUOLO</TD>
+    <TD>numeric(1)</TD>
+    <TD>Yes</TD>
+    <TD>指定是否有多个角色与数据库相关联的标志</TD>
+    <TD>No</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>FLAG_ALLINEA_NO_LIM</TD>
+    <TD>varchar(1)</TD>
+    <TD>Yes</TD>
+    <TD>FLA_ALLINEA_NO_LIMIT</TD>
+    <TD>No</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P>
+<DIV id="REP_UTENTE_DB_RUOLO">Table name: 
+<B>REP_UTENTE_DB_RUOLO</B><BR>使用<B>用户/角色关系</B>窗口定义用户可以在其上工作的数据库列表，并根据上下文为每个数据库分配角色，以指定用户可以执行的活动列表（可见菜单集）。<BR></DIV>
+<TABLE style="width: 100%;">
+  <THEAD>
+  <TR>
+    <TH style="background-color: rgb(255, 255, 178);">Column Name</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Data Type</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Mandatory</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Comment</TH>
+    <TH style="background-color: rgb(255, 255, 178);">PK</TH>
+    <TH style="background-color: rgb(255, 255, 178);">Parent Table 
+  Name</TH></TR></THEAD>
+  <TBODY>
+  <TR>
+    <TD>COD_UTENTE</TD>
+    <TD>varchar(255)</TD>
+    <TD>Yes</TD>
+    <TD>用户代码</TD>
+    <TD>Yes</TD>
+    <TD>REP_UTENTE</TD></TR>
+  <TR>
+    <TD>COD_DB</TD>
+    <TD>varchar(50)</TD>
+    <TD>Yes</TD>
+    <TD>用户可以访问的数据库代码。</TD>
+    <TD>Yes</TD>
+    <TD></TD></TR>
+  <TR>
+    <TD>COD_RUOLO</TD>
+    <TD>varchar(30)</TD>
+    <TD>Yes</TD>
+    <TD>角色代码。只有在为用户分配了当前数据库的唯一角色时，此窗口才提供用于访问该数据库的角色的规范。<BR>否则，需要启用“多角色”选项，然后从“详细信息”窗口菜单定义角色列表。<BR></TD>
+    <TD>Yes</TD>
+    <TD></TD></TR></TBODY></TABLE>
+<P></P></BODY></HTML>
