@@ -38,16 +38,8 @@ BEGIN
   DELETE FROM SESSION_V_REF_AZIENDA
    WHERE SESSION_ID = V_SESSION_ID;
 
-  INSERT INTO SESSION_V_REF_AZIENDA(
-      SESSION_ID
-    , HIE
-    , NODE
-    , ELEM
-  )
-  SELECT V_SESSION_ID
-       , HIE
-       , NODE
-       , ELEM
+  INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
+  SELECT V_SESSION_ID, HIE, NODE, ELEM
     FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
 
   /* 时间参数初始化 */
@@ -388,11 +380,6 @@ BEGIN
        )
        AND (T.COD_CONTO LIKE 'S600101%' OR T.COD_CONTO LIKE 'S600102%')
   ),
-  STANDARD_FACT AS (
-    SELECT * FROM DWD_STANDARD
-    UNION ALL
-    SELECT * FROM M01_FACT
-  ),
   AGG_FACT AS (
     SELECT COD_SCENARIO
          , COD_PERIODO
@@ -465,7 +452,11 @@ BEGIN
          , SUM(QCY_15_AMT) AS QCY_15_AMT
          , SYSTEM_SRC
          , D_ADJ_TYPE
-      FROM STANDARD_FACT
+      FROM (
+        SELECT * FROM DWD_STANDARD
+        UNION ALL
+        SELECT * FROM M01_FACT
+      )
      GROUP BY COD_SCENARIO, COD_PERIODO, COD_AZIENDA, COD_CATEGORIA, SRC_DETAIL
             , CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
             , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
@@ -604,6 +595,42 @@ BEGIN
                   ELSE A.SYSTEM_SRC
              END AS MANDT
            , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
+           , SUM(
+                 CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                        THEN NVL(A.BCY_0_AMT, 0)
+                      ELSE 0
+                 END
+               ) OVER (
+                 PARTITION BY A.SYSTEM_SRC
+                            , A.COD_AZIENDA
+                            , A.CUST_HEAD_CODE
+                            , A.ACCT_REC_CODE
+               ) AS LE_BCY_AMT
+           , SUM(
+                 CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                            OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                      THEN NVL(A.BCY_0_AMT, 0)
+                      ELSE 0
+                 END
+               ) OVER (
+                 PARTITION BY A.SYSTEM_SRC
+                            , A.COD_AZIENDA
+                            , A.CUST_HEAD_CODE
+                            , A.ACCT_REC_CODE
+               ) AS ME_BCY_AMT
+           , SUM(
+                 CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                            OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                      THEN NVL(A.BCY_0_AMT, 0)
+                      ELSE 0
+                 END
+               ) OVER (
+                 PARTITION BY A.SYSTEM_SRC
+                            , A.COD_AZIENDA
+                            , A.CUST_HEAD_CODE
+                            , A.COD_DEST2
+                            , A.ACCT_REC_CODE
+               ) AS MB_BCY_AMT
         FROM AW_MR9_ARPM01_000001 A
        WHERE A.COD_SCENARIO = V_SCENARIO
          AND A.COD_PERIODO = V_PERIODO
@@ -614,48 +641,8 @@ BEGIN
          )
          AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
          AND (A.SRC_DETAIL LIKE 'ORG%'
-              OR A.SRC_DETAIL LIKE 'ZTSO04%' 
+              OR A.SRC_DETAIL LIKE 'ZTSO04%'
              )
-    ),
-    AMOUNT_FACT AS (
-      SELECT F.*
-           , SUM(
-                 CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
-                        THEN F.BCY_0_AMT
-                      ELSE 0
-                 END
-               ) OVER (
-                 PARTITION BY F.SYSTEM_SRC
-                            , F.COD_AZIENDA
-                            , F.CUST_KEY
-                            , F.ACCT_REC_CODE
-               ) AS LE_BCY_AMT
-           , SUM(
-                 CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
-                            OR F.SRC_DETAIL LIKE 'ZTSO04%'
-                      THEN F.BCY_0_AMT
-                      ELSE 0
-                 END
-               ) OVER (
-                 PARTITION BY F.SYSTEM_SRC
-                            , F.COD_AZIENDA
-                            , F.CUST_KEY
-                            , F.ACCT_REC_CODE
-               ) AS ME_BCY_AMT
-           , SUM(
-                 CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
-                            OR F.SRC_DETAIL LIKE 'ZTSO04%'
-                      THEN F.BCY_0_AMT
-                      ELSE 0
-                 END
-               ) OVER (
-                 PARTITION BY F.SYSTEM_SRC
-                            , F.COD_AZIENDA
-                            , F.CUST_KEY
-                            , F.COD_DEST2
-                            , F.ACCT_REC_CODE
-               ) AS MB_BCY_AMT
-        FROM TARGET_FACT F
     ),
     REC_FLAG_FACT AS (
       SELECT F.*
@@ -735,15 +722,7 @@ BEGIN
                       , '2'
                     )
                   END AS MB_AGE_FLAG
-        FROM AMOUNT_FACT F
-    ),
-    HITACHI_ELEM AS (
-      SELECT DISTINCT R.ELEM
-        FROM TGK_GB_HISENSE.V_REF_AZIENDA_TV R
-       WHERE R.COD_SCENARIO = V_SCENARIO
-         AND R.COD_PERIODO = V_PERIODO
-         AND R.HIE = '30'
-         AND R.NODE = '1730'
+        FROM TARGET_FACT F
     ),
     NODE_MAP AS (
       SELECT N.COD_SCENARIO
@@ -755,7 +734,14 @@ BEGIN
              END AS SELF_NODE
            , N.HQ
         FROM TGK_GB_HISENSE.V_APAR_ELEM_NODE_TAB N
-        LEFT JOIN HITACHI_ELEM H
+        LEFT JOIN (
+          SELECT DISTINCT R.ELEM
+            FROM TGK_GB_HISENSE.V_REF_AZIENDA_TV R
+           WHERE R.COD_SCENARIO = V_SCENARIO
+             AND R.COD_PERIODO = V_PERIODO
+             AND R.HIE = '30'
+             AND R.NODE = '1730'
+        ) H
           ON H.ELEM = N.ELEM
        WHERE N.COD_SCENARIO = V_SCENARIO
          AND N.COD_PERIODO = V_PERIODO

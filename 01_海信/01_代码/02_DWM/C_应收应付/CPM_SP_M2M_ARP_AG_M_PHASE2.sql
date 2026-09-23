@@ -5,9 +5,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   , SESSION_USER IN VARCHAR2
 ) AS
   /**************************************************************************
-  最后更新时间：20260922
+  最后更新时间：20260923
   上一版本信息：
-  名称：CPM_SP_M2M_ARP_AG_M
+  名称：CPM_SP_M2M_ARP_AG_M_PHASE2
   用途：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
   源表：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO、ODSS600_TCURR
   目标表：AW_MR9_ARPM02_000001
@@ -16,11 +16,12 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
     1. 当前期间按公司+科目+客商+利润中心汇总ARPM01来源，并将来源横向展开。
     2. BY_BCY_0_AMT取上年12期ARPM02的BCY_0_AMT；LM_BCY_0_AMT取上月ARPM02的BCY_0_AMT。
     3. 设计字段COD_CONTO兼容映射为ARPM01的ACCT_REC_CODE。
-    4. 设计文档未提供ARPM02目标表DDL，以下INSERT严格按文档110个业务字段编写，目标表如包含审计字段需同步补充字段清单。
+    4. 过程自动行按场景+期间+公司限定删除；PROVENIENZA='INPUT_DEFORM'的界面行保留，并按业务键复用OID后更新过程字段。
     5. ADJ_REB_AMT按金额口径使用UREB_AMT-LEAST(BCY_0_AMT,UREB_AMT)，ADJ_RET_AMT使用LEAST(BCY_0_AMT,RET_NTRF_AMT)，并对负数和零值做安全处理。
     6. 非2023公司取DATI_CAMBIO.CAMBIO_FINALE；公司2023取SAP TCURR汇率。
 
   版本信息：最新修改记录放最上面
+    20260923 SHIQINGFENG.EX 重构ARPM02装载逻辑，保留INPUT_DEFORM并按OID MERGE更新
     20260922 SHIQINGFENG.EX 新增ARPM02账龄结果表过程
 
   手工执行：CALL CPM_SP_M2M_ARP_AG_M_PHASE2('2025ACT','06','6700','USER');
@@ -47,10 +48,8 @@ BEGIN
   DELETE FROM SESSION_V_REF_AZIENDA
    WHERE SESSION_ID = V_SESSION_ID;
 
-  INSERT INTO SESSION_V_REF_AZIENDA(
-      SESSION_ID , HIE , NODE , ELEM
-  )
-  SELECT V_SESSION_ID , HIE , NODE , ELEM
+  INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
+  SELECT V_SESSION_ID, HIE, NODE, ELEM
     FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
 
   -- 时间参数初始化。
@@ -116,7 +115,9 @@ BEGIN
   );
   COMMIT;
 
-  -- 删除当前批次，保证增量重跑不产生重复数据。
+
+  -- 仅删除本过程上次生成的自动行，保留界面修改后的 INPUT_DEFORM 行。
+  -- INPUT_DEFORM 行通过后续 MERGE 按业务键复用 OID 并更新过程负责的字段。
   DELETE FROM AW_MR9_ARPM02_000001
    WHERE COD_SCENARIO = V_SCENARIO
      AND COD_PERIODO = V_PERIODO
@@ -124,7 +125,8 @@ BEGIN
            SELECT ELEM
              FROM SESSION_AZIENDA_LIST
             WHERE SESSION_ID = V_SESSION_ID
-     );
+     )
+     AND PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2';
 
   INSERT INTO ZTAB_CPM_LOG(
       CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA
@@ -136,118 +138,8 @@ BEGIN
   -- 当前期间来源标准化、聚合及ARPM02字段平铺。
   -- ARPM01的ACCT_REC_CODE兼容映射为设计字段COD_CONTO。
   -- ==========================================================================
-  INSERT INTO AW_MR9_ARPM02_000001(
-      COD_SCENARIO
-    , COD_PERIODO
-    , COD_AZIENDA
-    , COD_CONTO
-    , COD_CATEGORIA
-    , CUST_CODE
-    , CUST_NAME
-    , CUST_HEAD_CODE
-    , CUST_HEAD_NAME
-    , CUST_BRANCH_CODE
-    , CUST_BRANCH_NAME
-    , COD_AZI_CTP
-    , COUNTRY_CODE
-    , COUNTRY_NAME
-    , ACCT_SRC_CODE
-    , LE_AGE_FLAG
-    , IS_REC_LG
-    , ME_AGE_FLAG
-    , IS_REC_ME
-    , MB_AGE_FLAG
-    , IS_REC_MB
-    , GRP_SCOPE
-    , NATURE_L1_NAME
-    , NATURE_L2_NAME
-    , NATURE_L3_NAME
-    , D_CHANNEL
-    , D_ONOFFLINE
-    , COD_DEST2
-    , COD_DEST3
-    , D_SALE_DEPT
-    , TAX_RATE
-    , COD_VALUTA
-    , COD_VALUTA_ORIGINARIA
-    , BY_BCY_0_AMT
-    , LM_BCY_0_AMT
-    , BCY_0_AMT
-    , BCY_1_AMT
-    , BCY_2_AMT
-    , BCY_3_AMT
-    , BCY_4_AMT
-    , BCY_5_AMT
-    , BCY_6_AMT
-    , BCY_7_AMT
-    , BCY_8_AMT
-    , BCY_9_AMT
-    , BCY_10_AMT
-    , BCY_11_AMT
-    , BCY_12_AMT
-    , BCY_13_AMT
-    , BCY_14_AMT
-    , BCY_15_AMT
-    , QCY_0_AMT
-    , QCY_1_AMT
-    , QCY_2_AMT
-    , QCY_3_AMT
-    , QCY_4_AMT
-    , QCY_5_AMT
-    , QCY_6_AMT
-    , QCY_7_AMT
-    , QCY_8_AMT
-    , QCY_9_AMT
-    , QCY_10_AMT
-    , QCY_11_AMT
-    , QCY_12_AMT
-    , QCY_13_AMT
-    , QCY_14_AMT
-    , QCY_15_AMT
-    , SHP_NINV_AMT
-    , RET_NTRF_AMT
-    , BCY_ADJ_INCL_0_AMT
-    , BCY_ADJ_INCL_1_AMT
-    , BCY_ADJ_INCL_2_AMT
-    , BCY_ADJ_INCL_3_AMT
-    , BCY_ADJ_INCL_4_AMT
-    , BCY_ADJ_INCL_5_AMT
-    , BCY_ADJ_INCL_6_AMT
-    , BCY_ADJ_INCL_7_AMT
-    , BCY_ADJ_INCL_8_AMT
-    , BCY_ADJ_INCL_9_AMT
-    , BCY_ADJ_INCL_10_AMT
-    , BCY_ADJ_INCL_11_AMT
-    , BCY_ADJ_INCL_12_AMT
-    , BCY_ADJ_INCL_13_AMT
-    , BCY_ADJ_INCL_14_AMT
-    , BCY_ADJ_INCL_15_AMT
-    , BCY_ADJ_EXCL_0_AMT
-    , overdue_0_amt
-    , overdue_1_amt
-    , overdue_2_amt
-    , overdue_3_amt
-    , overdue_4_amt
-    , overdue_5_amt
-    , overdue_6_amt
-    , overdue_7_amt
-    , overdue_8_amt
-    , overdue_9_amt
-    , INV_SAMPLE_AMT
-    , EPAY_AMT
-    , ECLS_AMT
-    , UREB_AMT
-    , UFEE_AMT
-    , PAY_TERM_CODE
-    , PAY_TERM_DESC
-    , CLOSING_RATE_BCY_AMT
-    , POSTING_RATE_BCY_AMT
-    , EXCHANGE_RATE_EVAL_FLAG
-    , TH_FX_EVAL_AMT
-    , CURRENCY_ACCT_DETAIL
-    , ADJ_REB_AMT
-    , ADJ_RET_AMT
-  )
+  MERGE INTO AW_MR9_ARPM02_000001 T
+  USING (
   WITH
   -- 当前ARPM01来源：保留所有来源，后续按四个业务键横向平铺。
   CURRENT_SOURCE AS (
@@ -331,18 +223,6 @@ BEGIN
        )
   ),
   -- 取当前期间每个业务键的维度基准行，ORG来源优先，其他来源作为兜底。
-  CURRENT_DIM_RN AS (
-    SELECT S.*
-         , ROW_NUMBER() OVER (
-               PARTITION BY S.COD_AZIENDA
-                          , S.COD_CONTO
-                          , S.CUST_CODE
-                          , S.COD_DEST2
-               ORDER BY CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN 1 ELSE 2 END
-                      , S.OID
-           ) AS RN
-      FROM CURRENT_SOURCE S
-  ),
   CURRENT_DIM AS (
     SELECT COD_AZIENDA
          , COD_CONTO
@@ -378,8 +258,19 @@ BEGIN
          , PAY_TERM_CODE
          , PAY_TERM_DESC
          , EXCHANGE_RATE_EVAL_FLAG
-      FROM CURRENT_DIM_RN
-     WHERE RN = 1
+      FROM (
+        SELECT S.*
+             , ROW_NUMBER() OVER (
+                   PARTITION BY S.COD_AZIENDA
+                              , S.COD_CONTO
+                              , S.CUST_CODE
+                              , S.COD_DEST2
+                   ORDER BY CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN 1 ELSE 2 END
+                          , S.OID
+               ) AS RN
+          FROM CURRENT_SOURCE S
+      ) S
+     WHERE S.RN = 1
   ),
   -- 当前期间按来源类别汇总，用于生成结果表的横向金额字段。
   CURRENT_AGG AS (
@@ -427,18 +318,6 @@ BEGIN
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ECLS%' OR S.ECLS_FLAG = 'Y' THEN S.BCY_0_AMT ELSE 0 END) AS ECLS_AMT
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'UFEE%' THEN S.BCY_0_AMT ELSE 0 END) AS UREB_AMT
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'UREB%' THEN S.BCY_0_AMT ELSE 0 END) AS UFEE_AMT
-      FROM CURRENT_SOURCE S
-     GROUP BY S.COD_AZIENDA
-            , S.COD_CONTO
-            , S.CUST_CODE
-            , S.COD_DEST2
-  ),
-  -- 当前期间币种科目明细：按法人账龄标识和本位币余额排序拼接。
-  CURRENT_CURRENCY AS (
-    SELECT S.COD_AZIENDA
-         , S.COD_CONTO
-         , S.CUST_CODE
-         , S.COD_DEST2
          , LISTAGG(
                NVL(S.LE_AGE_FLAG, '') || ':'
                || TO_CHAR(NVL(S.BCY_0_AMT, 0)) || '\'
@@ -589,29 +468,6 @@ BEGIN
          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
       FROM LM_HISTORY
   ),
-  DIM_RN AS (
-    SELECT D.*
-         , ROW_NUMBER() OVER (
-               PARTITION BY D.COD_AZIENDA
-                          , D.COD_CONTO
-                          , D.CUST_CODE
-                          , D.COD_DEST2
-               ORDER BY D.PRIORITY
-           ) AS RN
-      FROM DIM_CANDIDATE D
-  ),
-  DIM_SELECTED AS (
-    SELECT COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
-         , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
-         , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME, ACCT_SRC_CODE
-         , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
-         , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-         , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
-         , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
-         , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
-      FROM DIM_RN
-     WHERE RN = 1
-  ),
   -- 汇率表：非2023公司取本期最终汇率，2023公司取SAP TCURR汇率。
   FINAL_RATE AS (
     SELECT COD_VALUTA
@@ -717,12 +573,26 @@ BEGIN
          , NVL(A.ECLS_AMT, 0) AS ECLS_AMT
          , NVL(A.UREB_AMT, 0) AS UREB_AMT
          , NVL(A.UFEE_AMT, 0) AS UFEE_AMT
-         , NVL(C.CURRENCY_ACCT_DETAIL, NVL(B.CURRENCY_ACCT_DETAIL, NVL(L.CURRENCY_ACCT_DETAIL, ''))) AS CURRENCY_ACCT_DETAIL
+         , NVL(A.CURRENCY_ACCT_DETAIL, NVL(B.CURRENCY_ACCT_DETAIL, NVL(L.CURRENCY_ACCT_DETAIL, ''))) AS CURRENCY_ACCT_DETAIL
          , D.PAY_TERM_CODE
          , D.PAY_TERM_DESC
          , D.EXCHANGE_RATE_EVAL_FLAG
       FROM ALL_KEYS K
-      INNER JOIN DIM_SELECTED D
+      INNER JOIN (
+        SELECT D.*
+          FROM (
+            SELECT C.*
+                 , ROW_NUMBER() OVER (
+                       PARTITION BY C.COD_AZIENDA
+                                  , C.COD_CONTO
+                                  , C.CUST_CODE
+                                  , C.COD_DEST2
+                       ORDER BY C.PRIORITY
+                   ) AS RN
+              FROM DIM_CANDIDATE C
+          ) D
+         WHERE D.RN = 1
+      ) D
         ON D.COD_AZIENDA = K.COD_AZIENDA
        AND D.COD_CONTO = K.COD_CONTO
        AND NVL(D.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
@@ -732,11 +602,6 @@ BEGIN
        AND A.COD_CONTO = K.COD_CONTO
        AND NVL(A.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
        AND NVL(A.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
-      LEFT JOIN CURRENT_CURRENCY C
-        ON C.COD_AZIENDA = K.COD_AZIENDA
-       AND C.COD_CONTO = K.COD_CONTO
-       AND NVL(C.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
-       AND NVL(C.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
       LEFT JOIN BY_HISTORY B
         ON B.COD_AZIENDA = K.COD_AZIENDA
        AND B.COD_CONTO = K.COD_CONTO
@@ -889,117 +754,409 @@ BEGIN
         ON TR.TCURR = R.COD_VALUTA
        AND TR.FCURR = R.COD_VALUTA_ORIGINARIA
   )
-  SELECT COD_SCENARIO
-       , COD_PERIODO
-       , COD_AZIENDA
-       , COD_CONTO
-       , COD_CATEGORIA
-       , CUST_CODE
-       , CUST_NAME
-       , CUST_HEAD_CODE
-       , CUST_HEAD_NAME
-       , CUST_BRANCH_CODE
-       , CUST_BRANCH_NAME
-       , COD_AZI_CTP
-       , COUNTRY_CODE
-       , COUNTRY_NAME
-       , ACCT_SRC_CODE
-       , LE_AGE_FLAG
-       , IS_REC_LG
-       , ME_AGE_FLAG
-       , IS_REC_ME
-       , MB_AGE_FLAG
-       , IS_REC_MB
-       , GRP_SCOPE
-       , NATURE_L1_NAME
-       , NATURE_L2_NAME
-       , NATURE_L3_NAME
-       , D_CHANNEL
-       , D_ONOFFLINE
-       , COD_DEST2
-       , COD_DEST3
-       , D_SALE_DEPT
-       , TAX_RATE
-       , COD_VALUTA
-       , COD_VALUTA_ORIGINARIA
-       , BY_BCY_0_AMT
-       , LM_BCY_0_AMT
-       , BCY_0_AMT
-       , BCY_1_AMT
-       , BCY_2_AMT
-       , BCY_3_AMT
-       , BCY_4_AMT
-       , BCY_5_AMT
-       , BCY_6_AMT
-       , BCY_7_AMT
-       , BCY_8_AMT
-       , BCY_9_AMT
-       , BCY_10_AMT
-       , BCY_11_AMT
-       , BCY_12_AMT
-       , BCY_13_AMT
-       , BCY_14_AMT
-       , BCY_15_AMT
-       , QCY_0_AMT
-       , QCY_1_AMT
-       , QCY_2_AMT
-       , QCY_3_AMT
-       , QCY_4_AMT
-       , QCY_5_AMT
-       , QCY_6_AMT
-       , QCY_7_AMT
-       , QCY_8_AMT
-       , QCY_9_AMT
-       , QCY_10_AMT
-       , QCY_11_AMT
-       , QCY_12_AMT
-       , QCY_13_AMT
-       , QCY_14_AMT
-       , QCY_15_AMT
-       , SHP_NINV_AMT
-       , RET_NTRF_AMT
-       , BCY_ADJ_INCL_0_AMT
-       , BCY_ADJ_INCL_1_AMT
-       , BCY_ADJ_INCL_2_AMT
-       , BCY_ADJ_INCL_3_AMT
-       , BCY_ADJ_INCL_4_AMT
-       , BCY_ADJ_INCL_5_AMT
-       , BCY_ADJ_INCL_6_AMT
-       , BCY_ADJ_INCL_7_AMT
-       , BCY_ADJ_INCL_8_AMT
-       , BCY_ADJ_INCL_9_AMT
-       , BCY_ADJ_INCL_10_AMT
-       , BCY_ADJ_INCL_11_AMT
-       , BCY_ADJ_INCL_12_AMT
-       , BCY_ADJ_INCL_13_AMT
-       , BCY_ADJ_INCL_14_AMT
-       , BCY_ADJ_INCL_15_AMT
-       , BCY_ADJ_EXCL_0_AMT
-       , OVERDUE_0_AMT
-       , OVERDUE_1_AMT
-       , OVERDUE_2_AMT
-       , OVERDUE_3_AMT
-       , OVERDUE_4_AMT
-       , OVERDUE_5_AMT
-       , OVERDUE_6_AMT
-       , OVERDUE_7_AMT
-       , OVERDUE_8_AMT
-       , OVERDUE_9_AMT
-       , INV_SAMPLE_AMT
-       , EPAY_AMT
-       , ECLS_AMT
-       , UREB_AMT
-       , UFEE_AMT
-       , PAY_TERM_CODE
-       , PAY_TERM_DESC
-       , CLOSING_RATE_BCY_AMT
-       , POSTING_RATE_BCY_AMT
-       , EXCHANGE_RATE_EVAL_FLAG
-       , TH_FX_EVAL_AMT
-       , CURRENCY_ACCT_DETAIL
-       , ADJ_REB_AMT
-       , ADJ_RET_AMT
-    FROM RESULT_FACT;
+  -- 结果集按当前批次业务键查找已被界面修改的 INPUT_DEFORM 行。
+  -- 由于本过程生成的 OID 使用 NEWID()，重跑时必须从目标表复用人工行原有 OID。
+  SELECT NVL(M.OID, NEWID()) AS OID
+       , R.*
+       , CASE WHEN M.OID IS NOT NULL THEN 'INPUT_DEFORM'
+              ELSE 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+          END AS PROVENIENZA
+       , SYSDATE AS DATEUPD
+       , SESSION_USER AS USERUPD
+    FROM RESULT_FACT R
+    LEFT JOIN (
+      SELECT OID
+           , COD_SCENARIO
+           , COD_PERIODO
+           , COD_AZIENDA
+           , COD_CONTO
+           , CUST_CODE
+           , COD_DEST2
+        FROM (
+          SELECT T.OID
+               , T.COD_SCENARIO
+               , T.COD_PERIODO
+               , T.COD_AZIENDA
+               , T.COD_CONTO
+               , T.CUST_CODE
+               , T.COD_DEST2
+               , ROW_NUMBER() OVER (
+                     PARTITION BY T.COD_SCENARIO
+                                , T.COD_PERIODO
+                                , T.COD_AZIENDA
+                                , T.COD_CONTO
+                                , T.CUST_CODE
+                                , T.COD_DEST2
+                     ORDER BY T.DATEUPD DESC NULLS LAST, T.OID
+                 ) AS RN
+            FROM AW_MR9_ARPM02_000001 T
+           WHERE T.PROVENIENZA = 'INPUT_DEFORM'
+             AND T.COD_SCENARIO = V_SCENARIO
+             AND T.COD_PERIODO = V_PERIODO
+             AND T.COD_AZIENDA IN (
+                   SELECT ELEM
+                     FROM SESSION_AZIENDA_LIST
+                    WHERE SESSION_ID = V_SESSION_ID
+             )
+        ) M0
+       WHERE M0.RN = 1
+    ) M
+      ON M.COD_SCENARIO = R.COD_SCENARIO
+     AND M.COD_PERIODO = R.COD_PERIODO
+     AND M.COD_AZIENDA = R.COD_AZIENDA
+     AND M.COD_CONTO = R.COD_CONTO
+     AND NVL(M.CUST_CODE, '#') = NVL(R.CUST_CODE, '#')
+     AND NVL(M.COD_DEST2, '#') = NVL(R.COD_DEST2, '#')
+  ) S
+    ON (T.OID = S.OID)
+  WHEN MATCHED THEN UPDATE SET
+         T.COD_SCENARIO = S.COD_SCENARIO
+       , T.COD_PERIODO = S.COD_PERIODO
+       , T.COD_AZIENDA = S.COD_AZIENDA
+       , T.COD_CONTO = S.COD_CONTO
+       , T.COD_CATEGORIA = S.COD_CATEGORIA
+       , T.CUST_CODE = S.CUST_CODE
+       , T.CUST_NAME = S.CUST_NAME
+       , T.CUST_HEAD_CODE = S.CUST_HEAD_CODE
+       , T.CUST_HEAD_NAME = S.CUST_HEAD_NAME
+       , T.CUST_BRANCH_CODE = S.CUST_BRANCH_CODE
+       , T.CUST_BRANCH_NAME = S.CUST_BRANCH_NAME
+       , T.COD_AZI_CTP = S.COD_AZI_CTP
+       , T.COUNTRY_CODE = S.COUNTRY_CODE
+       , T.COUNTRY_NAME = S.COUNTRY_NAME
+       , T.ACCT_SRC_CODE = S.ACCT_SRC_CODE
+       , T.LE_AGE_FLAG = S.LE_AGE_FLAG
+       , T.IS_REC_LG = S.IS_REC_LG
+       , T.ME_AGE_FLAG = S.ME_AGE_FLAG
+       , T.IS_REC_ME = S.IS_REC_ME
+       , T.MB_AGE_FLAG = S.MB_AGE_FLAG
+       , T.IS_REC_MB = S.IS_REC_MB
+       , T.GRP_SCOPE = S.GRP_SCOPE
+       , T.NATURE_L1_NAME = S.NATURE_L1_NAME
+       , T.NATURE_L2_NAME = S.NATURE_L2_NAME
+       , T.NATURE_L3_NAME = S.NATURE_L3_NAME
+       , T.D_CHANNEL = S.D_CHANNEL
+       , T.D_ONOFFLINE = S.D_ONOFFLINE
+       , T.COD_DEST2 = S.COD_DEST2
+       , T.COD_DEST3 = S.COD_DEST3
+       , T.D_SALE_DEPT = S.D_SALE_DEPT
+       , T.TAX_RATE = S.TAX_RATE
+       , T.COD_VALUTA = S.COD_VALUTA
+       , T.COD_VALUTA_ORIGINARIA = S.COD_VALUTA_ORIGINARIA
+       , T.BY_BCY_0_AMT = S.BY_BCY_0_AMT
+       , T.LM_BCY_0_AMT = S.LM_BCY_0_AMT
+       , T.BCY_0_AMT = S.BCY_0_AMT
+       , T.BCY_1_AMT = S.BCY_1_AMT
+       , T.BCY_2_AMT = S.BCY_2_AMT
+       , T.BCY_3_AMT = S.BCY_3_AMT
+       , T.BCY_4_AMT = S.BCY_4_AMT
+       , T.BCY_5_AMT = S.BCY_5_AMT
+       , T.BCY_6_AMT = S.BCY_6_AMT
+       , T.BCY_7_AMT = S.BCY_7_AMT
+       , T.BCY_8_AMT = S.BCY_8_AMT
+       , T.BCY_9_AMT = S.BCY_9_AMT
+       , T.BCY_10_AMT = S.BCY_10_AMT
+       , T.BCY_11_AMT = S.BCY_11_AMT
+       , T.BCY_12_AMT = S.BCY_12_AMT
+       , T.BCY_13_AMT = S.BCY_13_AMT
+       , T.BCY_14_AMT = S.BCY_14_AMT
+       , T.BCY_15_AMT = S.BCY_15_AMT
+       , T.QCY_0_AMT = S.QCY_0_AMT
+       , T.QCY_1_AMT = S.QCY_1_AMT
+       , T.QCY_2_AMT = S.QCY_2_AMT
+       , T.QCY_3_AMT = S.QCY_3_AMT
+       , T.QCY_4_AMT = S.QCY_4_AMT
+       , T.QCY_5_AMT = S.QCY_5_AMT
+       , T.QCY_6_AMT = S.QCY_6_AMT
+       , T.QCY_7_AMT = S.QCY_7_AMT
+       , T.QCY_8_AMT = S.QCY_8_AMT
+       , T.QCY_9_AMT = S.QCY_9_AMT
+       , T.QCY_10_AMT = S.QCY_10_AMT
+       , T.QCY_11_AMT = S.QCY_11_AMT
+       , T.QCY_12_AMT = S.QCY_12_AMT
+       , T.QCY_13_AMT = S.QCY_13_AMT
+       , T.QCY_14_AMT = S.QCY_14_AMT
+       , T.QCY_15_AMT = S.QCY_15_AMT
+       , T.SHP_NINV_AMT = S.SHP_NINV_AMT
+       , T.RET_NTRF_AMT = S.RET_NTRF_AMT
+       , T.BCY_ADJ_INCL_0_AMT = S.BCY_ADJ_INCL_0_AMT
+       , T.BCY_ADJ_INCL_1_AMT = S.BCY_ADJ_INCL_1_AMT
+       , T.BCY_ADJ_INCL_2_AMT = S.BCY_ADJ_INCL_2_AMT
+       , T.BCY_ADJ_INCL_3_AMT = S.BCY_ADJ_INCL_3_AMT
+       , T.BCY_ADJ_INCL_4_AMT = S.BCY_ADJ_INCL_4_AMT
+       , T.BCY_ADJ_INCL_5_AMT = S.BCY_ADJ_INCL_5_AMT
+       , T.BCY_ADJ_INCL_6_AMT = S.BCY_ADJ_INCL_6_AMT
+       , T.BCY_ADJ_INCL_7_AMT = S.BCY_ADJ_INCL_7_AMT
+       , T.BCY_ADJ_INCL_8_AMT = S.BCY_ADJ_INCL_8_AMT
+       , T.BCY_ADJ_INCL_9_AMT = S.BCY_ADJ_INCL_9_AMT
+       , T.BCY_ADJ_INCL_10_AMT = S.BCY_ADJ_INCL_10_AMT
+       , T.BCY_ADJ_INCL_11_AMT = S.BCY_ADJ_INCL_11_AMT
+       , T.BCY_ADJ_INCL_12_AMT = S.BCY_ADJ_INCL_12_AMT
+       , T.BCY_ADJ_INCL_13_AMT = S.BCY_ADJ_INCL_13_AMT
+       , T.BCY_ADJ_INCL_14_AMT = S.BCY_ADJ_INCL_14_AMT
+       , T.BCY_ADJ_INCL_15_AMT = S.BCY_ADJ_INCL_15_AMT
+       , T.BCY_ADJ_EXCL_0_AMT = S.BCY_ADJ_EXCL_0_AMT
+       , T.OVERDUE_0_AMT = S.OVERDUE_0_AMT
+       , T.OVERDUE_1_AMT = S.OVERDUE_1_AMT
+       , T.OVERDUE_2_AMT = S.OVERDUE_2_AMT
+       , T.OVERDUE_3_AMT = S.OVERDUE_3_AMT
+       , T.OVERDUE_4_AMT = S.OVERDUE_4_AMT
+       , T.OVERDUE_5_AMT = S.OVERDUE_5_AMT
+       , T.OVERDUE_6_AMT = S.OVERDUE_6_AMT
+       , T.OVERDUE_7_AMT = S.OVERDUE_7_AMT
+       , T.OVERDUE_8_AMT = S.OVERDUE_8_AMT
+       , T.OVERDUE_9_AMT = S.OVERDUE_9_AMT
+       , T.INV_SAMPLE_AMT = S.INV_SAMPLE_AMT
+       , T.EPAY_AMT = S.EPAY_AMT
+       , T.ECLS_AMT = S.ECLS_AMT
+       , T.UREB_AMT = S.UREB_AMT
+       , T.UFEE_AMT = S.UFEE_AMT
+       , T.PAY_TERM_CODE = S.PAY_TERM_CODE
+       , T.PAY_TERM_DESC = S.PAY_TERM_DESC
+       , T.CLOSING_RATE_BCY_AMT = S.CLOSING_RATE_BCY_AMT
+       , T.POSTING_RATE_BCY_AMT = S.POSTING_RATE_BCY_AMT
+       , T.EXCHANGE_RATE_EVAL_FLAG = S.EXCHANGE_RATE_EVAL_FLAG
+       , T.TH_FX_EVAL_AMT = S.TH_FX_EVAL_AMT
+       , T.CURRENCY_ACCT_DETAIL = S.CURRENCY_ACCT_DETAIL
+       , T.ADJ_REB_AMT = S.ADJ_REB_AMT
+       , T.ADJ_RET_AMT = S.ADJ_RET_AMT
+       , T.PROVENIENZA = CASE WHEN T.PROVENIENZA = 'INPUT_DEFORM'
+                              THEN T.PROVENIENZA
+                              ELSE S.PROVENIENZA
+                         END
+       , T.DATEUPD = S.DATEUPD
+       , T.USERUPD = S.USERUPD
+  WHEN NOT MATCHED THEN INSERT (
+      OID
+    , COD_SCENARIO
+    , COD_PERIODO
+    , COD_AZIENDA
+    , COD_CONTO
+    , COD_CATEGORIA
+    , CUST_CODE
+    , CUST_NAME
+    , CUST_HEAD_CODE
+    , CUST_HEAD_NAME
+    , CUST_BRANCH_CODE
+    , CUST_BRANCH_NAME
+    , COD_AZI_CTP
+    , COUNTRY_CODE
+    , COUNTRY_NAME
+    , ACCT_SRC_CODE
+    , LE_AGE_FLAG
+    , IS_REC_LG
+    , ME_AGE_FLAG
+    , IS_REC_ME
+    , MB_AGE_FLAG
+    , IS_REC_MB
+    , GRP_SCOPE
+    , NATURE_L1_NAME
+    , NATURE_L2_NAME
+    , NATURE_L3_NAME
+    , D_CHANNEL
+    , D_ONOFFLINE
+    , COD_DEST2
+    , COD_DEST3
+    , D_SALE_DEPT
+    , TAX_RATE
+    , COD_VALUTA
+    , COD_VALUTA_ORIGINARIA
+    , BY_BCY_0_AMT
+    , LM_BCY_0_AMT
+    , BCY_0_AMT
+    , BCY_1_AMT
+    , BCY_2_AMT
+    , BCY_3_AMT
+    , BCY_4_AMT
+    , BCY_5_AMT
+    , BCY_6_AMT
+    , BCY_7_AMT
+    , BCY_8_AMT
+    , BCY_9_AMT
+    , BCY_10_AMT
+    , BCY_11_AMT
+    , BCY_12_AMT
+    , BCY_13_AMT
+    , BCY_14_AMT
+    , BCY_15_AMT
+    , QCY_0_AMT
+    , QCY_1_AMT
+    , QCY_2_AMT
+    , QCY_3_AMT
+    , QCY_4_AMT
+    , QCY_5_AMT
+    , QCY_6_AMT
+    , QCY_7_AMT
+    , QCY_8_AMT
+    , QCY_9_AMT
+    , QCY_10_AMT
+    , QCY_11_AMT
+    , QCY_12_AMT
+    , QCY_13_AMT
+    , QCY_14_AMT
+    , QCY_15_AMT
+    , SHP_NINV_AMT
+    , RET_NTRF_AMT
+    , BCY_ADJ_INCL_0_AMT
+    , BCY_ADJ_INCL_1_AMT
+    , BCY_ADJ_INCL_2_AMT
+    , BCY_ADJ_INCL_3_AMT
+    , BCY_ADJ_INCL_4_AMT
+    , BCY_ADJ_INCL_5_AMT
+    , BCY_ADJ_INCL_6_AMT
+    , BCY_ADJ_INCL_7_AMT
+    , BCY_ADJ_INCL_8_AMT
+    , BCY_ADJ_INCL_9_AMT
+    , BCY_ADJ_INCL_10_AMT
+    , BCY_ADJ_INCL_11_AMT
+    , BCY_ADJ_INCL_12_AMT
+    , BCY_ADJ_INCL_13_AMT
+    , BCY_ADJ_INCL_14_AMT
+    , BCY_ADJ_INCL_15_AMT
+    , BCY_ADJ_EXCL_0_AMT
+    , OVERDUE_0_AMT
+    , OVERDUE_1_AMT
+    , OVERDUE_2_AMT
+    , OVERDUE_3_AMT
+    , OVERDUE_4_AMT
+    , OVERDUE_5_AMT
+    , OVERDUE_6_AMT
+    , OVERDUE_7_AMT
+    , OVERDUE_8_AMT
+    , OVERDUE_9_AMT
+    , INV_SAMPLE_AMT
+    , EPAY_AMT
+    , ECLS_AMT
+    , UREB_AMT
+    , UFEE_AMT
+    , PAY_TERM_CODE
+    , PAY_TERM_DESC
+    , CLOSING_RATE_BCY_AMT
+    , POSTING_RATE_BCY_AMT
+    , EXCHANGE_RATE_EVAL_FLAG
+    , TH_FX_EVAL_AMT
+    , CURRENCY_ACCT_DETAIL
+    , ADJ_REB_AMT
+    , ADJ_RET_AMT
+    , PROVENIENZA
+    , DATEUPD
+    , USERUPD
+  ) VALUES (
+      S.OID
+    , S.COD_SCENARIO
+    , S.COD_PERIODO
+    , S.COD_AZIENDA
+    , S.COD_CONTO
+    , S.COD_CATEGORIA
+    , S.CUST_CODE
+    , S.CUST_NAME
+    , S.CUST_HEAD_CODE
+    , S.CUST_HEAD_NAME
+    , S.CUST_BRANCH_CODE
+    , S.CUST_BRANCH_NAME
+    , S.COD_AZI_CTP
+    , S.COUNTRY_CODE
+    , S.COUNTRY_NAME
+    , S.ACCT_SRC_CODE
+    , S.LE_AGE_FLAG
+    , S.IS_REC_LG
+    , S.ME_AGE_FLAG
+    , S.IS_REC_ME
+    , S.MB_AGE_FLAG
+    , S.IS_REC_MB
+    , S.GRP_SCOPE
+    , S.NATURE_L1_NAME
+    , S.NATURE_L2_NAME
+    , S.NATURE_L3_NAME
+    , S.D_CHANNEL
+    , S.D_ONOFFLINE
+    , S.COD_DEST2
+    , S.COD_DEST3
+    , S.D_SALE_DEPT
+    , S.TAX_RATE
+    , S.COD_VALUTA
+    , S.COD_VALUTA_ORIGINARIA
+    , S.BY_BCY_0_AMT
+    , S.LM_BCY_0_AMT
+    , S.BCY_0_AMT
+    , S.BCY_1_AMT
+    , S.BCY_2_AMT
+    , S.BCY_3_AMT
+    , S.BCY_4_AMT
+    , S.BCY_5_AMT
+    , S.BCY_6_AMT
+    , S.BCY_7_AMT
+    , S.BCY_8_AMT
+    , S.BCY_9_AMT
+    , S.BCY_10_AMT
+    , S.BCY_11_AMT
+    , S.BCY_12_AMT
+    , S.BCY_13_AMT
+    , S.BCY_14_AMT
+    , S.BCY_15_AMT
+    , S.QCY_0_AMT
+    , S.QCY_1_AMT
+    , S.QCY_2_AMT
+    , S.QCY_3_AMT
+    , S.QCY_4_AMT
+    , S.QCY_5_AMT
+    , S.QCY_6_AMT
+    , S.QCY_7_AMT
+    , S.QCY_8_AMT
+    , S.QCY_9_AMT
+    , S.QCY_10_AMT
+    , S.QCY_11_AMT
+    , S.QCY_12_AMT
+    , S.QCY_13_AMT
+    , S.QCY_14_AMT
+    , S.QCY_15_AMT
+    , S.SHP_NINV_AMT
+    , S.RET_NTRF_AMT
+    , S.BCY_ADJ_INCL_0_AMT
+    , S.BCY_ADJ_INCL_1_AMT
+    , S.BCY_ADJ_INCL_2_AMT
+    , S.BCY_ADJ_INCL_3_AMT
+    , S.BCY_ADJ_INCL_4_AMT
+    , S.BCY_ADJ_INCL_5_AMT
+    , S.BCY_ADJ_INCL_6_AMT
+    , S.BCY_ADJ_INCL_7_AMT
+    , S.BCY_ADJ_INCL_8_AMT
+    , S.BCY_ADJ_INCL_9_AMT
+    , S.BCY_ADJ_INCL_10_AMT
+    , S.BCY_ADJ_INCL_11_AMT
+    , S.BCY_ADJ_INCL_12_AMT
+    , S.BCY_ADJ_INCL_13_AMT
+    , S.BCY_ADJ_INCL_14_AMT
+    , S.BCY_ADJ_INCL_15_AMT
+    , S.BCY_ADJ_EXCL_0_AMT
+    , S.OVERDUE_0_AMT
+    , S.OVERDUE_1_AMT
+    , S.OVERDUE_2_AMT
+    , S.OVERDUE_3_AMT
+    , S.OVERDUE_4_AMT
+    , S.OVERDUE_5_AMT
+    , S.OVERDUE_6_AMT
+    , S.OVERDUE_7_AMT
+    , S.OVERDUE_8_AMT
+    , S.OVERDUE_9_AMT
+    , S.INV_SAMPLE_AMT
+    , S.EPAY_AMT
+    , S.ECLS_AMT
+    , S.UREB_AMT
+    , S.UFEE_AMT
+    , S.PAY_TERM_CODE
+    , S.PAY_TERM_DESC
+    , S.CLOSING_RATE_BCY_AMT
+    , S.POSTING_RATE_BCY_AMT
+    , S.EXCHANGE_RATE_EVAL_FLAG
+    , S.TH_FX_EVAL_AMT
+    , S.CURRENCY_ACCT_DETAIL
+    , S.ADJ_REB_AMT
+    , S.ADJ_RET_AMT
+    , S.PROVENIENZA
+    , S.DATEUPD
+    , S.USERUPD
+  );
 
   INSERT INTO ZTAB_CPM_LOG(
       CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA
