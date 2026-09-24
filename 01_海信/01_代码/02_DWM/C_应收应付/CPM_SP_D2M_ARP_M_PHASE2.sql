@@ -5,7 +5,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   , SESSION_USER IN VARCHAR2
 ) AS
   /**************************************************************************
-  最后更新时间：
+  最后更新时间：20260924
   上一版本信息：
   名称：CPM_SP_D2M_ARP_M
   用途：DWD->DWM往来账龄数据抽取
@@ -15,7 +15,8 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   特殊逻辑：仅取DWD_STANDARD和M01_FACT两个数据包
 
   版本信息：最新修改记录放最上面
-    
+    20260924 汇率和税率处理由AG过程负责，D2M仅完成ARPM01来源装载及重分类标识回写
+    20260923 修正日立公司GRP_SCOPE对方公司节点取数逻辑
     20260921 SHIQINGFENG.EX 新增重分类标识及集团归属范围更新
     20260920 SHIQINGFENG.EX 新增
 
@@ -591,9 +592,7 @@ BEGIN
            , A.SYSTEM_SRC
            , A.D_ADJ_TYPE
            , A.PROVENIENZA
-           , CASE WHEN A.SYSTEM_SRC LIKE 'S%' THEN SUBSTR(A.SYSTEM_SRC,2,4)
-                  ELSE A.SYSTEM_SRC
-             END AS MANDT
+           , AZ.CITTA_LEGALE AS MANDT
            , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
            , SUM(
                  CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
@@ -632,6 +631,8 @@ BEGIN
                             , A.ACCT_REC_CODE
                ) AS MB_BCY_AMT
         FROM AW_MR9_ARPM01_000001 A
+        LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
+          ON A.COD_AZIENDA = AZ.COD_AZIENDA
        WHERE A.COD_SCENARIO = V_SCENARIO
          AND A.COD_PERIODO = V_PERIODO
          AND A.COD_AZIENDA IN (
@@ -729,6 +730,8 @@ BEGIN
            , N.COD_PERIODO
            , N.ELEM
            , N.NODE AS NODE
+           , N.NODES AS NODES
+           , CASE WHEN H.ELEM IS NOT NULL THEN 1 ELSE 0 END AS IS_HITACHI
            , CASE WHEN H.ELEM IS NOT NULL THEN NVL(N.NODES, N.NODE)
                   ELSE N.NODE
              END AS SELF_NODE
@@ -747,6 +750,7 @@ BEGIN
          AND N.COD_PERIODO = V_PERIODO
     )
     -- 以下维度、金额和节点字段仅用于测试查询展示，不参与OID关联。
+    -- 当前公司为日立时，对方公司节点优先使用NODES，NODES为空时回退NODE。
     SELECT F.OID
          , F.COD_SCENARIO
          , F.COD_PERIODO
@@ -792,7 +796,9 @@ BEGIN
          , F.MB_BCY_AMT
          , C.SELF_NODE AS CUR_NODE
          , C.HQ AS CUR_HQ
-         , P.NODE AS CTP_NODE
+         , CASE WHEN C.IS_HITACHI = 1 THEN NVL(P.NODES, P.NODE)
+                ELSE P.NODE
+           END AS CTP_NODE
          , P.HQ AS CTP_HQ
          , F.LE_AGE_FLAG
          , F.IS_REC_LG
@@ -801,7 +807,10 @@ BEGIN
          , F.MB_AGE_FLAG
          , F.IS_REC_MB
          , CASE
-               WHEN C.SELF_NODE = P.NODE AND C.HQ = P.HQ THEN 'SUB-子公司'
+               WHEN C.SELF_NODE = CASE WHEN C.IS_HITACHI = 1 THEN NVL(P.NODES, P.NODE)
+                                       ELSE P.NODE
+                                  END
+                AND C.HQ = P.HQ THEN 'SUB-子公司'
                WHEN C.HQ = P.HQ THEN 'GIN-集团内'
                ELSE 'GEX-集团外'
            END AS GRP_SCOPE
@@ -840,6 +849,189 @@ BEGIN
        , T.GRP_SCOPE = S.GRP_SCOPE
        , T.DATEUPD = SYSDATE
        , T.USERUPD = SESSION_USER;
+
+  /* 汇率及法人税率处理已移至CPM_SP_M2M_ARP_AG_M_PHASE2。保留原逻辑注释块作为迁移记录。
+    -- 读取非2023公司使用的系统最终汇率，按币种形成唯一汇率。
+    CONVERSION_RATE AS (
+      SELECT COD_VALUTA
+           , MAX(ROUND(CAMBIO_FINALE, 5)) AS RATE
+        FROM TGK_FIMA_HISENSE.DATI_CAMBIO
+       WHERE COD_SCENARIO = SUBSTR(V_SCENARIO, 1, 4) || 'ACT'
+         AND COD_PERIODO = V_PERIODO
+       GROUP BY COD_VALUTA
+    ),
+    -- 读取2023公司使用的SAP TCURR汇率，并按币种对形成唯一汇率。
+    TCURR_CONVERSION_RATE AS (
+      SELECT TRIM(B.TCURR) AS TCURR
+           , TRIM(B.FCURR) AS FCURR
+           , MAX(
+               B.UKURS * CASE
+                             WHEN B.TCURR = 'VND' AND B.FCURR IN ('USD') THEN 1000
+                             WHEN B.TCURR = 'VND' THEN 100
+                             ELSE 1
+                         END
+             ) AS RATE
+        FROM ODS.ODSS600_TCURR@FMSLK B
+       WHERE B.KURST = 'M'
+         AND TO_CHAR(99999999 - B.GDATU) = TO_CHAR(
+               TRUNC(
+                 ADD_MONTHS(
+                   LAST_DAY(TO_DATE(V_YEARMONTH, 'YYYYMM'))
+                 , -1
+                 ) + 1
+               )
+             , 'YYYYMMDD'
+           )
+       GROUP BY TRIM(B.TCURR)
+              , TRIM(B.FCURR)
+    ),
+    -- 计算每条ARPM01记录的交易币转本位币汇率和法人税率因子。
+    FX_SOURCE AS (
+      SELECT A.OID
+           , CASE WHEN A.LE_AGE_FLAG = 'CL' AND A.IS_REC_LG = 'Y'
+                    THEN 1 / NULLIF(1 + NVL(A.TAX_RATE, 0), 0)
+                  ELSE 1
+              END AS TAX_FACTOR
+           , CASE
+                 WHEN TRIM(A.EXCHANGE_RATE_EVAL_FLAG) IS NULL
+                  AND TRIM(A.COD_VALUTA_ORIGINARIA) IS NOT NULL
+                  AND TRIM(A.COD_VALUTA) IS NOT NULL
+                  AND (
+                        (A.COD_AZIENDA = '2023'
+                         AND TCURR_CONV.RATE IS NOT NULL
+                         AND TCURR_CONV.RATE <> 0)
+                     OR (NVL(A.COD_AZIENDA, '#') <> '2023'
+                         AND (
+                               TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY'
+                            OR (QCY_RATE.RATE IS NOT NULL AND QCY_RATE.RATE <> 0)
+                         )
+                         AND (
+                               TRIM(A.COD_VALUTA) = 'CNY'
+                            OR (BCY_RATE.RATE IS NOT NULL AND BCY_RATE.RATE <> 0)
+                         ))
+                  )
+                  THEN CASE
+                           WHEN A.COD_AZIENDA = '2023'
+                            THEN TCURR_CONV.RATE
+                           ELSE
+                             ROUND(
+                               (CASE WHEN TRIM(A.COD_VALUTA) = 'CNY' THEN 1 ELSE BCY_RATE.RATE END)
+                               / (CASE WHEN TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY' THEN 1 ELSE QCY_RATE.RATE END)
+                             , 5
+                             )
+                       END
+             END AS CONVERSION_FACTOR
+           , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
+           , NVL(A.BCY_1_AMT, 0) AS BCY_1_AMT
+           , NVL(A.BCY_2_AMT, 0) AS BCY_2_AMT
+           , NVL(A.BCY_3_AMT, 0) AS BCY_3_AMT
+           , NVL(A.BCY_4_AMT, 0) AS BCY_4_AMT
+           , NVL(A.BCY_5_AMT, 0) AS BCY_5_AMT
+           , NVL(A.BCY_6_AMT, 0) AS BCY_6_AMT
+           , NVL(A.BCY_7_AMT, 0) AS BCY_7_AMT
+           , NVL(A.BCY_8_AMT, 0) AS BCY_8_AMT
+           , NVL(A.BCY_9_AMT, 0) AS BCY_9_AMT
+           , NVL(A.BCY_10_AMT, 0) AS BCY_10_AMT
+           , NVL(A.BCY_11_AMT, 0) AS BCY_11_AMT
+           , NVL(A.BCY_12_AMT, 0) AS BCY_12_AMT
+           , NVL(A.BCY_13_AMT, 0) AS BCY_13_AMT
+           , NVL(A.BCY_14_AMT, 0) AS BCY_14_AMT
+           , NVL(A.BCY_15_AMT, 0) AS BCY_15_AMT
+           , NVL(A.QCY_0_AMT, 0) AS QCY_0_AMT
+           , NVL(A.QCY_1_AMT, 0) AS QCY_1_AMT
+           , NVL(A.QCY_2_AMT, 0) AS QCY_2_AMT
+           , NVL(A.QCY_3_AMT, 0) AS QCY_3_AMT
+           , NVL(A.QCY_4_AMT, 0) AS QCY_4_AMT
+           , NVL(A.QCY_5_AMT, 0) AS QCY_5_AMT
+           , NVL(A.QCY_6_AMT, 0) AS QCY_6_AMT
+           , NVL(A.QCY_7_AMT, 0) AS QCY_7_AMT
+           , NVL(A.QCY_8_AMT, 0) AS QCY_8_AMT
+           , NVL(A.QCY_9_AMT, 0) AS QCY_9_AMT
+           , NVL(A.QCY_10_AMT, 0) AS QCY_10_AMT
+           , NVL(A.QCY_11_AMT, 0) AS QCY_11_AMT
+           , NVL(A.QCY_12_AMT, 0) AS QCY_12_AMT
+           , NVL(A.QCY_13_AMT, 0) AS QCY_13_AMT
+           , NVL(A.QCY_14_AMT, 0) AS QCY_14_AMT
+           , NVL(A.QCY_15_AMT, 0) AS QCY_15_AMT
+        FROM AW_MR9_ARPM01_000001 A
+        LEFT JOIN CONVERSION_RATE QCY_RATE
+          ON QCY_RATE.COD_VALUTA = A.COD_VALUTA_ORIGINARIA
+        LEFT JOIN CONVERSION_RATE BCY_RATE
+          ON BCY_RATE.COD_VALUTA = A.COD_VALUTA
+        LEFT JOIN TCURR_CONVERSION_RATE TCURR_CONV
+          ON TCURR_CONV.TCURR = TRIM(A.COD_VALUTA)
+         AND TCURR_CONV.FCURR = TRIM(A.COD_VALUTA_ORIGINARIA)
+       WHERE A.COD_SCENARIO = V_SCENARIO
+         AND A.COD_PERIODO = V_PERIODO
+         AND A.COD_AZIENDA IN (
+               SELECT ELEM
+                 FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+             )
+         AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+    ),
+    -- 将交易币账龄分段换算成本位币；汇率不可用时保留来源BCY分段。
+    FX_AMOUNT AS (
+      SELECT F.OID
+           , F.TAX_FACTOR
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_0_AMT ELSE F.QCY_0_AMT * F.CONVERSION_FACTOR END AS BCY_0_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_1_AMT ELSE F.QCY_1_AMT * F.CONVERSION_FACTOR END AS BCY_1_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_2_AMT ELSE F.QCY_2_AMT * F.CONVERSION_FACTOR END AS BCY_2_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_3_AMT ELSE F.QCY_3_AMT * F.CONVERSION_FACTOR END AS BCY_3_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_4_AMT ELSE F.QCY_4_AMT * F.CONVERSION_FACTOR END AS BCY_4_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_5_AMT ELSE F.QCY_5_AMT * F.CONVERSION_FACTOR END AS BCY_5_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_6_AMT ELSE F.QCY_6_AMT * F.CONVERSION_FACTOR END AS BCY_6_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_7_AMT ELSE F.QCY_7_AMT * F.CONVERSION_FACTOR END AS BCY_7_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_8_AMT ELSE F.QCY_8_AMT * F.CONVERSION_FACTOR END AS BCY_8_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_9_AMT ELSE F.QCY_9_AMT * F.CONVERSION_FACTOR END AS BCY_9_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_10_AMT ELSE F.QCY_10_AMT * F.CONVERSION_FACTOR END AS BCY_10_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_11_AMT ELSE F.QCY_11_AMT * F.CONVERSION_FACTOR END AS BCY_11_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_12_AMT ELSE F.QCY_12_AMT * F.CONVERSION_FACTOR END AS BCY_12_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_13_AMT ELSE F.QCY_13_AMT * F.CONVERSION_FACTOR END AS BCY_13_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_14_AMT ELSE F.QCY_14_AMT * F.CONVERSION_FACTOR END AS BCY_14_AMT
+           , CASE WHEN F.CONVERSION_FACTOR IS NULL THEN F.BCY_15_AMT ELSE F.QCY_15_AMT * F.CONVERSION_FACTOR END AS BCY_15_AMT
+        FROM FX_SOURCE F
+    )
+    SELECT F.OID
+         , F.BCY_0_AMT * F.TAX_FACTOR AS BCY_0_AMT
+         , F.BCY_1_AMT * F.TAX_FACTOR AS BCY_1_AMT
+         , F.BCY_2_AMT * F.TAX_FACTOR AS BCY_2_AMT
+         , F.BCY_3_AMT * F.TAX_FACTOR AS BCY_3_AMT
+         , F.BCY_4_AMT * F.TAX_FACTOR AS BCY_4_AMT
+         , F.BCY_5_AMT * F.TAX_FACTOR AS BCY_5_AMT
+         , F.BCY_6_AMT * F.TAX_FACTOR AS BCY_6_AMT
+         , F.BCY_7_AMT * F.TAX_FACTOR AS BCY_7_AMT
+         , F.BCY_8_AMT * F.TAX_FACTOR AS BCY_8_AMT
+         , F.BCY_9_AMT * F.TAX_FACTOR AS BCY_9_AMT
+         , F.BCY_10_AMT * F.TAX_FACTOR AS BCY_10_AMT
+         , F.BCY_11_AMT * F.TAX_FACTOR AS BCY_11_AMT
+         , F.BCY_12_AMT * F.TAX_FACTOR AS BCY_12_AMT
+         , F.BCY_13_AMT * F.TAX_FACTOR AS BCY_13_AMT
+         , F.BCY_14_AMT * F.TAX_FACTOR AS BCY_14_AMT
+         , F.BCY_15_AMT * F.TAX_FACTOR AS BCY_15_AMT
+      FROM FX_AMOUNT F
+  ) S
+     ON (T.OID = S.OID)
+   WHEN MATCHED THEN UPDATE SET
+         T.BCY_0_AMT = S.BCY_0_AMT
+       , T.BCY_1_AMT = S.BCY_1_AMT
+       , T.BCY_2_AMT = S.BCY_2_AMT
+       , T.BCY_3_AMT = S.BCY_3_AMT
+       , T.BCY_4_AMT = S.BCY_4_AMT
+       , T.BCY_5_AMT = S.BCY_5_AMT
+       , T.BCY_6_AMT = S.BCY_6_AMT
+       , T.BCY_7_AMT = S.BCY_7_AMT
+       , T.BCY_8_AMT = S.BCY_8_AMT
+       , T.BCY_9_AMT = S.BCY_9_AMT
+       , T.BCY_10_AMT = S.BCY_10_AMT
+       , T.BCY_11_AMT = S.BCY_11_AMT
+       , T.BCY_12_AMT = S.BCY_12_AMT
+       , T.BCY_13_AMT = S.BCY_13_AMT
+       , T.BCY_14_AMT = S.BCY_14_AMT
+       , T.BCY_15_AMT = S.BCY_15_AMT
+       , T.DATEUPD = SYSDATE
+       , T.USERUPD = SESSION_USER;
+  */
 
 
 

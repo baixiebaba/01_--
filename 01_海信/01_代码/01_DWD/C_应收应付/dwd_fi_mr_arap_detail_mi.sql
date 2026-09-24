@@ -405,8 +405,9 @@ src_bsid AS (
     UNION ALL
 
     SELECT 'S610' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
-      FROM ods.odss610_bsid
+      FROM ods.odsslt_s810_bsid
      WHERE budat <= @key_date_sap
+       AND mandt = '610'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 
@@ -415,6 +416,7 @@ src_bsid AS (
     SELECT 'S810' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s810_bsid
      WHERE budat <= @key_date_sap
+       AND mandt = '810'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 ),
@@ -467,9 +469,10 @@ src_bsad AS (
     UNION ALL
 
     SELECT 'S610' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
-      FROM ods.odss610_bsad
+      FROM ods.odsslt_s810_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
+       AND mandt = '610'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 
@@ -479,6 +482,7 @@ src_bsad AS (
       FROM ods.odsslt_s810_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
+       AND mandt = '810'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 
@@ -535,9 +539,10 @@ src_bsad AS (
     UNION ALL
 
     SELECT 'S610' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
-      FROM ods.odss610_bsad
+      FROM ods.odsslt_s810_bsad
      WHERE augdt >= @year_month_day
        AND augdt <= @key_date_sap
+       AND mandt = '610'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
        AND COALESCE(rstgr,'|') = '400'
@@ -548,6 +553,7 @@ src_bsad AS (
       FROM ods.odsslt_s810_bsad
      WHERE augdt >= @year_month_day
        AND augdt <= @key_date_sap
+       AND mandt = '810'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
        AND COALESCE(rstgr,'|') = '400'
@@ -598,8 +604,9 @@ src_bsik AS (
     UNION ALL
 
     SELECT 'S610' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
-      FROM ods.odss610_bsik
+      FROM ods.odsslt_s810_bsik
      WHERE budat <= @key_date_sap
+       AND mandt = '610'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 
@@ -608,6 +615,7 @@ src_bsik AS (
     SELECT 'S810' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s810_bsik
      WHERE budat <= @key_date_sap
+       AND mandt = '810'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 ),

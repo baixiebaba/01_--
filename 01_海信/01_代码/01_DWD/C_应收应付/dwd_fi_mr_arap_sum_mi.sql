@@ -125,7 +125,7 @@ cterm_dedup AS (
 tax_rate_rule_1 AS (
     SELECT company_code
          , cust_code
-         , MAX(tax_rate) AS tax_rate
+         , MAX(NVL(tax_rate,0)) AS tax_rate
       FROM dim.dim_rule_fi_mr_ar_tax_rate
      WHERE batch_id = 1
        AND NVL(valid_fr, '202401') <= @dt_month
@@ -137,7 +137,7 @@ tax_rate_rule_1 AS (
 tax_rate_rule_2 AS (
     SELECT company_code
          , profitcenter_code
-         , MAX(tax_rate) AS tax_rate
+         , MAX(NVL(tax_rate,0)) AS tax_rate
       FROM dim.dim_rule_fi_mr_ar_tax_rate
      WHERE batch_id = 2
        AND NVL(valid_fr, '202401') <= @dt_month
@@ -148,7 +148,7 @@ tax_rate_rule_2 AS (
 -- 读取税率规则第三优先级：仅按公司匹配税率。
 tax_rate_rule_3 AS (
     SELECT company_code
-         , MAX(tax_rate) AS tax_rate
+         , MAX(NVL(tax_rate,0)) AS tax_rate
       FROM dim.dim_rule_fi_mr_ar_tax_rate
      WHERE batch_id = 3
        AND NVL(valid_fr, '202401') <= @dt_month
