@@ -234,13 +234,13 @@ BEGIN
                 AND COMPANY_CODE <> '6600'
                 AND ACCT_SRC_CODE LIKE '2121%'
                 AND ACCT_SRC_CODE <> '2121999001' THEN '2121001000'
-               WHEN COMPANY_CODE IN ('6000', '6600')
+               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
                 AND ACCT_SRC_CODE LIKE '1131%' THEN '1131002000'
-               WHEN COMPANY_CODE IN ('6000', '6600')
+               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
                 AND ACCT_SRC_CODE LIKE '1133%' THEN '1133001003'
-               WHEN COMPANY_CODE IN ('6000', '6600')
+               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
                 AND ACCT_SRC_CODE LIKE '2181%' THEN '2181001005'
-               WHEN COMPANY_CODE IN ('6000', '6600')
+               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
                 AND ACCT_SRC_CODE LIKE '2121%' THEN '2121001000'
                WHEN COMPANY_CODE LIKE '16%'
                 AND COMPANY_CODE NOT LIKE '163%'
@@ -554,170 +554,220 @@ BEGIN
   MERGE INTO AW_MR9_ARPM01_000001 T
   USING (
     WITH TARGET_FACT AS (
-      SELECT A.OID
-           , A.COD_SCENARIO
-           , A.COD_PERIODO
-           , A.COD_AZIENDA
-           , A.COD_CATEGORIA
-           , A.SRC_DETAIL
-           , A.CUST_CODE
-           , A.CUST_NAME
-           , A.CUST_HEAD_CODE
-           , A.CUST_HEAD_NAME
-           , A.CUST_BRANCH_CODE
-           , A.CUST_BRANCH_NAME
-           , A.CUST_HEAD_CODE AS CUST_KEY
-           , A.COD_AZI_CTP
-           , A.COUNTRY_CODE
-           , A.COUNTRY_NAME
-           , A.ACCT_SRC_CODE
-           , A.ACCT_REC_CODE
-           , A.ACCT_MAP_CODE
-           , A.D_CHANNEL
-           , A.D_ONOFFLINE
-           , A.COD_DEST2
-           , A.COD_DEST3
-           , A.D_SALE_DEPT
-           , A.NATURE_L1_NAME
-           , A.NATURE_L2_NAME
-           , A.NATURE_L3_NAME
-           , A.UFEE_UREB_FLAG
-           , A.ECLS_FLAG
-           , A.PAY_TERM_CODE
-           , A.PAY_TERM_DESC
-           , A.EXCHANGE_RATE_EVAL_FLAG
-           , A.TAX_RATE
-           , A.COD_VALUTA
-           , A.COD_VALUTA_ORIGINARIA
-           , A.SYSTEM_SRC
-           , A.D_ADJ_TYPE
-           , A.PROVENIENZA
-           , AZ.CITTA_LEGALE AS MANDT
-           , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
-           , SUM(
-                 CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
-                        THEN NVL(A.BCY_0_AMT, 0)
-                      ELSE 0
-                 END
-               ) OVER (
-                 PARTITION BY A.SYSTEM_SRC
-                            , A.COD_AZIENDA
-                            , A.CUST_HEAD_CODE
-                            , A.ACCT_REC_CODE
-               ) AS LE_BCY_AMT
-           , SUM(
-                 CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
-                            OR A.SRC_DETAIL LIKE 'ZTSO04%'
-                      THEN NVL(A.BCY_0_AMT, 0)
-                      ELSE 0
-                 END
-               ) OVER (
-                 PARTITION BY A.SYSTEM_SRC
-                            , A.COD_AZIENDA
-                            , A.CUST_HEAD_CODE
-                            , A.ACCT_REC_CODE
-               ) AS ME_BCY_AMT
-           , SUM(
-                 CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
-                            OR A.SRC_DETAIL LIKE 'ZTSO04%'
-                      THEN NVL(A.BCY_0_AMT, 0)
-                      ELSE 0
-                 END
-               ) OVER (
-                 PARTITION BY A.SYSTEM_SRC
-                            , A.COD_AZIENDA
-                            , A.CUST_HEAD_CODE
-                            , A.COD_DEST2
-                            , A.ACCT_REC_CODE
-               ) AS MB_BCY_AMT
-        FROM AW_MR9_ARPM01_000001 A
-        LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
-          ON A.COD_AZIENDA = AZ.COD_AZIENDA
-       WHERE A.COD_SCENARIO = V_SCENARIO
-         AND A.COD_PERIODO = V_PERIODO
-         AND A.COD_AZIENDA IN (
-               SELECT ELEM
-                 FROM SESSION_AZIENDA_LIST
-                WHERE SESSION_ID = V_SESSION_ID
-         )
-         AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
-         AND (A.SRC_DETAIL LIKE 'ORG%'
-              OR A.SRC_DETAIL LIKE 'ZTSO04%'
-             )
+    SELECT * 
+      FROM 
+        (
+          SELECT A.OID
+              , A.COD_SCENARIO
+              , A.COD_PERIODO
+              , A.COD_AZIENDA
+              , A.COD_CATEGORIA
+              , A.SRC_DETAIL
+              , A.CUST_CODE
+              , A.CUST_NAME
+              , A.CUST_HEAD_CODE
+              , A.CUST_HEAD_NAME
+              , A.CUST_BRANCH_CODE
+              , A.CUST_BRANCH_NAME
+              , A.CUST_HEAD_CODE AS CUST_KEY
+              , A.COD_AZI_CTP
+              , A.COUNTRY_CODE
+              , A.COUNTRY_NAME
+              , A.ACCT_SRC_CODE
+              , A.ACCT_REC_CODE
+              , A.ACCT_MAP_CODE
+              , A.D_CHANNEL
+              , A.D_ONOFFLINE
+              , A.COD_DEST2
+              , A.COD_DEST3
+              , A.D_SALE_DEPT
+              , A.NATURE_L1_NAME
+              , A.NATURE_L2_NAME
+              , A.NATURE_L3_NAME
+              , A.UFEE_UREB_FLAG
+              , A.ECLS_FLAG
+              , A.PAY_TERM_CODE
+              , A.PAY_TERM_DESC
+              , A.EXCHANGE_RATE_EVAL_FLAG
+              , A.TAX_RATE
+              , A.COD_VALUTA
+              , A.COD_VALUTA_ORIGINARIA
+              , A.SYSTEM_SRC
+              , A.D_ADJ_TYPE
+              , A.PROVENIENZA
+              , AZ.CITTA_LEGALE AS MANDT
+              , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
+              , SUM(
+                    CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                            THEN NVL(A.BCY_0_AMT, 0)
+                          ELSE 0
+                    END
+                  ) OVER (
+                    PARTITION BY A.SYSTEM_SRC
+                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                            AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
+                                        THEN '6000' 
+                                        ELSE A.COD_AZIENDA
+                                  END 
+                                , A.CUST_HEAD_CODE
+                                , A.ACCT_REC_CODE
+                  ) AS LE_BCY_AMT
+              , SUM(
+                    CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                                OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                          THEN NVL(A.BCY_0_AMT, 0)
+                          ELSE 0
+                    END
+                  ) OVER (
+                    PARTITION BY A.SYSTEM_SRC
+                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                            AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
+                                        THEN '6000' 
+                                        ELSE A.COD_AZIENDA
+                                  END 
+                                , A.CUST_HEAD_CODE
+                                , A.ACCT_REC_CODE
+                  ) AS ME_BCY_AMT
+              , SUM(
+                    CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                                OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                          THEN NVL(A.BCY_0_AMT, 0)
+                          ELSE 0
+                    END
+                  ) OVER (
+                    PARTITION BY A.SYSTEM_SRC
+                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                            AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
+                                        THEN '6000' 
+                                        ELSE A.COD_AZIENDA
+                                  END 
+                                , A.CUST_HEAD_CODE
+                                , A.COD_DEST2
+                                , A.ACCT_REC_CODE
+                  ) AS MB_BCY_AMT
+            FROM AW_MR9_ARPM01_000001 A
+            LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
+              ON A.COD_AZIENDA = AZ.COD_AZIENDA
+          WHERE A.COD_SCENARIO = V_SCENARIO
+            AND A.COD_PERIODO = V_PERIODO
+            AND A.COD_AZIENDA IN (
+                  SELECT ELEM
+                    FROM SESSION_AZIENDA_LIST
+                    WHERE SESSION_ID = V_SESSION_ID
+                  
+                  UNION ALL
+                  /* 6000/6000A/6000B/6000C/6600 合并重分类 */
+                  SELECT COD_AZIENDA 
+                    FROM AZIENDA AZ
+                   WHERE COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                     AND 1 IN (SELECT 1
+                                  FROM SESSION_AZIENDA_LIST
+                                 WHERE SESSION_ID = V_SESSION_ID
+                                   AND ELEM IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                 )
+              )
+            AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+            AND (A.SRC_DETAIL LIKE 'ORG%'
+                  OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                )
+        ) AA
+        WHERE AA.COD_AZIENDA IN (
+                  SELECT ELEM
+                    FROM SESSION_AZIENDA_LIST
+                    WHERE SESSION_ID = V_SESSION_ID
+            )
     ),
     REC_FLAG_FACT AS (
       SELECT F.*
-           , CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
+           , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
+                    THEN 'N'
+                  WHEN F.SRC_DETAIL LIKE 'ORG%'
                     THEN
                     TGK_GB_HISENSE.F_APAR_REC(
                         V_YEARMONTH
                       , F.MANDT
                       , F.COD_AZIENDA
-                      , F.ACCT_SRC_CODE
+                      , F.ACCT_REC_CODE
                       , F.CUST_KEY
                       , F.LE_BCY_AMT
                       , '1'
                     )
                   END AS IS_REC_LG
-           , CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
+           , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
+                    THEN 'AR'
+                  WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
+                    THEN 'AP'
+                  WHEN F.SRC_DETAIL LIKE 'ORG%'
                     THEN
                     TGK_GB_HISENSE.F_APAR_REC(
                         V_YEARMONTH
                       , F.MANDT
                       , F.COD_AZIENDA
-                      , F.ACCT_SRC_CODE
+                      , F.ACCT_REC_CODE
                       , F.CUST_KEY
                       , F.LE_BCY_AMT
                       , '2'
                     )
                   END AS LE_AGE_FLAG
-           , CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
+           , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
+                    THEN 'N'
+                  WHEN F.SRC_DETAIL LIKE 'ORG%'
                          OR F.SRC_DETAIL LIKE 'ZTSO04%'
                     THEN
                     TGK_GB_HISENSE.F_APAR_REC(
                         V_YEARMONTH
                       , F.MANDT
                       , F.COD_AZIENDA
-                      , F.ACCT_SRC_CODE
+                      , F.ACCT_REC_CODE
                       , F.CUST_KEY
                       , F.ME_BCY_AMT
                       , '1'
                     )
                   END AS IS_REC_ME
-           , CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
+           , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
+                    THEN 'AR'
+                  WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
+                    THEN 'AP'
+                  WHEN F.SRC_DETAIL LIKE 'ORG%'
                         OR F.SRC_DETAIL LIKE 'ZTSO04%'
                     THEN
                     TGK_GB_HISENSE.F_APAR_REC(
                         V_YEARMONTH
                       , F.MANDT
                       , F.COD_AZIENDA
-                      , F.ACCT_SRC_CODE
+                      , F.ACCT_REC_CODE
                       , F.CUST_KEY
                       , F.ME_BCY_AMT
                       , '2'
                     )
                   END AS ME_AGE_FLAG
-           , CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
+           , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
+                    THEN 'N'
+                  WHEN F.SRC_DETAIL LIKE 'ORG%'
                         OR F.SRC_DETAIL LIKE 'ZTSO04%'
                     THEN
                     TGK_GB_HISENSE.F_APAR_REC(
                         V_YEARMONTH
                       , F.MANDT
                       , F.COD_AZIENDA
-                      , F.ACCT_SRC_CODE
+                      , F.ACCT_REC_CODE
                       , F.CUST_KEY
                       , F.MB_BCY_AMT
                       , '1'
                     )
                   END AS IS_REC_MB
-           , CASE WHEN F.SRC_DETAIL LIKE 'ORG%'
+           , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
+                    THEN 'AR'
+                  WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
+                    THEN 'AP'
+                  WHEN F.SRC_DETAIL LIKE 'ORG%'
                         OR F.SRC_DETAIL LIKE 'ZTSO04%'
                     THEN
                     TGK_GB_HISENSE.F_APAR_REC(
                         V_YEARMONTH
                       , F.MANDT
                       , F.COD_AZIENDA
-                      , F.ACCT_SRC_CODE
+                      , F.ACCT_REC_CODE
                       , F.CUST_KEY
                       , F.MB_BCY_AMT
                       , '2'
@@ -826,7 +876,7 @@ BEGIN
   ) S
      ON (T.OID = S.OID)
    WHEN MATCHED THEN UPDATE SET
-         T.ACCT_REC_CODE = CASE S.LE_AGE_FLAG
+         T.COD_CONTO = CASE S.LE_AGE_FLAG
                                  WHEN 'AR' THEN '1122000000'
                                  WHEN 'OR' THEN '122101F'
                                  WHEN 'AS' THEN '1123000000'

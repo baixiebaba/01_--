@@ -64,9 +64,9 @@ src_t052u AS (
 
     UNION ALL
 
-    -- SELECT 'S610' AS sap_system, zterm, text1 FROM ods.odss610_t052u WHERE spras = '1'
+    SELECT 'S610' AS sap_system, zterm, text1 FROM ods.odss610_t052u WHERE spras = '1'
 
-    -- UNION ALL
+    UNION ALL
 
     SELECT 'S810' AS sap_system, zterm, text1 FROM ods.odss810_t052u WHERE spras = '1'
 ),
@@ -117,16 +117,3 @@ SELECT company_code
         , cust_code
         , system_src
 ;
-
--- ============================================================================
--- 上线前核对项
--- 1. 建表语句已独立保存；目标表为全量覆盖的MD表，不按dt_month分区，执行本脚本前需确认目标表结构已存在。
--- 2. 当前按项目ODS命名规范引用odss{系统号}_knb1/t052u，执行前需确认六套表均已落地。
--- 3. T052U统一限定SPRAS='1'；同一ZTERM存在多条文本时取MAX(text1)。
--- 4. 客户编码取KNB1.KUNNR，并使用LTRIM(kunnr, '0')去除SAP前导零。
--- 5. 未匹配到T052U时保留KNB1数据，对应付款条件描述为空。
--- 6. 代码使用CONCAT_WS + ARRAY_SORT + COLLECT_LIST升序拼接；描述使用ARRAY_SORTBY按同一代码数组排序后拼接。
--- 7. system_src统一为S + MANDT，例如MANDT=600时取值为S600。
--- 8. load_dt使用NOW()获取本次数据加载时间，目标DATE字段按Doris隐式转换保存日期。
--- 9. replication_allocation沿用项目测试环境单副本配置，生产副本数需按集群规范调整。
--- ============================================================================

@@ -159,10 +159,10 @@ src_t001 AS (
     SELECT 'S900' AS system_src, bukrs, ktopl, waers
       FROM ods.odss900_t001
 
-    -- UNION ALL
+     UNION ALL
 
-    -- SELECT 'S610' AS system_src, bukrs, ktopl, waers
-    --   FROM ods.odss610_t001
+    SELECT 'S610' AS system_src, bukrs, ktopl, waers
+      FROM ods.odss610_t001
 
     UNION ALL
 
@@ -350,10 +350,10 @@ src_cepct AS (
     SELECT 'S900' AS system_src, prctr, spras, ktext
       FROM ods.odss900_cepct
 
-    -- UNION ALL
+    UNION ALL
 
-    -- SELECT 'S610' AS system_src, prctr, spras, ktext
-    --   FROM ods.odss610_cepct
+    SELECT 'S610' AS system_src, prctr, spras, ktext
+      FROM ods.odss610_cepct
 
     UNION ALL
 
@@ -362,15 +362,7 @@ src_cepct AS (
 ),
 -- 客户未清项目：仅保留参数月末前已过账且非A/S状态的记录。
 src_bsid AS (
-    SELECT 'S600' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, CASE
-           WHEN TRIM(bukrs) = '6000' THEN CASE TRIM(gsber)
-               WHEN '200' THEN '6000A'
-               WHEN '400' THEN '6000B'
-               WHEN '500' THEN '6000C'
-               ELSE TRIM(bukrs)
-           END
-           ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S600' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
       FROM ods.odsslt_s600_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -396,7 +388,8 @@ src_bsid AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSID' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSID' AS ods_src, 
+           bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch,NULL AS  pays_tran, sgtxt
       FROM ods.odsslt_s900_bsid
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -422,15 +415,7 @@ src_bsid AS (
 ),
 -- 客户已清项目：保留月末前过账、月末后清账的项目，回溯月末未清快照。
 src_bsad AS (
-    SELECT 'S600' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, CASE
-           WHEN TRIM(bukrs) = '6000' THEN CASE TRIM(gsber)
-               WHEN '200' THEN '6000A'
-               WHEN '400' THEN '6000B'
-               WHEN '500' THEN '6000C'
-               ELSE TRIM(bukrs)
-           END
-           ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S600' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
       FROM ods.odsslt_s600_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -488,15 +473,7 @@ src_bsad AS (
 
     UNION ALL
     -- 提前回款部分取已清表BSAD，清账日期限制在参数月份首日至月末。
-    SELECT 'S600' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, CASE
-           WHEN TRIM(bukrs) = '6000' THEN CASE TRIM(gsber)
-               WHEN '200' THEN '6000A'
-               WHEN '400' THEN '6000B'
-               WHEN '500' THEN '6000C'
-               ELSE TRIM(bukrs)
-           END
-           ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S600' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
       FROM ods.odsslt_s600_bsad
      WHERE augdt >= @year_month_day
        AND augdt <= @key_date_sap
@@ -561,15 +538,7 @@ src_bsad AS (
 ),
 -- 供应商未清项目：仅保留参数月末前已过账且非A/S状态的记录。
 src_bsik AS (
-    SELECT 'S600' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, CASE
-           WHEN TRIM(bukrs) = '6000' THEN CASE TRIM(gsber)
-               WHEN '200' THEN '6000A'
-               WHEN '400' THEN '6000B'
-               WHEN '500' THEN '6000C'
-               ELSE TRIM(bukrs)
-           END
-           ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S600' AS system_src, 'BSIK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s600_bsik
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
@@ -621,15 +590,8 @@ src_bsik AS (
 ),
 -- 供应商已清项目：保留月末前过账、月末后清账的项目，回溯月末未清快照。
 src_bsak AS (
-    SELECT 'S600' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, CASE
-           WHEN TRIM(bukrs) = '6000' THEN CASE TRIM(gsber)
-               WHEN '200' THEN '6000A'
-               WHEN '400' THEN '6000B'
-               WHEN '500' THEN '6000C'
-               ELSE TRIM(bukrs)
-           END
-           ELSE gsber
-       END AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S600' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, 
+            gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s600_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -658,7 +620,8 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    SELECT 'S900' AS system_src, 'BSAK' AS ods_src,
+            bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s900_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -668,18 +631,20 @@ src_bsak AS (
     UNION ALL
 
     SELECT 'S610' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
-      FROM ods.odss610_bsak
+      FROM ods.odsslt_s810_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
+       AND mandt = '610'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 
     UNION ALL
 
     SELECT 'S810' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
-      FROM ods.odss810_bsak
+      FROM ods.odsslt_s810_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
+       AND mandt = '810'
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 ),
@@ -816,7 +781,17 @@ normalized_items AS (
     SELECT a.system_src
          , a.ods_src
          , a.object_source
-         , a.bukrs AS company_code
+         , CASE
+               WHEN TRIM(a.bukrs) = '6000' 
+                 THEN CASE TRIM(a.gsber)
+                        WHEN '200' THEN '6000A'
+                        WHEN '400' THEN '6000B'
+                        WHEN '500' THEN '6000C'
+                        ELSE TRIM(a.bukrs)
+                     END
+                 ELSE TRIM(a.bukrs)
+           END AS company_code
+         , a.bukrs AS org_company_code
          , a.blart AS acct_cert_type
          , a.bstat AS acct_cert_status
          , a.belnr AS acct_cert_id
@@ -1511,7 +1486,7 @@ profitcenter_dim AS (
 SELECT @dt_month
      , LEFT(@dt_month, 4) AS `year`
      , RIGHT(@dt_month, 2) AS `month`
-     , a.company_code
+     , a.company_code AS company_code 
      , a.acct_cert_type
      , a.acct_cert_status
      , a.acct_cert_id
@@ -1804,10 +1779,10 @@ src_t001 AS (
     SELECT 'S900' AS system_src, bukrs, ktopl, waers
       FROM ods.odss900_t001
 
-    -- UNION ALL
+    UNION ALL
 
-    -- SELECT 'S610' AS system_src, bukrs, ktopl, waers
-    --   FROM ods.odss610_t001
+    SELECT 'S610' AS system_src, bukrs, ktopl, waers
+      FROM ods.odss610_t001
 
     UNION ALL
 
@@ -1869,10 +1844,10 @@ src_cepct AS (
     SELECT 'S900' AS system_src, prctr, spras, ktext
       FROM ods.odss900_cepct
 
-    -- UNION ALL
+    UNION ALL
 
-    -- SELECT 'S610' AS system_src, prctr, spras, ktext
-    --   FROM ods.odss610_cepct
+    SELECT 'S610' AS system_src, prctr, spras, ktext
+      FROM ods.odss610_cepct
 
     UNION ALL
 
@@ -1898,15 +1873,7 @@ gl_account_cfg AS (
 ),
 -- 合并六套SAP总账余额源，并在各物理源处按参数财年过滤。
 src_gl_balance AS (
-    SELECT CONCAT('S', g.rclnt) AS system_src, g.rbukrs AS company_code, g.racct AS acct_src_code, g.prctr AS src_profitcenter_code, CASE
-           WHEN TRIM(g.rbukrs) = '6000' THEN CASE TRIM(g.rbusa)
-               WHEN '200' THEN '6000A'
-               WHEN '400' THEN '6000B'
-               WHEN '500' THEN '6000C'
-               ELSE TRIM(g.rbukrs)
-           END
-           ELSE g.rbusa
-       END AS bus_range_code, g.rtcur AS qcy_code, 'FAGLFLEXT' AS ods_src, g.hslvt, g.hsl01, g.hsl02, g.hsl03, g.hsl04, g.hsl05, g.hsl06, g.hsl07, g.hsl08, g.hsl09, g.hsl10, g.hsl11, g.hsl12, g.tslvt, g.tsl01, g.tsl02, g.tsl03, g.tsl04, g.tsl05, g.tsl06, g.tsl07, g.tsl08, g.tsl09, g.tsl10, g.tsl11, g.tsl12
+    SELECT CONCAT('S', g.rclnt) AS system_src, g.rbukrs AS company_code, g.racct AS acct_src_code, g.prctr AS src_profitcenter_code, g.rbusa AS bus_range_code, g.rtcur AS qcy_code, 'FAGLFLEXT' AS ods_src, g.hslvt, g.hsl01, g.hsl02, g.hsl03, g.hsl04, g.hsl05, g.hsl06, g.hsl07, g.hsl08, g.hsl09, g.hsl10, g.hsl11, g.hsl12, g.tslvt, g.tsl01, g.tsl02, g.tsl03, g.tsl04, g.tsl05, g.tsl06, g.tsl07, g.tsl08, g.tsl09, g.tsl10, g.tsl11, g.tsl12
       FROM ods.ods_slt_s600_faglflext g
      -- 仅扫描参数财年，避免读取无关年度余额。
      WHERE ryear = @fiscal_year
@@ -1940,19 +1907,29 @@ src_gl_balance AS (
       FROM ods.ods_slt_s810_faglflext
      -- 仅扫描参数财年，避免读取无关年度余额。
      WHERE ryear = @fiscal_year
+       AND rclnt = '810'
 
     UNION ALL
 
-    -- S680余额源当前暂代S610，上线前仍需核验RCLNT=610。
     SELECT CONCAT('S', rclnt) AS system_src, rbukrs AS company_code, racct AS acct_src_code, prctr AS src_profitcenter_code, rbusa AS bus_range_code, rtcur AS qcy_code, 'FAGLFLEXT' AS ods_src, hslvt, hsl01, hsl02, hsl03, hsl04, hsl05, hsl06, hsl07, hsl08, hsl09, hsl10, hsl11, hsl12, tslvt, tsl01, tsl02, tsl03, tsl04, tsl05, tsl06, tsl07, tsl08, tsl09, tsl10, tsl11, tsl12
-      FROM ods.ods_s680_faglflext
+      FROM ods.ods_slt_s810_faglflext
      -- 仅扫描参数财年，避免读取无关年度余额。
      WHERE ryear = @fiscal_year
+       AND rclnt = '610'
 ),
 -- 计算非统驭科目本位币/交易币的期初加累计发生额。
 balance_detail AS (
     SELECT g.system_src
-         , g.company_code
+         , CASE
+               WHEN TRIM(g.company_code) = '6000' 
+                 THEN CASE TRIM(g.bus_range_code)
+                        WHEN '200' THEN '6000A'
+                        WHEN '400' THEN '6000B'
+                        WHEN '500' THEN '6000C'
+                        ELSE TRIM(g.company_code)
+                     END 
+                 ELSE TRIM(g.company_code)
+           END AS company_code
          , c.acct_type_code
          , g.acct_src_code
          , g.src_profitcenter_code
@@ -2063,7 +2040,7 @@ profitcenter_dim AS (
 SELECT @dt_month
      , LEFT(@dt_month, 4) AS `year`
      , RIGHT(@dt_month, 2) AS `month`
-     , b.company_code
+     , b.company_code AS company_code
      , NULL AS acct_cert_type
      , NULL AS acct_cert_status
      , NULL AS acct_cert_id
@@ -2151,29 +2128,3 @@ SELECT @dt_month
     ON pc.system_src = b.system_src
    AND pc.prctr = b.src_profitcenter_code
 ;
-
--- ============================================================================
--- 上线前核对项
--- 1. 六系统BSID/BSAD/BSIK/BSAK事实表物理名当前按
---    S600使用ods.odsslt_s600_{表名}，其余系统使用ods.odss{700/800/900/610/810}_{表名}编写，需在目标环境确认真实表名及字段；
---    各物理源分支已直接下推BUDAT/BSTAT条件，已清表另下推AUGDT条件，
---    会话变量@key_date_sap直接用于源分支月末过滤，all_items不再重复关联和过滤。
--- 2. S610非统驭余额暂沿用ods.ods_s680_faglflext，并通过RCLNT拼接为system_src识别；
---    上线前需确认该表确实承载S610数据及RCLNT取值为610。
--- 3. 完整重跑必须先执行第一段INSERT OVERWRITE覆盖月份分区，再执行第二段INSERT INTO追加余额；
---    第二段若单独重复执行会产生重复余额行，不可作为幂等重跑入口。
--- 4. 业务范围、三级性质和业务管理单元已按有效期规则映射：第一段客户与供应商均参与，商显/日立按公司10架构与国家处理，其余公司按业务范围规则batch 1→2→3处理；业务管理单元按batch 1→2处理。未命中均保持NULL。
---    第二段余额仅具备公司粒度，故仅对非商显、非日立公司应用业务范围batch 3；不具备国家、客商、分类、三级性质和映射后利润中心时，不参与相应batch，业务管理单元保持NULL。
---    映射后利润中心仅对第一段电商零售类客户生效：按新旧利润中心映射规则将原始利润中心映射为目标利润中心；未命中客户范围或映射规则时保持NULL，第二段余额保持NULL。
---    onoffline对第一段客户和供应商行均生效：先按应收规则表batch 1→2→3匹配，未命中再按收入规则表batch 5→2→1匹配，均未命中默认020_OFF_002（零售-传统零售）；第二段余额保持NULL。
--- 5. 第一段保留BELNR + BUZEI凭证行粒度；需确认六系统BUZEI、BSTAT、BUDAT、BLDAT、
---    ZFBDT、ZBD1T、AUGDT、ZLSCH、PAYS_TRAN、SGTXT均已稳定入湖，且日期字段格式为YYYYMMDD。
---    netrcp_dt按最终账龄基准日期计算：shkzg='H'时ZBD1T按0天处理，其他借贷方向使用ZBD1T天数；非统驭科目余额无行项目付款条件，netrcp_dt为空。
--- 6. 账龄日期配置dim.dim_rule_fi_mr_ar_agingdate需确认valid_fr/valid_to可按YYYYMM比较，
---    空company_code表示系统级规则；同一有效月、系统、公司存在重叠记录时SQL会按归一化键去重，
---    但仍需由维表侧治理重复配置。
--- 7. 科目映射按原始科目 + SAP系统 + 有效月份取唯一记录；若映射表存在同排序值重复，
---    需由维表侧补充稳定唯一键。
--- 8. CEPCT若同一利润中心存在多个控制范围或有效期版本，需补充KOKRS/DATBI约束。
--- 9. 若ODS金额仍采用SAP内部币种小数格式，需在入表前结合TCURX完成小数位转换。
--- ============================================================================

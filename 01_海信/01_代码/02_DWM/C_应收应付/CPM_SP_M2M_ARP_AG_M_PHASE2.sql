@@ -177,7 +177,7 @@ BEGIN
   CURRENT_SOURCE_BASE AS (
     SELECT A.OID
          , A.COD_AZIENDA
-         , A.ACCT_REC_CODE AS COD_CONTO
+         , A.COD_CONTO AS COD_CONTO
          , A.COD_CATEGORIA
          , A.SRC_DETAIL
          , A.CUST_CODE

@@ -263,7 +263,7 @@ detail_rule_base AS (
         ON t3.company_code = d.company_code
       LEFT JOIN ex_rate_company_rule erc
         ON erc.company_code = d.company_code
-       AND erc.cust_code = d.cust_head_code
+       AND erc.cust_code = NVL(d.cust_head_code,d.acct_src_code)
       LEFT JOIN ex_rate_account_rule era
         ON era.system_src = d.system_src
        AND era.acct_src_code = d.acct_src_code
@@ -446,8 +446,8 @@ xh_ar_fact AS (
          , ar_bukrs AS company_code
          , CONCAT('XH_', COALESCE(ap_bukrs, 'Z001')) AS cust_code
          , '应收账款-信汇' AS cust_name
-         , NULL AS cust_head_code
-         , NULL AS cust_head_name
+         , CONCAT('XH_', COALESCE(ap_bukrs, 'Z001')) AS cust_head_code
+         , '应收账款-信汇' AS cust_head_name
          , NULL AS cust_branch_code
          , NULL AS cust_branch_name
          , ap_bukrs AS cp_company_code
@@ -507,8 +507,8 @@ xh_ap_fact AS (
          , ap_bukrs AS company_code
          , CONCAT('XH_', COALESCE(ar_bukrs, 'Z001')) AS cust_code
          , '应付账款-信汇' AS cust_name
-         , NULL AS cust_head_code
-         , NULL AS cust_head_name
+         , CONCAT('XH_', COALESCE(ar_bukrs, 'Z001')) AS cust_head_code
+         , '应付账款-信汇' AS cust_head_name
          , NULL AS cust_branch_code
          , NULL AS cust_branch_name
          , ar_bukrs AS cp_company_code
@@ -1205,7 +1205,7 @@ SELECT p.dt_month
   FROM report_pivot p
   LEFT JOIN cterm_dedup c
     ON c.system_src = p.system_src
-   AND c.company_code = p.company_code
+   AND c.company_code = CASE WHEN p.company_code LIKE '6000%' THEN '6000' END
    AND c.cust_code = p.cust_code
 ;
 
