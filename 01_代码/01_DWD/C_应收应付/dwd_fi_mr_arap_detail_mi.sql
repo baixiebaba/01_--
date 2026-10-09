@@ -1,6 +1,7 @@
 /*
 -- ============================================================================
--- 最新版修改记录：20260921 MODIFY 更正净收付日期借贷方向逻辑
+-- 最新版修改记录：20261009 MODIFY 修复SAP多格式日期转换
+-- 上一版修改记录：20260921 MODIFY 更正净收付日期借贷方向逻辑
 -- 上一版修改记录：20260921 ADD 新增净收付日期 netrcp_dt
 -- 目标表：往来账龄明细表 test.dwd_fi_mr_arap_detail_mi
 -- 修改记录：最新修改记录放最上面
@@ -797,17 +798,63 @@ normalized_items AS (
          , a.belnr AS acct_cert_id
          , NULLIF(TRIM(a.gjahr), '') AS gjahr
          , a.buzei AS acct_cert_item
-         , STR_TO_DATE(NULLIF(TRIM(a.bldat), ''), '%Y%m%d') AS voucher_dt
-         , STR_TO_DATE(NULLIF(TRIM(a.budat), ''), '%Y%m%d') AS posting_dt
-         , STR_TO_DATE(NULLIF(TRIM(a.aging_date_sap), ''), '%Y%m%d') AS baseline_dt
+         -- SAP日期统一支持YYYYMMDD、YYYY-MM-DD和YYYY-MM-DD HH:MM:SS；空串、00000000及非法值返回NULL。
          , CASE
-               WHEN NULLIF(TRIM(a.aging_date_sap), '') IS NULL
+               WHEN NULLIF(TRIM(CAST(a.bldat AS STRING)), '') IS NULL
+                 OR NULLIF(TRIM(CAST(a.bldat AS STRING)), '') = '00000000'
+                   THEN NULL
+               WHEN TRIM(CAST(a.bldat AS STRING)) REGEXP '^[0-9]{8}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y%m%d') AS DATE)
+               WHEN TRIM(CAST(a.bldat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+               WHEN TRIM(CAST(a.bldat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y-%m-%d') AS DATE)
+           END AS voucher_dt
+         , CASE
+               WHEN NULLIF(TRIM(CAST(a.budat AS STRING)), '') IS NULL
+                 OR NULLIF(TRIM(CAST(a.budat AS STRING)), '') = '00000000'
+                   THEN NULL
+               WHEN TRIM(CAST(a.budat AS STRING)) REGEXP '^[0-9]{8}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y%m%d') AS DATE)
+               WHEN TRIM(CAST(a.budat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+               WHEN TRIM(CAST(a.budat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y-%m-%d') AS DATE)
+           END AS posting_dt
+         , CASE
+               WHEN NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') IS NULL
+                 OR NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') = '00000000'
+                   THEN NULL
+               WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+               WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+               WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+           END AS baseline_dt
+         , CASE
+               WHEN NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') IS NULL
+                 OR NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') = '00000000'
                    THEN NULL
                WHEN a.shkzg = 'H'
-                   THEN STR_TO_DATE(NULLIF(TRIM(a.aging_date_sap), ''), '%Y%m%d')
+                   THEN CASE
+                            WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
+                                THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+                            WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+                                THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                            WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                                THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+                        END
                WHEN NULLIF(TRIM(a.zbd1t), '') IS NOT NULL
                    THEN DATE_ADD(
-                            STR_TO_DATE(NULLIF(TRIM(a.aging_date_sap), ''), '%Y%m%d')
+                            CASE
+                                WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
+                                    THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+                                WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+                                    THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                                WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                                    THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+                            END
                           , INTERVAL CAST(NULLIF(TRIM(a.zbd1t), '') AS INT) DAY
                         )
            END AS netrcp_dt
@@ -835,7 +882,17 @@ normalized_items AS (
          , CAST(
                DATEDIFF(
                    @key_date
-                    , STR_TO_DATE(NULLIF(TRIM(a.aging_date_sap), ''), '%Y%m%d')
+                    , CASE
+                          WHEN NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') IS NULL
+                            OR NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') = '00000000'
+                              THEN NULL
+                          WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
+                              THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+                          WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+                              THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                          WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                              THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+                      END
                ) + 1 AS DECIMALV3(27, 9)
            ) AS aging_days
          , a.pays_tran

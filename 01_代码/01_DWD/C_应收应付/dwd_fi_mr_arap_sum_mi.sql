@@ -1,9 +1,10 @@
 /*
 -- ============================================================================
--- 最新版修改记录：20260915 ADD BY shiqingfeng.ex 新增
+-- 最新版修改记录：20261009 ADD BY Kiro 修改EPAY提前回款逻辑
 -- 上一版修改记录：
 -- 目标表：往来账龄汇总表 test.dwd_fi_mr_arap_sum_mi
 -- 修改记录：最新修改记录放最上面
+--   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
 --   20260915 ADD BY shiqingfeng.ex 新增
 -- ============================================================================
 */
@@ -13,7 +14,7 @@
 SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
--- 统计截止日期：取参数月份月末，供EPAY基准日期判断。
+-- 统计截止日期：取参数月份月末，供EPAY baseline_dt判断。
 SET @last_day = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
 -- 以上SET与下方单条INSERT OVERWRITE必须在同一session中依次执行。
 set enable_auto_create_when_overwrite=true;
@@ -1223,7 +1224,7 @@ SELECT p.dt_month
 
 -- ============================================================================
 -- EPAY：提前回款来源。
--- 使用DETAIL已装载的BSID/BSAD数据，按付款原因、科目、基准日期和正负金额计算提前回款。
+-- 使用DETAIL已装载的BSID/BSAD数据，按baseline_dt、渠道、凭证月份和凭证类型筛选提前回款；按公司+客商+利润中心聚合负数。
 -- 本段必须在前面的Sum覆盖装载完成后执行。
 -- ============================================================================
 INSERT INTO test.dwd_fi_mr_arap_sum_mi
@@ -1297,70 +1298,60 @@ INSERT INTO test.dwd_fi_mr_arap_sum_mi
     , load_dt                  -- 更新时间
 )
 WITH
--- EPAY：从Detail读取BSID/BSAD数据，按付款原因、科目和月末基准日期筛选。
+-- EPAY：从Detail读取BSID/BSAD数据，按指定提前回款条件筛选并保留本位币、交易币金额。
 epay_detail AS (
-    SELECT  d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
-          , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
-          , SUM(COALESCE(bcy_amt, 0)) AS bcy_amt
-          , system_src
+    SELECT d.dt_month
+         , d.`year`
+         , d.`month`
+         , d.company_code
+         , d.cust_code
+         , d.cust_name
+         , d.acct_src_code
+         , d.acct_map_code
+         , d.src_profitcenter_code
+         , d.src_profitcenter_name
+         , d.profitcenter_code
+         , d.profitcenter_name
+         , d.bcy_code
+         , d.qcy_code
+         , d.system_src
+         , d.bcy_amt
+         , d.qcy_amt
       FROM test.dwd_fi_mr_arap_detail_mi d
      WHERE d.dt_month = @dt_month
-       AND d.ods_src IN ('BSID', 'BSAD', 'BSAD_EPAY')
-       AND d.pay_reason_code = '400'
+       AND (d.ods_src = 'BSID' OR d.ods_src LIKE 'BSAD%')
        AND d.acct_map_code LIKE '1122%'
-       AND d.netrcp_dt <= @last_day
-     GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
-            , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
-            , system_src
-     HAVING SUM(COALESCE(bcy_amt, 0)) > 0
-
-    UNION ALL
-
-    SELECT d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
-          , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
-          , SUM(COALESCE(bcy_amt, 0)) AS bcy_amt
-          , system_src
-      FROM test.dwd_fi_mr_arap_detail_mi d
-     WHERE d.dt_month = @dt_month
-       AND d.ods_src IN ('BSID', 'BSAD', 'BSAD_EPAY')
-       AND d.pay_reason_code = '400'
-       AND d.acct_map_code LIKE '1122%'
-     GROUP BY d.dt_month,d.year,d.month,d.company_code,d.cust_code,d.cust_name
-            , d.acct_src_code,d.acct_map_code,d.src_profitcenter_code,d.src_profitcenter_name,d.profitcenter_code,d.profitcenter_name
-            , system_src
-     HAVING SUM(COALESCE(bcy_amt, 0)) < 0
+       AND d.baseline_dt <= @last_day
+       AND d.tov_channel_code NOT LIKE 'ARTA_A_07%'
+       AND NOT (d.posting_dt >= STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
+            AND d.posting_dt < DATE_ADD(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'), INTERVAL 1 MONTH)
+            AND d.acct_cert_type = 'AB')
 ),
--- EPAY：按当前需要的业务维度汇总正负金额，计算提前回款净额。
+-- EPAY：按公司、客商、利润中心聚合本位币和交易币金额，仅保留聚合结果为负数的数据。
 epay_sum AS (
-    SELECT dt_month
-         , `year`
-         , `month`
-         , company_code
-         , cust_code
-         , cust_name
-         , acct_src_code
-         , acct_map_code
-         , src_profitcenter_code
-         , src_profitcenter_name
+    SELECT company_code
+         , MAX(dt_month) AS dt_month
+         , MAX(`year`) AS `year`
+         , MAX(`month`) AS `month`
+         , cust_code AS cust_code
+         , MAX(cust_name) AS cust_name
+         , MAX(acct_src_code) AS acct_src_code
+         , MAX(acct_map_code) AS acct_map_code
+         , MAX(src_profitcenter_code) AS src_profitcenter_code
+         , MAX(src_profitcenter_name) AS src_profitcenter_name
          , profitcenter_code
-         , profitcenter_name
+         , MAX(profitcenter_name) AS profitcenter_name
+         , MAX(bcy_code) AS bcy_code
+         , MAX(qcy_code) AS qcy_code
          , SUM(COALESCE(bcy_amt, 0)) AS bcy_net_amt
-         , system_src
+         , SUM(COALESCE(qcy_amt, 0)) AS qcy_net_amt
+         , MAX(system_src) AS system_src
       FROM epay_detail
-     GROUP BY dt_month
-            , `year`
-            , `month`
-            , company_code
+     GROUP BY company_code
             , cust_code
-            , cust_name
-            , acct_src_code
-            , acct_map_code
-            , src_profitcenter_code
-            , src_profitcenter_name
             , profitcenter_code
-            , profitcenter_name
-            , system_src
     HAVING SUM(COALESCE(bcy_amt, 0)) < 0
+        OR SUM(COALESCE(qcy_amt, 0)) < 0
 )
 SELECT dt_month
      , `year`
@@ -1378,9 +1369,9 @@ SELECT dt_month
      , NULL AS bus_range_name
      , NULL AS marketing_dept_code
      , NULL AS marketing_dept_name
-     , '400' AS pay_reason_code
-     , 'CNY' AS bcy_code
-     , 'CNY' AS qcy_code
+     , NULL AS pay_reason_code
+     , bcy_code AS bcy_code
+     , qcy_code AS qcy_code
      , bcy_net_amt AS bcy_0_amt
      , bcy_net_amt AS bcy_1_amt
      , 0 AS bcy_2_amt
@@ -1397,8 +1388,8 @@ SELECT dt_month
      , 0 AS bcy_13_amt
      , 0 AS bcy_14_amt
      , 0 AS bcy_15_amt
-     , bcy_net_amt AS qcy_0_amt
-     , bcy_net_amt AS qcy_1_amt
+     , qcy_net_amt AS qcy_0_amt
+     , qcy_net_amt AS qcy_1_amt
      , 0 AS qcy_2_amt
      , 0 AS qcy_3_amt
      , 0 AS qcy_4_amt

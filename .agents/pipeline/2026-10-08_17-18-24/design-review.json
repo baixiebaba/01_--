@@ -1,0 +1,15 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {"id": 1, "severity": "HIGH", "title": "STEP2比例来源错误排除规则表", "location": "02-design.md 概述、结构元数据预检、STEP2", "fix": "按Excel引入AW_RUL_ARPBDR_000001，定义BATCH_ID 1/2/3、字段白名单、匹配键和BD_RATIO_1..15；缺对象时阻断。"},
+    {"id": 2, "severity": "HIGH", "title": "10-15账龄保留不确定分支且与Excel冲突", "location": "02-design.md STEP2/STEP3", "fix": "固定实现1-15全部账龄，取消若XML/若无输入条件，补齐BD、AGE_ALLOC和BD_AFAL 10-15。"},
+    {"id": 3, "severity": "HIGH", "title": "STEP1遗漏ARP_02_003返利扣减", "location": "02-design.md STEP1", "fix": "补充ARP_02_003来源、SPC_REB_DED_AMT字段、符号/扣减顺序/空值和写回规则。"},
+    {"id": 4, "severity": "HIGH", "title": "HAS_INDIVIDUAL未落到可执行的15账龄实现", "location": "02-design.md STEP2/STEP3", "fix": "定义完整INDIVIDUAL_DATA列清单和业务键，使用COUNT(*)>0传播HAS_INDIVIDUAL，并逐列实现SPID_0..15和BD_AFAL_1..15。"},
+    {"id": 5, "severity": "HIGH", "title": "规则优先级及字段语义未按Excel固定", "location": "02-design.md 当前接口、STEP2", "fix": "明确BATCH_ID优先级、GRP_SCOPE前三位、CUST_HEAD_CODE/CUST_CODE及NATURE_L3_NAME匹配和重复规则处理；FORM_DATI不得未经确认替代。"},
+    {"id": 6, "severity": "HIGH", "title": "STEP3分摊和上月/核销粒度未固定", "location": "02-design.md STEP3", "fix": "列出分摊、上月、核销各自完整业务键、空值规则、多对多断言和最终勾稽公式。"},
+    {"id": 7, "severity": "HIGH", "title": "参数校验及异常边界缺少可执行事务设计", "location": "02-design.md 公共参数、失败边界", "fix": "给出校验顺序、错误码、日志提交边界和保存原异常后独立清理/日志嵌套块的PL/SQL模板。"},
+    {"id": 8, "severity": "MEDIUM", "title": "MERGE重复断言未定义具体SQL和失败语义", "location": "02-design.md 各STEP及MERGE唯一性", "fix": "逐个MERGE列出重复检测SQL、日志内容、错误码、停止点以及已提交步骤是否保留。"},
+    {"id": 9, "severity": "MEDIUM", "title": "精度尾差方案没有可执行的分摊池算法", "location": "02-design.md 金额精度和尾差", "fix": "定义分区键、来源总额、OID排序、累计值和最后行公式，并先固定ALL_TAB_COLUMNS precision/scale结果。"},
+    {"id": 10, "severity": "NIT", "title": "XML关键区域解析判据不足", "location": "02-design.md 设计依据与核对边界", "fix": "规定必需行范围和字段清单，处理合并单元格继承，缺失即失败。"}
+  ]
+}
