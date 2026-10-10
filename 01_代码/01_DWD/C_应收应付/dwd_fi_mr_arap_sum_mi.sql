@@ -1,7 +1,11 @@
 /*
 -- ============================================================================
--- 最新版修改记录：20261009 ADD BY Kiro 修改EPAY提前回款逻辑
+-- 最新版修改记录：20261009 ADD BY Kiro 新增周转渠道及商冷客户群四字段
+-- 上一版修改记录：20261009 ADD BY Kiro 调整POLICY取数限制
 -- 上一版修改记录：
+--   20261009 ADD BY Kiro 补充OVERDUE及POLICY利润中心映射
+--   20261009 ADD BY Kiro 修改POLICY政策取数逻辑
+--   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
 -- 目标表：往来账龄汇总表 test.dwd_fi_mr_arap_sum_mi
 -- 修改记录：最新修改记录放最上面
 --   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
@@ -47,6 +51,10 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sum_mi PARTITION (*)
     , channel_l2_name          -- 二级公司分类名称
     , channel_l3_code          -- 三级公司分类编码
     , channel_l3_name          -- 三级公司分类名称
+    , tov_channel_code         -- 周转分析渠道编码
+    , tov_channel_name         -- 周转分析渠道名称
+    , cc_cust_group_code       -- 商冷客户群编码
+    , cc_cust_group_name       -- 商冷客户群名称
     , onoffline_code           -- 线上线下编码
     , onoffline_name           -- 线上线下名称
     , src_profitcenter_code    -- 原始利润中心编码
@@ -223,6 +231,7 @@ ecls_match AS (
        AND d.pay_reason_code = '400'
        AND d.acct_map_code LIKE '1122%'
        AND d.ods_src <> 'BSAD_EPAY'
+       AND d.tov_channel_code LIKE 'ARTA_A_07%'
      GROUP BY d.acct_map_code
             , d.cust_code
             , d.pays_tran
@@ -316,6 +325,10 @@ detail_fact AS (
          , channel_l2_name
          , channel_l3_code
          , channel_l3_name
+         , tov_channel_code
+         , tov_channel_name
+         , cc_cust_group_code
+         , cc_cust_group_name
          , onoffline_code
          , onoffline_name
          , src_profitcenter_code
@@ -463,6 +476,10 @@ xh_ar_fact AS (
          , NULL AS channel_l2_name
          , NULL AS channel_l3_code
          , NULL AS channel_l3_name
+         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
+         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
+         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code
          , NULL AS onoffline_name
          , NULL AS src_profitcenter_code
@@ -524,6 +541,10 @@ xh_ap_fact AS (
          , NULL AS channel_l2_name
          , NULL AS channel_l3_code
          , NULL AS channel_l3_name
+         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
+         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
+         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code
          , NULL AS onoffline_name
          , NULL AS src_profitcenter_code
@@ -563,32 +584,44 @@ xh_ap_fact AS (
 ),
 -- OVERDUE / INV_SAMPLE：直接取原字段金额，不再拆成两个冗余包；同一来源表一次聚合后再分流到两个事实输出。
 overdue_sample_src AS (
-    SELECT ledge_code AS company_code
-         , gl_account AS acct_src_code
-         , LTRIM(COALESCE(cust_code, ''), '0') AS cust_code
-         , cust_name AS cust_name
-         , profit_center_code AS profitcenter_code
-         , profit_center_name AS profitcenter_name
-         , SUM(COALESCE(overdue_adj_after_amt, 0)) AS overdue_amount
-         , SUM(COALESCE(inv_sample_amt, 0)) AS inv_sample_amount
-      FROM dws.dws_fi_mr_ar_overdue_mi
-     WHERE DATE_FORMAT(start_dt, '%Y%m%d') = DATE_FORMAT(
+    SELECT s.ledge_code AS company_code
+         , s.gl_account AS acct_src_code
+         , LTRIM(COALESCE(s.cust_code, ''), '0') AS cust_code
+         , s.cust_name AS cust_name
+         , s.profit_center_code AS profitcenter_code
+         , s.profit_center_name AS profitcenter_name
+         , SUM(COALESCE(s.overdue_adj_after_amt, 0)) AS overdue_amount
+         , SUM(COALESCE(s.inv_sample_amt, 0)) AS inv_sample_amount
+      FROM dws.dws_fi_mr_ar_overdue_mi s
+     WHERE DATE_FORMAT(s.start_dt, '%Y%m%d') = DATE_FORMAT(
                                DATE_ADD(
                                    STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
                                  , INTERVAL 1 MONTH
                                )
                              , '%Y%m%d'
                          )
-     GROUP BY ledge_code
-            , gl_account
-            , cust_code
-            , cust_name
-            , profit_center_code
-            , profit_center_name
-    HAVING SUM(COALESCE(overdue_adj_after_amt, 0)) <> 0
-        OR SUM(COALESCE(inv_sample_amt, 0)) <> 0
+     GROUP BY s.ledge_code
+            , s.gl_account
+            , s.cust_code
+            , s.cust_name
+            , s.profit_center_code
+            , s.profit_center_name
+    HAVING SUM(COALESCE(s.overdue_adj_after_amt, 0)) <> 0
+        OR SUM(COALESCE(s.inv_sample_amt, 0)) <> 0
 ),
--- OVERDUE：标准化为窄事实接口，直接取超期款调整后金额。
+-- OVERDUE：读取目标月份有效的batch_id=2利润中心映射，并按去前导0后的旧利润中心去重，避免放大金额。
+overdue_profitcenter_rule AS (
+    SELECT NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '') AS src_profitcenter_code
+         , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
+         , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
+      FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
+     WHERE CAST(pm.batch_id AS INT) = 2
+       AND NVL(pm.valid_fr, '202401') <= @dt_month
+       AND NVL(pm.valid_to, '999999') >= @dt_month
+     GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
+),
+-- OVERDUE：标准化为窄事实接口；原利润中心按DETAIL语义去前导0后保留，命中映射时输出新利润中心。
+-- 未命中映射时回退去前导0的原始利润中心编码和原始利润中心名称。
 overdue_fact AS (
     SELECT @dt_month AS dt_month, LEFT(@dt_month, 4) AS `year`, RIGHT(@dt_month, 2) AS `month`
          , company_code, cust_code, cust_name
@@ -599,9 +632,15 @@ overdue_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
+         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
+         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
+         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
-         , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
-         , profitcenter_code, profitcenter_name
+         , NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '') AS src_profitcenter_code
+         , s.profitcenter_name AS src_profitcenter_name
+         , COALESCE(r.profitcenter_code, NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '')) AS profitcenter_code
+         , COALESCE(r.profitcenter_name, s.profitcenter_name) AS profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
@@ -612,6 +651,8 @@ overdue_fact AS (
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
          , '1' AS aging_seg_code, overdue_amount AS bcy_amt, overdue_amount AS qcy_amt
       FROM overdue_sample_src s
+      LEFT JOIN overdue_profitcenter_rule r
+        ON r.src_profitcenter_code = NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '')
      WHERE COALESCE(overdue_amount, 0) <> 0
 ),
 -- INV_SAMPLE：标准化为窄事实接口，直接取样机款金额。
@@ -625,6 +666,10 @@ sample_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
+         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
+         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
+         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
          , profitcenter_code, profitcenter_name
@@ -673,6 +718,10 @@ sms_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
+         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
+         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
+         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
          , NULL AS profitcenter_code, NULL AS profitcenter_name
@@ -688,48 +737,265 @@ sms_fact AS (
       FROM sms_sum s
      WHERE amount <> 0
 ),
--- POLICY：保持政策欠付返利的期间筛选、状态维度及非零过滤。
-policy_sum AS (
-    SELECT sales_group AS company_code
-         , customer_code AS cust_code
-         , customer_name AS cust_name
-         , profit_center AS profitcenter_code
-         , NULL AS profitcenter_name
-         , policystatename AS ledger_status
-         , SUM(COALESCE(arrears_amount, 0)) AS amount
-      FROM dwd.dwd_mrs_mc_report_reward_account_detail_new_hi
-     WHERE REPLACE(LEFT(period, 7), '-', '') = @dt_month
-     GROUP BY sales_group
-            , customer_code
-            , customer_name
-            , profit_center
-            , policystatename
+-- POLICY：读取目标月份有效的结算类客户规则；batch_id=2按公司+周转分析渠道匹配。
+policy_customer_scope AS (
+    SELECT company_code
+         , LTRIM(NULLIF(TRIM(cust_code), ''), '0') AS cust_code
+         , NULLIF(TRIM(tov_channel_code), '') AS tov_channel_code
+         , CAST(batch_id AS INT) AS batch_id
+      FROM dim.dim_rule_fi_mr_ar_cust_type
+     WHERE TRIM(cust_type) = '结算类客户'
+       AND CAST(batch_id AS INT) IN (1, 2)
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY company_code
+            , LTRIM(NULLIF(TRIM(cust_code), ''), '0')
+            , NULLIF(TRIM(tov_channel_code), '')
+            , CAST(batch_id AS INT)
 ),
--- POLICY：标准化为窄事实接口。
+-- POLICY：按S600客商映射补充对方公司、国家及三级公司分类，避免政策事实缺少组织维度。
+policy_customer_dim AS (
+    SELECT LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0') AS cust_sap_code
+         , d.cust_code AS cust_mdg_code
+         , d.cust_name
+         , d.cp_company_code
+         , d.country_code
+         , d.country_name
+         , d.com_1st_code AS channel_l1_code
+         , d.com_1st_name AS channel_l1_name
+         , d.com_2nd_code AS channel_l2_code
+         , d.com_2nd_name AS channel_l2_name
+         , d.com_3rd_code AS channel_l3_code
+         , d.com_3rd_name AS channel_l3_name
+         , d.cust_group_ccc_code AS cc_cust_group_code
+         , d.cust_group_ccc_name AS cc_cust_group_name
+      FROM dim.dim_fi_mr_customer_map_dd m
+      LEFT JOIN dim.dim_fi_mr_customer_dd d
+        ON NULLIF(LTRIM(NULLIF(TRIM(d.cust_code), ''), '0'), '') = NULLIF(LTRIM(NULLIF(TRIM(m.cust_mdg_code), ''), '0'), '')
+     WHERE TRIM(m.cust_sap_client) = '600'
+       AND TRIM(m.cust_supp_type) IN ('C', 'S')
+     GROUP BY LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0')
+            , d.cust_code
+            , d.cust_name
+            , d.cp_company_code
+            , d.country_code
+            , d.country_name
+            , d.com_1st_code
+            , d.com_1st_name
+            , d.com_2nd_code
+            , d.com_2nd_name
+            , d.com_3rd_code
+            , d.com_3rd_name
+            , d.cust_group_ccc_code
+            , d.cust_group_ccc_name
+),
+-- POLICY：读取目标月份有效的周转分析渠道规则，并按匹配键去重。
+policy_tov_rule_1 AS (
+    SELECT company_code
+         , LTRIM(NULLIF(TRIM(cust_code), ''), '0') AS cust_code
+         , MAX(tov_channel_code) AS tov_channel_code
+         , MAX(tov_channel_name) AS tov_channel_name
+      FROM dim.dim_rule_fi_mr_ar_tov_channel_mapping
+     WHERE CAST(batch_id AS INT) = 1
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY company_code
+            , LTRIM(NULLIF(TRIM(cust_code), ''), '0')
+),
+-- POLICY：周转分析渠道第二匹配方式按公司+三级公司分类去重。
+policy_tov_rule_2 AS (
+    SELECT company_code
+         , channel_l3_code
+         , MAX(tov_channel_code) AS tov_channel_code
+         , MAX(tov_channel_name) AS tov_channel_name
+      FROM dim.dim_rule_fi_mr_ar_tov_channel_mapping
+     WHERE CAST(batch_id AS INT) = 2
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY company_code
+            , channel_l3_code
+),
+-- POLICY：先按公司+客商、再按公司+三级分类匹配周转渠道；结果作为policy_tov_channel使用。
+policy_src_base AS (
+    SELECT p.sales_group AS company_code
+         , p.customer_code AS cust_code
+         , p.customer_name AS cust_name
+         , c.cp_company_code
+         , c.country_code
+         , c.country_name
+         , c.channel_l1_code
+         , c.channel_l1_name
+         , c.channel_l2_code
+         , c.channel_l2_name
+         , c.channel_l3_code
+         , c.channel_l3_name
+         , c.cc_cust_group_code
+         , c.cc_cust_group_name
+         , NULLIF(LTRIM(TRIM(p.profit_center), '0'), '') AS profitcenter_code
+         , NULL AS profitcenter_name
+         , p.policy_list
+         , p.policystatename AS ledger_status
+         , p.arrears_amount AS bcy_amt
+         , p.arrears_amount AS qcy_amt
+         , COALESCE(t1.tov_channel_code, t2.tov_channel_code) AS policy_tov_channel
+         , COALESCE(t1.tov_channel_name, t2.tov_channel_name) AS policy_tov_channel_name
+      FROM dwd.dwd_mrs_mc_report_reward_account_detail_new_hi p
+      LEFT JOIN policy_customer_dim c
+        ON c.cust_sap_code = LTRIM(NULLIF(TRIM(p.customer_code), ''), '0')
+      LEFT JOIN policy_tov_rule_1 t1
+        ON t1.company_code = p.sales_group
+       AND t1.cust_code = c.cust_mdg_code
+      LEFT JOIN policy_tov_rule_2 t2
+        ON t2.company_code = p.sales_group
+       AND t2.channel_l3_code = c.channel_l3_code
+     WHERE REPLACE(LEFT(p.period, 7), '-', '') = @dt_month
+),
+-- POLICY：非ARTA分支严格取不属于结算类客户范围的数据；空渠道按非ARTA口径处理。
+-- 使用两个NOT EXISTS拆开batch_id匹配条件，避免在政策过滤中使用OR。
+-- 两个分支显式保持同一字段顺序，避免新增字段导致UNION ALL列漂移。
+policy_src AS (
+    SELECT b.company_code
+         , b.cust_code
+         , b.cust_name
+         , b.cp_company_code
+         , b.country_code
+         , b.country_name
+         , b.channel_l1_code
+         , b.channel_l1_name
+         , b.channel_l2_code
+         , b.channel_l2_name
+         , b.channel_l3_code
+         , b.channel_l3_name
+         , b.cc_cust_group_code
+         , b.cc_cust_group_name
+         , b.profitcenter_code
+         , b.profitcenter_name
+         , b.policy_list
+         , b.ledger_status
+         , b.bcy_amt
+         , b.qcy_amt
+         , b.policy_tov_channel
+         , b.policy_tov_channel_name
+      FROM policy_src_base b
+     WHERE COALESCE(b.policy_tov_channel, '') NOT LIKE 'ARTA_A_07%'
+       AND b.ledger_status IN ('兑现过程中', '确认完毕')
+       AND NOT EXISTS (
+               SELECT 1
+                 FROM policy_customer_scope r
+                WHERE r.company_code = b.company_code
+                  AND r.batch_id = 1
+                  AND r.cust_code = LTRIM(NULLIF(TRIM(b.cust_code), ''), '0')
+           )
+       AND NOT EXISTS (
+               SELECT 1
+                 FROM policy_customer_scope r
+                WHERE r.company_code = b.company_code
+                  AND r.batch_id = 2
+                  AND r.tov_channel_code = NULLIF(TRIM(b.policy_tov_channel), '')
+           )
+    UNION ALL
+    -- POLICY：ARTA分支严格限定周转分析渠道，并仅取政策清单退差未冲红。
+    SELECT b.company_code
+         , b.cust_code
+         , b.cust_name
+         , b.cp_company_code
+         , b.country_code
+         , b.country_name
+         , b.channel_l1_code
+         , b.channel_l1_name
+         , b.channel_l2_code
+         , b.channel_l2_name
+         , b.channel_l3_code
+         , b.channel_l3_name
+         , b.cc_cust_group_code
+         , b.cc_cust_group_name
+         , b.profitcenter_code
+         , b.profitcenter_name
+         , b.policy_list
+         , b.ledger_status
+         , b.bcy_amt
+         , b.qcy_amt
+         , b.policy_tov_channel
+         , b.policy_tov_channel_name
+      FROM policy_src_base b
+     WHERE b.policy_tov_channel LIKE 'ARTA_A_07%'
+       AND b.policy_list = '退差未冲红'
+),
+-- POLICY：分别汇总本位币和交易币；政策源两者均实际对应arrears_amount。
+policy_sum AS (
+    SELECT s.company_code
+         , s.cust_code
+         , MAX(s.cust_name) AS cust_name
+         , MAX(s.cp_company_code) AS cp_company_code
+         , MAX(s.country_code) AS country_code
+         , MAX(s.country_name) AS country_name
+         , MAX(s.channel_l1_code) AS channel_l1_code
+         , MAX(s.channel_l1_name) AS channel_l1_name
+         , MAX(s.channel_l2_code) AS channel_l2_code
+         , MAX(s.channel_l2_name) AS channel_l2_name
+         , MAX(s.channel_l3_code) AS channel_l3_code
+         , MAX(s.channel_l3_name) AS channel_l3_name
+         , MAX(s.policy_tov_channel) AS tov_channel_code
+         , MAX(s.policy_tov_channel_name) AS tov_channel_name
+         , MAX(s.cc_cust_group_code) AS cc_cust_group_code
+         , MAX(s.cc_cust_group_name) AS cc_cust_group_name
+         , s.profitcenter_code AS profitcenter_code
+         , MAX(s.profitcenter_name) AS profitcenter_name
+         , s.ledger_status
+         , SUM(COALESCE(s.bcy_amt, 0)) AS bcy_amt
+         , SUM(COALESCE(s.qcy_amt, 0)) AS qcy_amt
+      FROM policy_src s
+     GROUP BY s.company_code
+            , s.cust_code
+            , s.profitcenter_code
+            , s.ledger_status
+),
+-- POLICY：标准化前读取目标月份有效的batch_id=2利润中心映射；匹配前及映射后编码均去前导0。
+policy_profitcenter_rule AS (
+    SELECT NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '') AS src_profitcenter_code
+         , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
+         , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
+      FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
+     WHERE CAST(pm.batch_id AS INT) = 2
+       AND NVL(pm.valid_fr, '202401') <= @dt_month
+       AND NVL(pm.valid_to, '999999') >= @dt_month
+     GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
+),
+-- POLICY：标准化为窄事实接口；原利润中心编码按DETAIL语义去前导0后保留，命中映射时输出新利润中心。
+-- 映射未命中时回退去前导0的原始利润中心编码和原始利润中心名称。
 policy_fact AS (
     SELECT @dt_month AS dt_month, LEFT(@dt_month, 4) AS `year`, RIGHT(@dt_month, 2) AS `month`
-         , company_code, cust_code, cust_name
+         , s.company_code, s.cust_code, s.cust_name
          , NULL AS cust_head_code, NULL AS cust_head_name
          , NULL AS cust_branch_code, NULL AS cust_branch_name
-         , NULL AS cp_company_code, NULL AS country_code, NULL AS country_name
+         , s.cp_company_code, s.country_code, s.country_name
          , NULL AS acct_type_code, NULL AS acct_src_code, NULL AS acct_map_code
-         , NULL AS channel_l1_code, NULL AS channel_l1_name
-         , NULL AS channel_l2_code, NULL AS channel_l2_name
-         , NULL AS channel_l3_code, NULL AS channel_l3_name
+         , s.channel_l1_code, s.channel_l1_name
+         , s.channel_l2_code, s.channel_l2_name
+         , s.channel_l3_code, s.channel_l3_name
+         , s.tov_channel_code
+         , s.tov_channel_name
+         , s.cc_cust_group_code
+         , s.cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
-         , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
-         , profitcenter_code, profitcenter_name
+         , s.profitcenter_code AS src_profitcenter_code
+         , s.profitcenter_name AS src_profitcenter_name
+         , COALESCE(r.profitcenter_code, s.profitcenter_code) AS profitcenter_code
+         , COALESCE(r.profitcenter_name, s.profitcenter_name) AS profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
-         , 'POLICY' AS system_src, 'POLICY' AS ods_src
-         , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, ledger_status, NULL AS acct_cert_type
+         , 'POLICY' AS system_src, 'UREB' AS ods_src
+         , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, s.ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
          , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
-         , '1' AS aging_seg_code, amount AS bcy_amt, amount AS qcy_amt
+         , '1' AS aging_seg_code, s.bcy_amt AS bcy_amt, s.qcy_amt AS qcy_amt
       FROM policy_sum s
-     WHERE amount <> 0
+      LEFT JOIN policy_profitcenter_rule r
+        ON r.src_profitcenter_code = NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '')
+     WHERE NOT (COALESCE(s.bcy_amt, 0) = 0
+            AND COALESCE(s.qcy_amt, 0) = 0)
 ),
 -- WRITEOFF：保留科目映射有效期、审核状态、SAP凭证号和科目范围过滤。
 acct_mapping AS (
@@ -806,6 +1072,10 @@ writeoff_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
+         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
+         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
+         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , profitcenter_code AS src_profitcenter_code, NULL AS src_profitcenter_name
          , profitcenter_code, NULL AS profitcenter_name
@@ -994,6 +1264,10 @@ report_pivot AS (
          , channel_l2_name
          , channel_l3_code
          , channel_l3_name
+         , tov_channel_code
+         , tov_channel_name
+         , cc_cust_group_code
+         , cc_cust_group_name
          , onoffline_code
          , onoffline_name
          , src_profitcenter_code
@@ -1084,6 +1358,10 @@ report_pivot AS (
             , channel_l2_name
             , channel_l3_code
             , channel_l3_name
+            , tov_channel_code
+            , tov_channel_name
+            , cc_cust_group_code
+            , cc_cust_group_name
             , onoffline_code
             , onoffline_name
             , src_profitcenter_code
@@ -1142,6 +1420,10 @@ SELECT p.dt_month
      , p.channel_l2_name
      , p.channel_l3_code
      , p.channel_l3_name
+     , p.tov_channel_code
+     , p.tov_channel_name
+     , p.cc_cust_group_code
+     , p.cc_cust_group_name
      , p.onoffline_code
      , p.onoffline_name
      , p.src_profitcenter_code
@@ -1237,6 +1519,10 @@ INSERT INTO test.dwd_fi_mr_arap_sum_mi
     , cust_name                -- 客商名称
     , acct_src_code            -- 原始科目编码
     , acct_map_code            -- 映射后科目编码
+    , tov_channel_code         -- 周转分析渠道编码
+    , tov_channel_name         -- 周转分析渠道名称
+    , cc_cust_group_code       -- 商冷客户群编码
+    , cc_cust_group_name       -- 商冷客户群名称
     , src_profitcenter_code    -- 原始利润中心编码
     , src_profitcenter_name    -- 原始利润中心名称
     , profitcenter_code        -- 映射后利润中心编码
@@ -1308,6 +1594,10 @@ epay_detail AS (
          , d.cust_name
          , d.acct_src_code
          , d.acct_map_code
+         , d.tov_channel_code
+         , d.tov_channel_name
+         , d.cc_cust_group_code
+         , d.cc_cust_group_name
          , d.src_profitcenter_code
          , d.src_profitcenter_name
          , d.profitcenter_code
@@ -1337,6 +1627,10 @@ epay_sum AS (
          , MAX(cust_name) AS cust_name
          , MAX(acct_src_code) AS acct_src_code
          , MAX(acct_map_code) AS acct_map_code
+         , MAX(tov_channel_code) AS tov_channel_code
+         , MAX(tov_channel_name) AS tov_channel_name
+         , MAX(cc_cust_group_code) AS cc_cust_group_code
+         , MAX(cc_cust_group_name) AS cc_cust_group_name
          , MAX(src_profitcenter_code) AS src_profitcenter_code
          , MAX(src_profitcenter_name) AS src_profitcenter_name
          , profitcenter_code
@@ -1361,6 +1655,10 @@ SELECT dt_month
      , cust_name
      , acct_src_code
      , acct_map_code
+     , tov_channel_code
+     , tov_channel_name
+     , cc_cust_group_code
+     , cc_cust_group_name
      , src_profitcenter_code
      , src_profitcenter_name
      , profitcenter_code

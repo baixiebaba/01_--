@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sum_mi (
     , channel_l2_name VARCHAR(200) COMMENT '二级公司分类名称'
     , channel_l3_code VARCHAR(30) COMMENT '三级公司分类编码'
     , channel_l3_name VARCHAR(200) COMMENT '三级公司分类名称'
+    , tov_channel_code VARCHAR(30) COMMENT '周转分析渠道'
+    , cc_cust_group_code VARCHAR(30) COMMENT '商冷客户群'
     , onoffline_code VARCHAR(30) COMMENT '渠道分组编码'
     , onoffline_name VARCHAR(200) COMMENT '渠道分组名称'
     , src_profitcenter_code VARCHAR(30) COMMENT '原始利润中心编码'

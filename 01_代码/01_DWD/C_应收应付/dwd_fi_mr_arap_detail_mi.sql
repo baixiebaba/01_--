@@ -205,65 +205,45 @@ src_skb1 AS (
     SELECT 'S810' AS system_src, bukrs, saknr, mitkz
       FROM ods.odss810_skb1
 ),
--- 汇总六套SAP客户主数据，提供客户名称和MDG编码。
-src_kna1 AS (
-    SELECT 'S600' AS system_src, kunnr, name1, zkunnr_mdg
-      FROM ods.odss600_kna1
-
-    UNION ALL
-
-    SELECT 'S700' AS system_src, kunnr, name1, zkunnr_mdg
-      FROM ods.odss700_kna1
-
-    UNION ALL
-
-    SELECT 'S800' AS system_src, kunnr, name1, zkunnr_mdg
-      FROM ods.odss800_kna1
-
-    UNION ALL
-
-    SELECT 'S900' AS system_src, kunnr, name1, zkunnr_mdg
-      FROM ods.odss900_kna1
-
-    UNION ALL
-
-    SELECT 'S610' AS system_src, kunnr, name1, zkunnr_mdg
-      FROM ods.odss610_kna1
-
-    UNION ALL
-
-    SELECT 'S810' AS system_src, kunnr, name1, zkunnr_mdg
-      FROM ods.odss810_kna1
+-- 汇总SAP客商编码映射，并以MDG客商维度补充统一属性。
+cust_sap_map_dim AS (
+    SELECT NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '') AS cust_sap_code
+         , CASE TRIM(m.cust_sap_client)
+               WHEN '600' THEN 'S600'
+               WHEN '700' THEN 'S700'
+               WHEN '800' THEN 'S800'
+               WHEN '900' THEN 'S900'
+               WHEN '610' THEN 'S610'
+               WHEN '810' THEN 'S810'
+               ELSE CONCAT('S', TRIM(m.cust_sap_client))
+           END AS cust_sap_client
+         , TRIM(m.cust_supp_type) AS cust_supp_type
+         , NULLIF(LTRIM(TRIM(m.cust_mdg_code), '0'), '') AS cust_mdg_code
+      FROM dim.dim_fi_mr_customer_map_dd m
+     WHERE TRIM(m.cust_supp_type) IN ('C', 'S')
 ),
--- 汇总六套SAP供应商主数据，提供供应商名称和MDG编码。
-src_lfa1 AS (
-    SELECT 'S600' AS system_src, lifnr, name1, zlifnr_mdg
-      FROM ods.odss600_lfa1
-
-    UNION ALL
-
-    SELECT 'S700' AS system_src, lifnr, name1, zlifnr_mdg
-      FROM ods.odss700_lfa1
-
-    UNION ALL
-
-    SELECT 'S800' AS system_src, lifnr, name1, zlifnr_mdg
-      FROM ods.odss800_lfa1
-
-    UNION ALL
-
-    SELECT 'S900' AS system_src, lifnr, name1, zlifnr_mdg
-      FROM ods.odss900_lfa1
-
-    UNION ALL
-
-    SELECT 'S610' AS system_src, lifnr, name1, zlifnr_mdg
-      FROM ods.odss610_lfa1
-
-    UNION ALL
-
-    SELECT 'S810' AS system_src, lifnr, name1, zlifnr_mdg
-      FROM ods.odss810_lfa1
+-- 统一匹配客户和供应商SAP编码，关联MDG客商属性并保护空串、全零编码。
+customer_supplier_dim AS (
+    SELECT m.cust_sap_code
+         , m.cust_sap_client
+         , m.cust_supp_type
+         , d.cust_code AS cust_mdg_code
+         , d.cust_name AS name1
+         , d.com_1st_code
+         , d.com_1st_name
+         , d.com_2nd_code
+         , d.com_2nd_name
+         , d.com_3rd_code
+         , d.com_3rd_name
+         , d.country_code
+         , d.country_name
+         , d.cp_company_mr_code
+         , d.cp_company_code
+         , d.cust_group_ccc_code
+         , d.cust_group_ccc_name
+      FROM cust_sap_map_dim m
+      LEFT JOIN dim.dim_fi_mr_customer_dd d
+        ON NULLIF(LTRIM(TRIM(d.cust_code), '0'), '') = m.cust_mdg_code
 ),
 -- 汇总六套SAP公司级客商主数据KVERM，按系统、公司、客商类型和主户编码聚合非空付款条件。
 cust_kverm_dim AS (
@@ -273,11 +253,11 @@ cust_kverm_dim AS (
          , k.cust_type_code
          , MAX(k.kverm) AS kverm
       FROM (
-            SELECT 'S600' AS system_src, bukrs AS company_code, LTRIM(kunnr, '0') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss600_knb1
+            SELECT 'S600' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(kunnr), '0'), '') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss600_knb1
 
             UNION ALL
 
-            SELECT 'S600' AS system_src, bukrs AS company_code, LTRIM(lifnr, '0') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss600_lfb1
+            SELECT 'S600' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(lifnr), '0'), '') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss600_lfb1
 
             UNION ALL
 
@@ -295,35 +275,35 @@ cust_kverm_dim AS (
 
             UNION ALL
 
-            SELECT 'S800' AS system_src, bukrs AS company_code, LTRIM(kunnr, '0') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss800_knb1
+            SELECT 'S800' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(kunnr), '0'), '') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss800_knb1
 
             UNION ALL
 
-            SELECT 'S800' AS system_src, bukrs AS company_code, LTRIM(lifnr, '0') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss800_lfb1
+            SELECT 'S800' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(lifnr), '0'), '') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss800_lfb1
 
             UNION ALL
 
-            SELECT 'S900' AS system_src, bukrs AS company_code, LTRIM(kunnr, '0') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss900_knb1
+            SELECT 'S900' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(kunnr), '0'), '') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss900_knb1
 
             UNION ALL
 
-            SELECT 'S900' AS system_src, bukrs AS company_code, LTRIM(lifnr, '0') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss900_lfb1
+            SELECT 'S900' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(lifnr), '0'), '') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss900_lfb1
 
             UNION ALL
 
-            SELECT 'S610' AS system_src, bukrs AS company_code, LTRIM(kunnr, '0') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss610_knb1
+            SELECT 'S610' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(kunnr), '0'), '') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss610_knb1
 
             UNION ALL
 
-            SELECT 'S610' AS system_src, bukrs AS company_code, LTRIM(lifnr, '0') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss610_lfb1
+            SELECT 'S610' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(lifnr), '0'), '') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss610_lfb1
 
             UNION ALL
 
-            SELECT 'S810' AS system_src, bukrs AS company_code, LTRIM(kunnr, '0') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss810_knb1
+            SELECT 'S810' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(kunnr), '0'), '') AS cust_code, 'C' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss810_knb1
 
             UNION ALL
 
-            SELECT 'S810' AS system_src, bukrs AS company_code, LTRIM(lifnr, '0') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss810_lfb1
+            SELECT 'S810' AS system_src, bukrs AS company_code, NULLIF(LTRIM(TRIM(lifnr), '0'), '') AS cust_code, 'V' AS cust_type_code, NULLIF(TRIM(kverm), '') AS kverm FROM ods.odss810_lfb1
       ) k
      WHERE k.kverm IS NOT NULL
      GROUP BY k.system_src
@@ -859,12 +839,12 @@ normalized_items AS (
                         )
            END AS netrcp_dt
          , STR_TO_DATE(NULLIF(TRIM(a.augdt), ''), '%Y%m%d') AS clearing_dt
-         , LTRIM(COALESCE(a.cust_head_code, ''), '0') AS cust_head_code
-         , LTRIM(COALESCE(a.filkd, ''), '0') AS cust_branch_code
+         , NULLIF(LTRIM(TRIM(a.cust_head_code), '0'), '') AS cust_head_code
+         , NULLIF(LTRIM(TRIM(a.filkd), '0'), '') AS cust_branch_code
          , a.acct_type_code
          , a.hkont AS acct_src_code
          , CASE WHEN a.system_src = 'S600' THEN a.hkont ELSE am.acct_map_code END AS acct_map_code
-         , COALESCE(a.prctr, '') AS src_profitcenter_code
+         , NULLIF(LTRIM(TRIM(a.prctr), '0'), '') AS src_profitcenter_code
          , COALESCE(a.gsber, '') AS bus_range_code
          , a.zlsch AS pay_method
          , NULLIF(TRIM(a.rstgr), '') AS pay_reason_code
@@ -912,101 +892,30 @@ aging_seg_cfg AS (
      WHERE NVL(r.valid_fr, '202401') <= @dt_month
        AND NVL(r.valid_to, '999999') >= @dt_month
 ),
--- 按系统和去前导零后的客户编码聚合客户名称及MDG编码。
-customer_dim AS (
-    SELECT system_src
-         , LTRIM(kunnr, '0') AS kunnr
-         , MAX(name1) AS name1
-         , MAX(LTRIM(zkunnr_mdg, '0')) AS zkunnr_mdg
-      FROM src_kna1
-     GROUP BY system_src
-            , LTRIM(kunnr, '0')
-),
--- 按系统和去前导零后的供应商编码聚合供应商名称及MDG编码。
-vendor_dim AS (
-    SELECT system_src
-         , LTRIM(lifnr, '0') AS lifnr
-         , MAX(name1) AS name1
-         , MAX(LTRIM(zlifnr_mdg, '0')) AS zlifnr_mdg
-      FROM src_lfa1
-     GROUP BY system_src
-            , LTRIM(lifnr, '0')
-),
--- 聚合客户分类和国家维度，供MDG客商编码关联。
-customer_class_dim AS (
-    SELECT LTRIM(cust_code, '0') AS cust_code
-         , MAX(com_1st_code) AS com_1st_code
-         , MAX(com_1st_name) AS com_1st_name
-         , MAX(com_2nd_code) AS com_2nd_code
-         , MAX(com_2nd_name) AS com_2nd_name
-         , MAX(com_3rd_code) AS com_3rd_code
-         , MAX(com_3rd_name) AS com_3rd_name
-         , MAX(country_code) AS country_code
-         , MAX(country_name) AS country_name
-      FROM dw.dim_customer_base_info_dd
-     GROUP BY LTRIM(cust_code, '0')
-),
--- 筛选有效的客商对方公司映射，并按客商、类型和系统聚合。
-cp_company_dim AS (
-    SELECT LTRIM(a.cust_code, '0') AS cust_code
-         , a.cust_type_code
-         , a.system_src
-         , MAX(
-               COALESCE(
-                   NULLIF(TRIM(a.cp_company_code_mr), '')
-                 , TRIM(a.cp_company_code)
-               )
-           ) AS cp_company_code
-      FROM dim.dim_rule_fi_mr_cust2ctp_mapping a
-     WHERE a.cust_type_code IN ('C', 'V')
-       AND NVL(a.valid_fr, '202401') <= @dt_month
-       AND NVL(a.valid_to, '999999') >= @dt_month
-     GROUP BY LTRIM(a.cust_code, '0')
-            , a.cust_type_code
-            , a.system_src
-),
--- 读取目标月份有效的电商零售类客户范围。
-ecom_retail_cust AS (
-    SELECT LTRIM(r.cust_code, '0') AS cust_code
-      FROM dim.dim_rule_fi_mr_ar_cust_type r
-     WHERE TRIM(r.cust_type) = '电商零售类客户'
-       AND NVL(r.valid_fr, '202401') <= @dt_month
-       AND NVL(r.valid_to, '999999') >= @dt_month
-     GROUP BY LTRIM(r.cust_code, '0')
-),
--- 读取目标月份有效的新旧利润中心映射；同一原始利润中心重复配置使用MAX聚合。
-ar_profit_mapping AS (
-    SELECT r.src_profitcenter_code
-         , MAX(r.profitcenter_code) AS profitcenter_code
-         , MAX(r.profitcenter_name) AS profitcenter_name
-      FROM dim.dim_rule_fi_mr_ar_profit_mapping r
-     WHERE TRIM(r.logic_name) = '新旧利润中心映射'
-       AND NVL(r.valid_fr, '202401') <= @dt_month
-       AND NVL(r.valid_to, '999999') >= @dt_month
-     GROUP BY r.src_profitcenter_code
-),
--- 读取应收模块渠道分组规则；同一匹配键的重复配置使用MAX聚合，避免窗口排序开销。
+-- 读取应收模块渠道分组规则，并展开公司包含关系；同一匹配键的重复配置使用MAX聚合。
 ar_nf_rule AS (
-    SELECT CAST(r.batch_id AS INT) AS batch_id
-         , r.company_code
-         , r.channel_l1_code
-         , r.channel_l3_code
-         , MAX(r.onoffline_code) AS onoffline_code
-         , MAX(r.onoffline_name) AS onoffline_name
-      FROM dim.dim_rule_fi_mr_ar_nf_mapping r
-     WHERE NVL(r.valid_fr, '202401') <= @dt_month
-       AND NVL(r.valid_to, '999999') >= @dt_month
-     GROUP BY CAST(r.batch_id AS INT)
-            , r.company_code
-            , r.channel_l1_code
-            , r.channel_l3_code
+    SELECT CAST(a.batch_id AS INT) AS batch_id
+         , b.cod_azienda AS company_code
+         , a.channel_l1_code
+         , a.channel_l3_code
+         , MAX(a.onoffline_code) AS onoffline_code
+         , MAX(a.onoffline_name) AS onoffline_name
+      FROM dim.dim_rule_fi_mr_ar_nf_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE a.company_code
+     WHERE NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+     GROUP BY CAST(a.batch_id AS INT)
+            , b.cod_azienda
+            , a.channel_l1_code
+            , a.channel_l3_code
 ),
 -- 读取收入模块线上线下规则，并展开公司包含关系；同一匹配键的重复配置使用MAX聚合。
 rev_nf_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , b.cod_azienda AS company_code
          , c.cod_azienda AS cp_company_code
-         , LTRIM(NULLIF(TRIM(a.cust_code), ''), '0') AS cust_code
+         , NULLIF(LTRIM(TRIM(a.cust_code), '0'), '') AS cust_code
          , MAX(a.onoffline_code) AS onoffline_code
          , MAX(a.onoffline_name) AS onoffline_name
       FROM dim.dim_rule_fi_mr_nf_mapping a
@@ -1020,7 +929,7 @@ rev_nf_rule AS (
      GROUP BY CAST(a.batch_id AS INT)
             , b.cod_azienda
             , c.cod_azienda
-            , LTRIM(NULLIF(TRIM(a.cust_code), ''), '0')
+            , NULLIF(LTRIM(TRIM(a.cust_code), '0'), '')
 ),
 -- 构造客商和供应商行的渠道匹配上下文；两类客商使用相同规则及默认渠道处理。
 nf_match_base AS (
@@ -1041,30 +950,97 @@ nf_match_base AS (
                    THEN a.cust_branch_code
                ELSE a.cust_head_code
            END AS cust_code
-         , ctp.cp_company_code
+         , COALESCE(c.cp_company_mr_code, c.cp_company_code) AS cp_company_code
          , ch.com_1st_code AS channel_l1_code
          , ch.com_3rd_code AS channel_l3_code
       FROM normalized_items a
-      LEFT JOIN customer_dim c
-        ON a.object_source = 'CUSTOMER'
-       AND c.system_src = a.system_src
-       AND c.kunnr = a.cust_head_code
-      LEFT JOIN vendor_dim v
-        ON a.object_source = 'VENDOR'
-       AND v.system_src = a.system_src
-       AND v.lifnr = a.cust_head_code
-      LEFT JOIN customer_class_dim ch
-        ON ch.cust_code = CASE
-                               WHEN a.object_source = 'CUSTOMER' THEN c.zkunnr_mdg
-                               ELSE v.zlifnr_mdg
-                           END
-      LEFT JOIN cp_company_dim ctp
-        ON ctp.cust_code = a.cust_head_code
-       AND ctp.system_src = a.system_src
-       AND ctp.cust_type_code = CASE
-                                    WHEN a.object_source = 'CUSTOMER' THEN 'C'
-                                    ELSE 'V'
-                                END
+      LEFT JOIN customer_supplier_dim c
+        ON c.cust_sap_code = a.cust_head_code
+       AND c.cust_sap_client = a.system_src
+       AND c.cust_supp_type = CASE
+                                  WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                  ELSE 'S'
+                              END
+      LEFT JOIN customer_supplier_dim ch
+        ON ch.cust_sap_code = CASE
+                                  WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
+                                      THEN a.cust_branch_code
+                                  ELSE a.cust_head_code
+                              END
+       AND ch.cust_sap_client = a.system_src
+       AND ch.cust_supp_type = CASE
+                                  WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                  ELSE 'S'
+                              END
+),
+-- 读取目标月份有效的周转分析渠道规则；客户编码去前导零并按匹配键聚合，避免重复配置放大事实行。
+tov_channel_rule AS (
+    SELECT CAST(a.batch_id AS INT) AS batch_id
+         , b.cod_azienda AS company_code
+         , CASE
+               WHEN CAST(a.batch_id AS INT) = 1
+                   THEN NULLIF(LTRIM(TRIM(a.cust_code), '0'), '')
+           END AS cust_code
+         , CASE
+               WHEN CAST(a.batch_id AS INT) = 2
+                   THEN a.channel_l3_code
+           END AS channel_l3_code
+         , MAX(a.tov_channel_code) AS tov_channel_code
+         , MAX(a.tov_channel_name) AS tov_channel_name
+      FROM dim.dim_rule_fi_mr_ar_tov_channel_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE a.company_code
+     WHERE NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+       AND CAST(a.batch_id AS INT) IN (1, 2)
+     GROUP BY CAST(a.batch_id AS INT)
+            , b.cod_azienda
+            , CASE
+                  WHEN CAST(a.batch_id AS INT) = 1
+                      THEN NULLIF(LTRIM(TRIM(a.cust_code), '0'), '')
+              END
+            , CASE
+                  WHEN CAST(a.batch_id AS INT) = 2
+                      THEN a.channel_l3_code
+              END
+),
+-- 周转分析渠道按事实键生成候选；batch_id=1按公司+客商，batch_id=2按公司+三级分类。
+tov_channel_candidate AS (
+    SELECT b.fact_key
+         , r.batch_id
+         , r.tov_channel_code
+         , r.tov_channel_name
+      FROM nf_match_base b
+     INNER JOIN tov_channel_rule r
+        ON r.batch_id = 1
+       AND r.company_code = b.company_code
+       AND r.cust_code = b.cust_code
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.tov_channel_code
+         , r.tov_channel_name
+      FROM nf_match_base b
+     INNER JOIN tov_channel_rule r
+        ON r.batch_id = 2
+       AND r.company_code = b.company_code
+       AND r.channel_l3_code = b.channel_l3_code
+),
+-- 周转分析渠道按最小batch_id取优先级；batch_id=1命中时阻止batch_id=2回退。
+tov_channel_pick AS (
+    SELECT c.fact_key
+         , MAX(c.tov_channel_code) AS tov_channel_code
+         , MAX(c.tov_channel_name) AS tov_channel_name
+      FROM tov_channel_candidate c
+     INNER JOIN (
+            SELECT fact_key
+                 , MIN(batch_id) AS batch_id
+              FROM tov_channel_candidate
+             GROUP BY fact_key
+     ) p
+        ON p.fact_key = c.fact_key
+       AND p.batch_id = c.batch_id
+     GROUP BY c.fact_key
 ),
 -- 应收模块渠道规则按1（公司+三级）→2（公司+二级）→3（公司）顺序匹配。
 ar_nf_candidate AS (
@@ -1173,6 +1149,208 @@ nf_final AS (
            END AS onoffline_name
       FROM rev_nf_pick
 ),
+-- 读取目标月份有效的利润中心映射规则，并展开公司编码通配配置。
+ar_profitcenter_rule AS (
+    SELECT CAST(a.batch_id AS INT) AS batch_id
+         , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
+         , NULLIF(LTRIM(TRIM(a.src_profitcenter_code), '0'), '') AS src_profitcenter_code
+         , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '') AS acct_src_code
+         , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '') AS onoffline_code
+         , MAX(a.profitcenter_code) AS profitcenter_code
+         , MAX(a.profitcenter_name) AS profitcenter_name
+      FROM dim.dim_rule_fi_mr_ar_profit_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(a.company_code)
+     WHERE NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+       AND CAST(a.batch_id AS INT) IN (1, 3, 4, 5)
+     GROUP BY CAST(a.batch_id AS INT)
+            , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '')
+            , NULLIF(LTRIM(TRIM(a.src_profitcenter_code), '0'), '')
+            , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
+            , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '')
+),
+-- 按周转渠道、公司、旧利润中心、科目和渠道分组生成利润中心候选。
+profitcenter_candidate AS (
+    SELECT b.fact_key
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM (
+            SELECT MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   ) AS fact_key
+                 , a.system_src
+                 , a.ods_src
+                 , a.company_code
+                 , a.gjahr
+                 , a.acct_cert_id
+                 , a.acct_cert_item
+                 , a.src_profitcenter_code
+                 , a.acct_src_code
+                 , tc.tov_channel_code
+                 , CASE
+                       WHEN nf.fact_key IS NOT NULL THEN nf.onoffline_code
+                       ELSE '020_OFF_002'
+                   END AS onoffline_code
+              FROM normalized_items a
+              LEFT JOIN tov_channel_pick tc
+                ON tc.fact_key = MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   )
+              LEFT JOIN nf_final nf
+                ON nf.fact_key = MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   )
+      ) b
+     INNER JOIN ar_profitcenter_rule r
+        ON r.batch_id = 1
+       AND b.tov_channel_code LIKE 'ARTA_A_07%'
+       AND r.src_profitcenter_code = b.src_profitcenter_code
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM (
+            SELECT MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   ) AS fact_key
+                 , a.system_src
+                 , a.ods_src
+                 , a.company_code
+                 , a.gjahr
+                 , a.acct_cert_id
+                 , a.acct_cert_item
+                 , a.acct_src_code
+              FROM normalized_items a
+      ) b
+     INNER JOIN ar_profitcenter_rule r
+        ON r.batch_id = 3
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+       AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM (
+            SELECT MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   ) AS fact_key
+                 , a.system_src
+                 , a.ods_src
+                 , a.company_code
+                 , a.gjahr
+                 , a.acct_cert_id
+                 , a.acct_cert_item
+                 , CASE
+                       WHEN nf.fact_key IS NOT NULL THEN nf.onoffline_code
+                       ELSE '020_OFF_002'
+                   END AS onoffline_code
+              FROM normalized_items a
+              LEFT JOIN nf_final nf
+                ON nf.fact_key = MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   )
+      ) b
+     INNER JOIN ar_profitcenter_rule r
+        ON r.batch_id = 4
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+       AND r.onoffline_code = NULLIF(LTRIM(TRIM(b.onoffline_code), '0'), '')
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM (
+            SELECT MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   ) AS fact_key
+                 , a.system_src
+                 , a.ods_src
+                 , a.company_code
+                 , a.gjahr
+                 , a.acct_cert_id
+                 , a.acct_cert_item
+              FROM normalized_items a
+      ) b
+     INNER JOIN ar_profitcenter_rule r
+        ON r.batch_id = 5
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+),
+-- 按1→3→4→5业务优先级选取唯一利润中心，避免规则重复放大事实行。
+profitcenter_pick AS (
+    SELECT c.fact_key
+         , MAX(c.profitcenter_code) AS profitcenter_code
+         , MAX(c.profitcenter_name) AS profitcenter_name
+      FROM profitcenter_candidate c
+     INNER JOIN (
+            SELECT fact_key
+                 , MIN(batch_id) AS batch_id
+              FROM profitcenter_candidate
+             GROUP BY fact_key
+     ) p
+        ON p.fact_key = c.fact_key
+       AND p.batch_id = c.batch_id
+     GROUP BY c.fact_key
+),
 -- 公司10架构：01020为商显公司，050为日立公司。
 company10_scope AS (
     SELECT TRIM(elem) AS company_code
@@ -1210,24 +1388,24 @@ ar_mapping_base AS (
          , ch.com_1st_code AS channel_l1_code
          , ch.com_2nd_code AS channel_l2_code
          , ch.country_code
-         , pm.profitcenter_code
+         , pc.profitcenter_code
          , cs.company_scope
          , k.kverm
       FROM normalized_items a
-      LEFT JOIN customer_dim c
-        ON a.object_source = 'CUSTOMER'
-       AND c.system_src = a.system_src
-       AND c.kunnr = a.cust_head_code
-      LEFT JOIN vendor_dim v
-        ON a.object_source = 'VENDOR'
-       AND v.system_src = a.system_src
-       AND v.lifnr = a.cust_head_code
-      LEFT JOIN customer_class_dim ch
-        ON ch.cust_code = CASE
-                               WHEN a.object_source = 'CUSTOMER'
-                                   THEN c.zkunnr_mdg
-                               ELSE v.zlifnr_mdg
-                           END
+      LEFT JOIN customer_supplier_dim c
+        ON c.cust_sap_code = a.cust_head_code
+       AND c.cust_sap_client = a.system_src
+       AND c.cust_supp_type = CASE
+                                  WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                  ELSE 'S'
+                              END
+      LEFT JOIN customer_supplier_dim ch
+        ON ch.cust_sap_code = a.cust_head_code
+       AND ch.cust_sap_client = a.system_src
+       AND ch.cust_supp_type = CASE
+                                  WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                  ELSE 'S'
+                              END
       LEFT JOIN cust_kverm_dim k
         ON k.system_src = a.system_src
        AND k.company_code = a.company_code
@@ -1236,16 +1414,18 @@ ar_mapping_base AS (
                                   ELSE 'V'
                               END
        AND k.cust_code = a.cust_head_code
-      LEFT JOIN ecom_retail_cust er
-        ON a.object_source = 'CUSTOMER'
-       AND er.cust_code = CASE
-                              WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
-                                  THEN a.cust_branch_code
-                              ELSE a.cust_head_code
-                          END
-      LEFT JOIN ar_profit_mapping pm
-        ON er.cust_code IS NOT NULL
-       AND pm.src_profitcenter_code = a.src_profitcenter_code
+      LEFT JOIN profitcenter_pick pc
+        ON pc.fact_key = MD5(
+               CONCAT_WS(
+                   '|'
+                 , COALESCE(a.system_src, '')
+                 , COALESCE(a.ods_src, '')
+                 , COALESCE(a.company_code, '')
+                 , COALESCE(a.gjahr, '')
+                 , COALESCE(a.acct_cert_id, '')
+                 , COALESCE(a.acct_cert_item, '')
+               )
+           )
       LEFT JOIN company10_scope cs
         ON cs.company_code = a.company_code
 ),
@@ -1532,13 +1712,13 @@ company_dim AS (
 -- 仅保留语言为1的利润中心文本，并按系统/利润中心聚合。
 profitcenter_dim AS (
     SELECT system_src
-         , prctr
+         , NULLIF(LTRIM(TRIM(prctr), '0'), '') AS prctr
          , MAX(ktext) AS ktext
       FROM src_cepct
      -- 仅使用语言代码1的利润中心文本。
      WHERE spras = '1'
      GROUP BY system_src
-            , prctr
+            , NULLIF(LTRIM(TRIM(prctr), '0'), '')
 )
 SELECT @dt_month
      , LEFT(@dt_month, 4) AS `year`
@@ -1562,24 +1742,24 @@ SELECT @dt_month
            WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL AND a.object_source = 'CUSTOMER'
                THEN COALESCE(bc.name1, '')
            WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL AND a.object_source = 'VENDOR'
-               THEN COALESCE(bv.name1, '')
+               THEN COALESCE(bc.name1, '')
            WHEN a.object_source = 'CUSTOMER'
                THEN COALESCE(c.name1, '')
-           ELSE COALESCE(v.name1, '')
+           ELSE COALESCE(c.name1, '')
        END AS cust_name
      , a.cust_head_code
      , CASE
            WHEN a.object_source = 'CUSTOMER'
                THEN COALESCE(c.name1, '')
-           ELSE COALESCE(v.name1, '')
+           ELSE COALESCE(c.name1, '')
        END AS cust_head_name
      , a.cust_branch_code
      , CASE
            WHEN a.object_source = 'CUSTOMER'
                THEN COALESCE(bc.name1, '')
-           ELSE COALESCE(bv.name1, '')
+           ELSE COALESCE(bc.name1, '')
        END AS cust_branch_name
-     , ctp.cp_company_code
+     , COALESCE(c.cp_company_mr_code, c.cp_company_code) AS cp_company_code
      , ci.country_code
      , ci.country_name
      , a.acct_type_code
@@ -1591,10 +1771,10 @@ SELECT @dt_month
      , ch.com_2nd_name AS channel_l2_name
      , ch.com_3rd_code AS channel_l3_code
      , ch.com_3rd_name AS channel_l3_name
-     , NULL AS tov_channel_code
-     , NULL AS tov_channel_name
-     , NULL AS cc_cust_group_code
-     , NULL AS cc_cust_group_name
+     , tc.tov_channel_code
+     , tc.tov_channel_name
+     , ch.cust_group_ccc_code AS cc_cust_group_code
+     , ch.cust_group_ccc_name AS cc_cust_group_name
      -- 客商和供应商均按应收规则、收入规则、传统零售默认值依次取值。
      , CASE
            WHEN nf.fact_key IS NOT NULL THEN nf.onoffline_code
@@ -1606,8 +1786,8 @@ SELECT @dt_month
        END AS onoffline_name
      , a.src_profitcenter_code
      , COALESCE(pc.ktext, '') AS src_profitcenter_name
-     , pm.profitcenter_code
-     , pm.profitcenter_name
+     , COALESCE(NULLIF(TRIM(pc_map.profitcenter_code), ''), a.src_profitcenter_code) AS profitcenter_code
+     , COALESCE(NULLIF(TRIM(pc_map.profitcenter_name), ''), COALESCE(pc.ktext, '')) AS profitcenter_name
      , bm.bus_range_code
      , bm.bus_range_name
      , bm.marketing_dept_code
@@ -1655,47 +1835,69 @@ SELECT @dt_month
              , COALESCE(a.acct_cert_item, '')
            )
        )
+  LEFT JOIN tov_channel_pick tc
+    ON tc.fact_key = MD5(
+           CONCAT_WS(
+               '|'
+             , COALESCE(a.system_src, '')
+             , COALESCE(a.ods_src, '')
+             , COALESCE(a.company_code, '')
+             , COALESCE(a.gjahr, '')
+             , COALESCE(a.acct_cert_id, '')
+             , COALESCE(a.acct_cert_item, '')
+           )
+       )
+  LEFT JOIN profitcenter_pick pc_map
+    ON pc_map.fact_key = MD5(
+           CONCAT_WS(
+               '|'
+             , COALESCE(a.system_src, '')
+             , COALESCE(a.ods_src, '')
+             , COALESCE(a.company_code, '')
+             , COALESCE(a.gjahr, '')
+             , COALESCE(a.acct_cert_id, '')
+             , COALESCE(a.acct_cert_item, '')
+           )
+       )
   LEFT JOIN aging_seg_cfg seg
     ON a.aging_days >= seg.aging_seg_fr
    AND a.aging_days <= seg.aging_seg_to
-  LEFT JOIN customer_dim c
-    ON a.object_source = 'CUSTOMER'
-   AND c.system_src = a.system_src
-   AND c.kunnr = a.cust_head_code
-  LEFT JOIN vendor_dim v
-    ON a.object_source = 'VENDOR'
-   AND v.system_src = a.system_src
-   AND v.lifnr = a.cust_head_code
-  LEFT JOIN customer_dim bc
-    ON a.object_source = 'CUSTOMER'
-   AND bc.system_src = a.system_src
-   AND bc.kunnr = a.cust_branch_code
-  LEFT JOIN vendor_dim bv
-    ON a.object_source = 'VENDOR'
-   AND bv.system_src = a.system_src
-   AND bv.lifnr = a.cust_branch_code
-  LEFT JOIN customer_class_dim ch
-    ON ch.cust_code = CASE
-                           WHEN a.object_source = 'CUSTOMER' THEN c.zkunnr_mdg
-                           ELSE v.zlifnr_mdg
-                       END
-  LEFT JOIN customer_class_dim ci
-    ON ci.cust_code = CASE WHEN a.object_source = 'CUSTOMER' THEN c.zkunnr_mdg ELSE v.zlifnr_mdg END
-  LEFT JOIN cp_company_dim ctp
-    ON ctp.cust_code = a.cust_head_code
-   AND ctp.system_src = a.system_src
-   AND ctp.cust_type_code = CASE WHEN a.object_source = 'CUSTOMER' THEN 'C' ELSE 'V' END
-  -- 仅电商零售类客户进入新旧利润中心映射。
-  LEFT JOIN ecom_retail_cust er
-    ON a.object_source = 'CUSTOMER'
-   AND er.cust_code = CASE
-                          WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
-                              THEN a.cust_branch_code
-                          ELSE a.cust_head_code
-                      END
-  LEFT JOIN ar_profit_mapping pm
-    ON er.cust_code IS NOT NULL
-   AND pm.src_profitcenter_code = a.src_profitcenter_code
+      LEFT JOIN customer_supplier_dim c
+        ON c.cust_sap_code = a.cust_head_code
+       AND c.cust_sap_client = a.system_src
+       AND c.cust_supp_type = CASE
+                                  WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                  ELSE 'S'
+                              END
+      LEFT JOIN customer_supplier_dim bc
+        ON bc.cust_sap_code = a.cust_branch_code
+       AND bc.cust_sap_client = a.system_src
+       AND bc.cust_supp_type = CASE
+                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                   ELSE 'S'
+                               END
+      LEFT JOIN customer_supplier_dim ch
+        ON ch.cust_sap_code = CASE
+                                  WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
+                                      THEN a.cust_branch_code
+                                  ELSE a.cust_head_code
+                              END
+       AND ch.cust_sap_client = a.system_src
+       AND ch.cust_supp_type = CASE
+                                  WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                  ELSE 'S'
+                              END
+      LEFT JOIN customer_supplier_dim ci
+        ON ci.cust_sap_code = CASE
+                                  WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
+                                      THEN a.cust_branch_code
+                                  ELSE a.cust_head_code
+                              END
+       AND ci.cust_sap_client = a.system_src
+       AND ci.cust_supp_type = CASE
+                                  WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                  ELSE 'S'
+                              END
   LEFT JOIN company_dim co
     ON co.system_src = a.system_src
    AND co.bukrs = a.company_code
@@ -2035,7 +2237,7 @@ balance_agg AS (
          , company_code
          , acct_type_code
          , acct_src_code
-         , src_profitcenter_code
+         , NULLIF(LTRIM(TRIM(src_profitcenter_code), '0'), '') AS src_profitcenter_code
          , bus_range_code
          , qcy_code
          , ods_src
@@ -2046,7 +2248,7 @@ balance_agg AS (
             , company_code
             , acct_type_code
             , acct_src_code
-            , src_profitcenter_code
+            , NULLIF(LTRIM(TRIM(src_profitcenter_code), '0'), '')
             , bus_range_code
             , qcy_code
             , ods_src
@@ -2086,13 +2288,109 @@ company_dim AS (
 -- 仅保留语言为1的利润中心文本，并按系统/利润中心聚合。
 profitcenter_dim AS (
     SELECT system_src
-         , prctr
+         , NULLIF(LTRIM(TRIM(prctr), '0'), '') AS prctr
          , MAX(ktext) AS ktext
       FROM src_cepct
      -- 仅使用语言代码1的利润中心文本。
      WHERE spras = '1'
      GROUP BY system_src
-            , prctr
+            , NULLIF(LTRIM(TRIM(prctr), '0'), '')
+),
+-- 读取第二段可用的利润中心规则；非统驭余额仅支持batch 3和batch 5。
+ar_profitcenter_balance_rule AS (
+    SELECT CAST(a.batch_id AS INT) AS batch_id
+         , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
+         , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '') AS acct_src_code
+         , MAX(a.profitcenter_code) AS profitcenter_code
+         , MAX(a.profitcenter_name) AS profitcenter_name
+      FROM dim.dim_rule_fi_mr_ar_profit_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(a.company_code)
+     WHERE NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+       AND CAST(a.batch_id AS INT) IN (3, 5)
+     GROUP BY CAST(a.batch_id AS INT)
+            , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '')
+            , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
+),
+-- 按公司+科目匹配batch 3，未命中时按公司匹配batch 5。
+profitcenter_balance_candidate AS (
+    SELECT b.system_src
+         , b.company_code
+         , b.acct_src_code
+         , b.src_profitcenter_code
+         , b.bus_range_code
+         , b.qcy_code
+         , b.ods_src
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM balance_agg b
+     INNER JOIN ar_profitcenter_balance_rule r
+        ON r.batch_id = 3
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+       AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
+    UNION ALL
+    SELECT b.system_src
+         , b.company_code
+         , b.acct_src_code
+         , b.src_profitcenter_code
+         , b.bus_range_code
+         , b.qcy_code
+         , b.ods_src
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM balance_agg b
+     INNER JOIN ar_profitcenter_balance_rule r
+        ON r.batch_id = 5
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+),
+-- 按余额粒度唯一选取利润中心，batch 3优先于batch 5且不复制余额事实。
+profitcenter_balance_pick AS (
+    SELECT c.system_src
+         , c.company_code
+         , c.acct_src_code
+         , c.src_profitcenter_code
+         , c.bus_range_code
+         , c.qcy_code
+         , c.ods_src
+         , MAX(c.profitcenter_code) AS profitcenter_code
+         , MAX(c.profitcenter_name) AS profitcenter_name
+      FROM profitcenter_balance_candidate c
+     INNER JOIN (
+            SELECT system_src
+                 , company_code
+                 , acct_src_code
+                 , src_profitcenter_code
+                 , bus_range_code
+                 , qcy_code
+                 , ods_src
+                 , MIN(batch_id) AS batch_id
+              FROM profitcenter_balance_candidate
+             GROUP BY system_src
+                    , company_code
+                    , acct_src_code
+                    , src_profitcenter_code
+                    , bus_range_code
+                    , qcy_code
+                    , ods_src
+     ) p
+        ON COALESCE(p.system_src, '') = COALESCE(c.system_src, '')
+       AND COALESCE(p.company_code, '') = COALESCE(c.company_code, '')
+       AND COALESCE(p.acct_src_code, '') = COALESCE(c.acct_src_code, '')
+       AND COALESCE(p.src_profitcenter_code, '') = COALESCE(c.src_profitcenter_code, '')
+       AND COALESCE(p.bus_range_code, '') = COALESCE(c.bus_range_code, '')
+       AND COALESCE(p.qcy_code, '') = COALESCE(c.qcy_code, '')
+       AND COALESCE(p.ods_src, '') = COALESCE(c.ods_src, '')
+       AND p.batch_id = c.batch_id
+     GROUP BY c.system_src
+            , c.company_code
+            , c.acct_src_code
+            , c.src_profitcenter_code
+            , c.bus_range_code
+            , c.qcy_code
+            , c.ods_src
 )
 SELECT @dt_month
      , LEFT(@dt_month, 4) AS `year`
@@ -2133,8 +2431,8 @@ SELECT @dt_month
      , NULL AS onoffline_name
      , b.src_profitcenter_code
      , COALESCE(pc.ktext, '') AS src_profitcenter_name
-     , NULL AS profitcenter_code
-     , NULL AS profitcenter_name
+     , COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code) AS profitcenter_code
+     , COALESCE(NULLIF(TRIM(bp.profitcenter_name), ''), COALESCE(pc.ktext, '')) AS profitcenter_name
      , br.bus_range_code
      , br.bus_range_name
      , NULL AS marketing_dept_code
@@ -2158,6 +2456,14 @@ SELECT @dt_month
      , b.ods_src
      , NOW() AS load_dt
   FROM balance_agg b
+  LEFT JOIN profitcenter_balance_pick bp
+    ON COALESCE(bp.system_src, '') = COALESCE(b.system_src, '')
+   AND COALESCE(bp.company_code, '') = COALESCE(b.company_code, '')
+   AND COALESCE(bp.acct_src_code, '') = COALESCE(b.acct_src_code, '')
+   AND COALESCE(bp.src_profitcenter_code, '') = COALESCE(b.src_profitcenter_code, '')
+   AND COALESCE(bp.bus_range_code, '') = COALESCE(b.bus_range_code, '')
+   AND COALESCE(bp.qcy_code, '') = COALESCE(b.qcy_code, '')
+   AND COALESCE(bp.ods_src, '') = COALESCE(b.ods_src, '')
   LEFT JOIN (
         SELECT TRIM(elem) AS company_code
              , MAX(CASE WHEN TRIM(node) = '01020' THEN '商显公司' ELSE '日立公司' END) AS company_scope

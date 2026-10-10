@@ -5,7 +5,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   , SESSION_USER IN VARCHAR2
 ) AS
   /**************************************************************************
-  最后更新时间：20260924
+  最后更新时间：20261014
   上一版本信息：
   名称：CPM_SP_M2M_ARP_AG_M_PHASE2
   用途：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -21,6 +21,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
     6. 汇率及法人重分类除税由第一个包完成，本过程直接读取ARPM01已处理的BCY/QCY账龄分段。
 
   版本信息：最新修改记录放最上面
+    20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
     20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
     20260923 SHIQINGFENG.EX 汇率评估标识为空时，交易币金额先换算人民币再换算成本位币
     20260923 SHIQINGFENG.EX 重构ARPM02装载逻辑，保留INPUT_DEFORM并按OID MERGE更新
@@ -177,7 +178,11 @@ BEGIN
   CURRENT_SOURCE_BASE AS (
     SELECT A.OID
          , A.COD_AZIENDA
-         , A.COD_CONTO AS COD_CONTO
+         , CASE WHEN A.SRC_DETAIL LIKE 'EPAY%'
+                       AND NVL(TRIM(A.COD_CONTO), '|') = '|'
+                     THEN '1122000000'
+                ELSE A.COD_CONTO
+            END AS COD_CONTO
          , A.COD_CATEGORIA
          , A.SRC_DETAIL
          , A.CUST_CODE
@@ -293,6 +298,7 @@ BEGIN
               WHERE SESSION_ID = V_SESSION_ID
        )
        AND NVL(A.LE_AGE_FLAG,'|') <> '|'
+       AND SRC_DETAIL LIKE 'ORG%'
   ),
   -- 按用户口径计算ORG来源本位币账龄金额；非ORG来源保留原始BCY供补充金额使用。
   CURRENT_SOURCE AS (
@@ -470,6 +476,53 @@ BEGIN
             END AS CALC_POSTING_RATE_BCY_AMT
       FROM CURRENT_SOURCE_BASE S
   ),
+  -- 无账龄标识补充来源：按业务键聚合补充金额，不输出非匹配维度字段。
+  -- 直接使用ARPM01本位币金额；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。
+  -- NULL业务键保留，并由结果关联时按当前NVL语义匹配；EPAY空科目固定为1122000000。
+  SUPPLEMENT_AGG AS (
+    SELECT S.COD_AZIENDA
+         , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
+                     AND NVL(TRIM(S.COD_CONTO), '|') = '|'
+                  THEN '1122000000'
+                ELSE S.COD_CONTO
+            END AS COD_CONTO
+         , S.CUST_CODE
+         , S.COD_DEST2
+         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_CK%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS SHP_NINV_AMT
+         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_TH%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS RET_NTRF_AMT
+         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'OVERDUE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS OVERDUE_AMT
+         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'INV_SAMPLE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS INV_SAMPLE_AMT
+         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'EPAY%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS EPAY_AMT
+         , SUM(CASE WHEN S.ECLS_FLAG = 'Y' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS ECLS_AMT
+         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'UREB%' OR S.UFEE_UREB_FLAG = 'UREB' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS UREB_AMT
+         , SUM(CASE WHEN S.UFEE_UREB_FLAG = 'UFEE' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS UFEE_AMT
+      FROM AW_MR9_ARPM01_000001 S
+     WHERE S.COD_SCENARIO = V_SCENARIO
+       AND S.COD_PERIODO = V_PERIODO
+       AND S.COD_AZIENDA IN (
+             SELECT ELEM
+               FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+       )
+       AND (
+             S.SRC_DETAIL LIKE 'ZTSO04_CK%'
+          OR S.SRC_DETAIL LIKE 'ZTSO04_TH%'
+          OR S.SRC_DETAIL LIKE 'OVERDUE%'
+          OR S.SRC_DETAIL LIKE 'INV_SAMPLE%'
+          OR S.SRC_DETAIL LIKE 'EPAY%'
+          OR S.ECLS_FLAG = 'Y'
+          OR S.SRC_DETAIL LIKE 'UREB%'
+          OR S.UFEE_UREB_FLAG IN ('UREB','UFEE')
+       )
+     GROUP BY S.COD_AZIENDA
+            , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
+                        AND NVL(TRIM(S.COD_CONTO), '|') = '|'
+                     THEN '1122000000'
+                   ELSE S.COD_CONTO
+              END
+            , S.CUST_CODE
+            , S.COD_DEST2
+  ),
   -- 取当前期间每个业务键的维度基准行，ORG来源优先，其他来源作为兜底。
   CURRENT_DIM AS (
     SELECT COD_AZIENDA
@@ -521,7 +574,8 @@ BEGIN
      WHERE S.RN = 1
   ),
   -- 当前期间按来源类别汇总，用于生成结果表的横向金额字段。
-  CURRENT_AGG AS (
+  -- 先按业务键聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。
+  CURRENT_SOURCE_AGG AS (
     SELECT S.COD_AZIENDA
          , S.COD_CONTO
          , S.CUST_CODE
@@ -670,24 +724,17 @@ BEGIN
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_13_AMT ELSE 0 END) AS ORG_QCY_13_AMT
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_14_AMT ELSE 0 END) AS ORG_QCY_14_AMT
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_15_AMT ELSE 0 END) AS ORG_QCY_15_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_CK%' THEN S.BCY_0_AMT ELSE 0 END) AS SHP_NINV_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_TH%' THEN S.BCY_0_AMT ELSE 0 END) AS RET_NTRF_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'OVERDUE%' THEN S.BCY_0_AMT ELSE 0 END) AS OVERDUE_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'INV_SAMPLE%' THEN S.BCY_0_AMT ELSE 0 END) AS INV_SAMPLE_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'EPAY%' THEN S.BCY_0_AMT ELSE 0 END) AS EPAY_AMT
-         , SUM(CASE WHEN S.ECLS_FLAG = 'Y' THEN S.BCY_0_AMT ELSE 0 END) AS ECLS_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'UFEE%' OR UFEE_UREB_FLAG = 'UREB' THEN S.BCY_0_AMT ELSE 0 END) AS UREB_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'UREB%' THEN S.BCY_0_AMT ELSE 0 END) AS UFEE_AMT
+         -- 补充金额在CURRENT_AGG中统一关联SUPPLEMENT_AGG，不在明细层重复汇总。
          , SUM(NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0)) AS CLOSING_RATE_BCY_AMT
          , SUM(NVL(S.CALC_POSTING_RATE_BCY_AMT, 0)) AS POSTING_RATE_BCY_AMT
          , LISTAGG(
                NVL(S.ACCT_SRC_CODE, '') || ':'
                || TO_CHAR(NVL(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                                      THEN S.CALC_BCY_0_AMT
-                                      ELSE S.BCY_0_AMT
+                                      THEN ROUND(S.CALC_BCY_0_AMT,2)
+                                      ELSE ROUND(S.BCY_0_AMT,2)
                                   END, 0)) || '\'
                || NVL(S.COD_VALUTA_ORIGINARIA, '') || ':'
-               || TO_CHAR(NVL(S.QCY_0_AMT, 0))
+               || TO_CHAR(NVL(ROUND(S.QCY_0_AMT,2), 0))
              , ';'
            ) WITHIN GROUP (ORDER BY S.ACCT_SRC_CODE, S.BCY_0_AMT) AS CURRENCY_ACCT_DETAIL
       FROM CURRENT_SOURCE S
@@ -695,6 +742,24 @@ BEGIN
             , S.COD_CONTO
             , S.CUST_CODE
             , S.COD_DEST2
+  ),
+  -- 当前主来源已按业务键聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。
+  CURRENT_AGG AS (
+    SELECT A.*
+         , NVL(B.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
+         , NVL(B.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
+         , NVL(B.OVERDUE_AMT, 0) AS OVERDUE_AMT
+         , NVL(B.INV_SAMPLE_AMT, 0) AS INV_SAMPLE_AMT
+         , NVL(B.EPAY_AMT, 0) AS EPAY_AMT
+         , NVL(B.ECLS_AMT, 0) AS ECLS_AMT
+         , NVL(B.UREB_AMT, 0) AS UREB_AMT
+         , NVL(B.UFEE_AMT, 0) AS UFEE_AMT
+      FROM CURRENT_SOURCE_AGG A
+      LEFT JOIN SUPPLEMENT_AGG B
+        ON B.COD_AZIENDA = A.COD_AZIENDA
+       AND NVL(B.COD_CONTO, '#') = NVL(A.COD_CONTO, '#')
+       AND NVL(B.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
+       AND NVL(B.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
   ),
   -- 年初历史结果：按设计业务键读取上年12期ARPM02本月余额。
   BY_HISTORY AS (
@@ -793,6 +858,8 @@ BEGIN
   -- 当前、年初、上月的业务键并集，支持当前月无数据但历史有余额的记录保留。
   ALL_KEYS AS (
     SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM CURRENT_DIM
+    UNION
+    SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM SUPPLEMENT_AGG
     UNION
     SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM BY_HISTORY
     UNION
