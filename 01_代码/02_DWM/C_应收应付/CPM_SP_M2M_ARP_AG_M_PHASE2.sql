@@ -5,7 +5,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   , SESSION_USER IN VARCHAR2
 ) AS
   /**************************************************************************
-  最后更新时间：20261014
+  最后更新时间：20261010
   上一版本信息：
   名称：CPM_SP_M2M_ARP_AG_M_PHASE2
   用途：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -21,6 +21,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
     6. 汇率及法人重分类除税由第一个包完成，本过程直接读取ARPM01已处理的BCY/QCY账龄分段。
 
   版本信息：最新修改记录放最上面
+    20261010 新增周转分析渠道和商冷客户群字段，直接对应ARPM01来源字段
     20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
     20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
     20260923 SHIQINGFENG.EX 汇率评估标识为空时，交易币金额先换算人民币再换算成本位币
@@ -206,6 +207,8 @@ BEGIN
          , A.NATURE_L2_NAME
          , A.NATURE_L3_NAME
          , A.D_CHANNEL
+         , A.D_TOV_CHAN
+         , A.D_CC_CUSTGRP
          , A.D_ONOFFLINE
          , A.COD_DEST2
          , A.COD_DEST3
@@ -549,6 +552,8 @@ BEGIN
          , NATURE_L2_NAME
          , NATURE_L3_NAME
          , D_CHANNEL
+         , D_TOV_CHAN
+         , D_CC_CUSTGRP
          , D_ONOFFLINE
          , COD_DEST2
          , COD_DEST3
@@ -788,6 +793,8 @@ BEGIN
          , T.NATURE_L2_NAME
          , T.NATURE_L3_NAME
          , T.D_CHANNEL
+         , T.D_TOV_CHAN
+         , T.D_CC_CUSTGRP
          , T.D_ONOFFLINE
          , T.COD_DEST3
          , T.D_SALE_DEPT
@@ -835,6 +842,8 @@ BEGIN
          , T.NATURE_L2_NAME
          , T.NATURE_L3_NAME
          , T.D_CHANNEL
+         , T.D_TOV_CHAN
+         , T.D_CC_CUSTGRP
          , T.D_ONOFFLINE
          , T.COD_DEST3
          , T.D_SALE_DEPT
@@ -873,7 +882,7 @@ BEGIN
          , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
          , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
          , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-         , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+         , D_CHANNEL, D_TOV_CHAN, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
          , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
       FROM CURRENT_DIM
@@ -884,7 +893,7 @@ BEGIN
          , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
          , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
          , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-         , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+         , D_CHANNEL, D_TOV_CHAN, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
          , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
       FROM BY_HISTORY
@@ -895,7 +904,7 @@ BEGIN
          , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
          , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
          , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-         , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+         , D_CHANNEL, D_TOV_CHAN, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
          , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
       FROM LM_HISTORY
@@ -927,6 +936,8 @@ BEGIN
          , D.NATURE_L2_NAME
          , D.NATURE_L3_NAME
          , D.D_CHANNEL
+         , D.D_TOV_CHAN
+         , D.D_CC_CUSTGRP
          , D.D_ONOFFLINE
          , K.COD_DEST2
          , D.COD_DEST3
@@ -1061,6 +1072,8 @@ BEGIN
          , R.NATURE_L2_NAME
          , R.NATURE_L3_NAME
          , R.D_CHANNEL
+         , R.D_TOV_CHAN
+         , R.D_CC_CUSTGRP
          , R.D_ONOFFLINE
          , R.COD_DEST2
          , R.COD_DEST3
@@ -1286,6 +1299,8 @@ BEGIN
        , T.NATURE_L2_NAME = S.NATURE_L2_NAME
        , T.NATURE_L3_NAME = S.NATURE_L3_NAME
        , T.D_CHANNEL = S.D_CHANNEL
+       , T.D_TOV_CHAN = S.D_TOV_CHAN
+       , T.D_CC_CUSTGRP = S.D_CC_CUSTGRP
        , T.D_ONOFFLINE = S.D_ONOFFLINE
        , T.COD_DEST2 = S.COD_DEST2
        , T.COD_DEST3 = S.COD_DEST3
@@ -1397,6 +1412,8 @@ BEGIN
     , NATURE_L2_NAME
     , NATURE_L3_NAME
     , D_CHANNEL
+    , D_TOV_CHAN
+    , D_CC_CUSTGRP
     , D_ONOFFLINE
     , COD_DEST2
     , COD_DEST3
@@ -1511,6 +1528,8 @@ BEGIN
     , S.NATURE_L2_NAME
     , S.NATURE_L3_NAME
     , S.D_CHANNEL
+    , S.D_TOV_CHAN
+    , S.D_CC_CUSTGRP
     , S.D_ONOFFLINE
     , S.COD_DEST2
     , S.COD_DEST3

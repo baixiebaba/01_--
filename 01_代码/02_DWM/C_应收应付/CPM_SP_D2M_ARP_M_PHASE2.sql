@@ -501,6 +501,8 @@ BEGIN
        , MB_AGE_FLAG
        , GRP_SCOPE
        , D_CHANNEL
+       , D_TOV_CHAN
+       , D_CC_CUSTGRP
        , D_ONOFFLINE
        , COD_DEST2
        , COD_DEST3

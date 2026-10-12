@@ -210,23 +210,12 @@ apar_range_rule AS (
             , acct_src_code
             , cust_code
 ),
--- 读取电商零售客户范围，供ECLS标识匹配。
-ecom_retail_scope AS (
-    SELECT LTRIM(cust_code, '0') AS cust_code
-      FROM dim.dim_rule_fi_mr_ar_cust_type
-     WHERE TRIM(cust_type) = '电商零售类客户'
-       AND NVL(valid_fr, '202401') <= @dt_month
-       AND NVL(valid_to, '999999') >= @dt_month
-     GROUP BY LTRIM(cust_code, '0')
-),
 -- 识别满足金额、基准日期和电商零售范围条件的明细键。
 ecls_match AS (
     SELECT d.acct_map_code
          , d.cust_code
          , d.pays_tran
       FROM test.dwd_fi_mr_arap_detail_mi d
-      INNER JOIN ecom_retail_scope e
-        ON e.cust_code = d.cust_code
      WHERE d.dt_month = @dt_month
        AND d.pay_reason_code = '400'
        AND d.acct_map_code LIKE '1122%'
@@ -729,7 +718,7 @@ sms_fact AS (
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
          , 'SMS' AS system_src, 'UREB' AS ods_src
-         , leibie AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
+         , leibie AS reb_type, 'UREB' AS ufee_ureb_flag, NULL AS ecls_flag, NULL AS ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
          , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
@@ -986,7 +975,7 @@ policy_fact AS (
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
          , 'POLICY' AS system_src, 'UREB' AS ods_src
-         , NULL AS reb_type, NULL AS ufee_ureb_flag, NULL AS ecls_flag, s.ledger_status, NULL AS acct_cert_type
+         , NULL AS reb_type, 'UREB' AS ufee_ureb_flag, NULL AS ecls_flag, s.ledger_status, NULL AS acct_cert_type
          , NULL AS tax_rate
          , NULL AS nature_l1_name, NULL AS nature_l2_name, NULL AS nature_l3_name
          , NULL AS exchange_rate_eval_flag, NULL AS is_apar_flag
@@ -1488,7 +1477,7 @@ SELECT p.dt_month
   FROM report_pivot p
   LEFT JOIN cterm_dedup c
     ON c.system_src = p.system_src
-   AND c.company_code = CASE WHEN p.company_code LIKE '6000%' THEN '6000' END
+   AND c.company_code = p.company_code
    AND c.cust_code = p.cust_code
 ;
 

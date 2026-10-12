@@ -896,40 +896,22 @@ aging_seg_cfg AS (
 ar_nf_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , b.cod_azienda AS company_code
+         , NULLIF(LTRIM(TRIM(a.cust_code), '0'), '') AS cust_code
          , a.channel_l1_code
          , a.channel_l3_code
          , MAX(a.onoffline_code) AS onoffline_code
          , MAX(a.onoffline_name) AS onoffline_name
       FROM dim.dim_rule_fi_mr_ar_nf_mapping a
       LEFT JOIN ods.odsfima_azienda b
-        ON b.cod_azienda LIKE a.company_code
+        ON b.cod_azienda LIKE TRIM(a.company_code)
      WHERE NVL(a.valid_fr, '202401') <= @dt_month
        AND NVL(a.valid_to, '999999') >= @dt_month
+       AND CAST(a.batch_id AS INT) IN (1, 2, 3, 4)
      GROUP BY CAST(a.batch_id AS INT)
             , b.cod_azienda
+            , NULLIF(LTRIM(TRIM(a.cust_code), '0'), '')
             , a.channel_l1_code
             , a.channel_l3_code
-),
--- 读取收入模块线上线下规则，并展开公司包含关系；同一匹配键的重复配置使用MAX聚合。
-rev_nf_rule AS (
-    SELECT CAST(a.batch_id AS INT) AS batch_id
-         , b.cod_azienda AS company_code
-         , c.cod_azienda AS cp_company_code
-         , NULLIF(LTRIM(TRIM(a.cust_code), '0'), '') AS cust_code
-         , MAX(a.onoffline_code) AS onoffline_code
-         , MAX(a.onoffline_name) AS onoffline_name
-      FROM dim.dim_rule_fi_mr_nf_mapping a
-      LEFT JOIN ods.odsfima_azienda b
-        ON b.cod_azienda LIKE a.company_code
-      LEFT JOIN ods.odsfima_azienda c
-        ON c.cod_azienda LIKE a.cp_company_code
-     WHERE NVL(a.valid_fr, '202401') <= @dt_month
-       AND NVL(a.valid_to, '999999') >= @dt_month
-       AND CAST(a.batch_id AS INT) IN (1, 2, 5)
-     GROUP BY CAST(a.batch_id AS INT)
-            , b.cod_azienda
-            , c.cod_azienda
-            , NULLIF(LTRIM(TRIM(a.cust_code), '0'), '')
 ),
 -- 构造客商和供应商行的渠道匹配上下文；两类客商使用相同规则及默认渠道处理。
 nf_match_base AS (
@@ -950,7 +932,6 @@ nf_match_base AS (
                    THEN a.cust_branch_code
                ELSE a.cust_head_code
            END AS cust_code
-         , COALESCE(c.cp_company_mr_code, c.cp_company_code) AS cp_company_code
          , ch.com_1st_code AS channel_l1_code
          , ch.com_3rd_code AS channel_l3_code
       FROM normalized_items a
@@ -1042,7 +1023,7 @@ tov_channel_pick AS (
        AND p.batch_id = c.batch_id
      GROUP BY c.fact_key
 ),
--- 应收模块渠道规则按1（公司+三级）→2（公司+二级）→3（公司）顺序匹配。
+-- 应收模块渠道规则按1（公司+客商）→2（公司）→3（公司+三级分类）→4（公司+一级分类）顺序匹配。
 ar_nf_candidate AS (
     SELECT b.fact_key
          , r.batch_id
@@ -1050,20 +1031,38 @@ ar_nf_candidate AS (
          , r.onoffline_name
       FROM nf_match_base b
       INNER JOIN ar_nf_rule r
-        ON (
-               r.batch_id = 1
-           AND r.company_code = b.company_code
-           AND r.channel_l3_code = b.channel_l3_code
-           )
-        OR (
-               r.batch_id = 2
-           AND r.company_code = b.company_code
-           AND r.channel_l1_code = b.channel_l1_code
-           )
-        OR (
-               r.batch_id = 3
-           AND r.company_code = b.company_code
-           )
+        ON r.batch_id = 1
+       AND r.company_code = b.company_code
+       AND r.cust_code = b.cust_code
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.onoffline_code
+         , r.onoffline_name
+      FROM nf_match_base b
+      INNER JOIN ar_nf_rule r
+        ON r.batch_id = 2
+       AND r.company_code = b.company_code
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.onoffline_code
+         , r.onoffline_name
+      FROM nf_match_base b
+      INNER JOIN ar_nf_rule r
+        ON r.batch_id = 3
+       AND r.company_code = b.company_code
+       AND r.channel_l3_code = b.channel_l3_code
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.onoffline_code
+         , r.onoffline_name
+      FROM nf_match_base b
+      INNER JOIN ar_nf_rule r
+        ON r.batch_id = 4
+       AND r.company_code = b.company_code
+       AND r.channel_l1_code = b.channel_l1_code
 ),
 -- 应收规则按最小batch_id取优先级；同一事实键的重复配置使用MAX聚合。
 ar_nf_pick AS (
@@ -1081,73 +1080,23 @@ ar_nf_pick AS (
        AND p.batch_id = c.batch_id
      GROUP BY c.fact_key
 ),
--- 应收规则未命中时，按收入模块既有5→2→1优先级回退匹配。
-rev_nf_candidate AS (
-    SELECT b.fact_key
-         , r.batch_id
-         , r.onoffline_code
-         , r.onoffline_name
-      FROM nf_match_base b
-      INNER JOIN rev_nf_rule r
-        ON (
-               r.batch_id = 1
-           AND r.company_code = b.company_code
-           )
-        OR (
-               r.batch_id = 2
-           AND r.company_code = b.company_code
-           AND r.cust_code = b.cust_code
-           )
-        OR (
-               r.batch_id = 5
-           AND r.company_code = b.company_code
-           AND r.cp_company_code = b.cp_company_code
-           )
-     WHERE NOT EXISTS (
-               SELECT 1
-                 FROM ar_nf_pick ar
-                WHERE ar.fact_key = b.fact_key
-           )
-),
--- 收入规则按最大batch_id取优先级；同一事实键的重复配置使用MAX聚合。
-rev_nf_pick AS (
-    SELECT c.fact_key
-         , MAX(c.onoffline_code) AS onoffline_code
-         , MAX(c.onoffline_name) AS onoffline_name
-      FROM rev_nf_candidate c
-      INNER JOIN (
-            SELECT fact_key
-                 , MAX(batch_id) AS batch_id
-              FROM rev_nf_candidate
-             GROUP BY fact_key
-      ) p
-        ON p.fact_key = c.fact_key
-       AND p.batch_id = c.batch_id
-     GROUP BY c.fact_key
-),
--- 应收规则优先，未命中才使用收入规则；字符串NULL表示规则显式置空，不再回退默认值。
+
+-- 仅保留应收模块渠道规则命中结果；空值或字符串NULL按默认渠道处理。
 nf_final AS (
     SELECT fact_key
          , CASE
-               WHEN onoffline_code = 'NULL' THEN NULL
+               WHEN NULLIF(TRIM(onoffline_code), '') IS NULL
+                 OR onoffline_code = 'NULL'
+                   THEN '020_OFF_002'
                ELSE onoffline_code
            END AS onoffline_code
          , CASE
-               WHEN onoffline_name = 'NULL' THEN NULL
+               WHEN NULLIF(TRIM(onoffline_name), '') IS NULL
+                 OR onoffline_name = 'NULL'
+                   THEN '零售-传统零售'
                ELSE onoffline_name
            END AS onoffline_name
       FROM ar_nf_pick
-    UNION ALL
-    SELECT fact_key
-         , CASE
-               WHEN onoffline_code = 'NULL' THEN NULL
-               ELSE onoffline_code
-           END AS onoffline_code
-         , CASE
-               WHEN onoffline_name = 'NULL' THEN NULL
-               ELSE onoffline_name
-           END AS onoffline_name
-      FROM rev_nf_pick
 ),
 -- 读取目标月份有效的利润中心映射规则，并展开公司编码通配配置。
 ar_profitcenter_rule AS (
@@ -1775,7 +1724,7 @@ SELECT @dt_month
      , tc.tov_channel_name
      , ch.cust_group_ccc_code AS cc_cust_group_code
      , ch.cust_group_ccc_name AS cc_cust_group_name
-     -- 客商和供应商均按应收规则、收入规则、传统零售默认值依次取值。
+     -- 客商和供应商均按应收渠道分组规则取值，未命中时使用传统零售默认值。
      , CASE
            WHEN nf.fact_key IS NOT NULL THEN nf.onoffline_code
            ELSE '020_OFF_002'
