@@ -742,6 +742,17 @@ policy_customer_scope AS (
             , NULLIF(TRIM(tov_channel_code), '')
             , CAST(batch_id AS INT)
 ),
+-- POLICY：读取商冷客户群维度，按标准化公司+客商聚合，避免关联重复放大政策金额。
+policy_customer_ccc_dim AS (
+    SELECT NULLIF(LTRIM(TRIM(d.company_code_mdg), '0'), '') AS company_code_mdg
+         , NULLIF(LTRIM(TRIM(d.cust_sap_code), '0'), '') AS cust_sap_code
+         , MAX(d.crg_cust_group_code) AS crg_cust_group_code
+         , MAX(d.crg_cust_group_name) AS crg_cust_group_name
+      FROM dw.dim_customer_company_info_dd d
+     WHERE d.crg_cust_group_code IS NOT NULL
+     GROUP BY NULLIF(LTRIM(TRIM(d.company_code_mdg), '0'), '')
+            , NULLIF(LTRIM(TRIM(d.cust_sap_code), '0'), '')
+),
 -- POLICY：按S600客商映射补充对方公司、国家及三级公司分类，避免政策事实缺少组织维度。
 policy_customer_dim AS (
     SELECT LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0') AS cust_sap_code
@@ -756,8 +767,6 @@ policy_customer_dim AS (
          , d.com_2nd_name AS channel_l2_name
          , d.com_3rd_code AS channel_l3_code
          , d.com_3rd_name AS channel_l3_name
-         , d.cust_group_ccc_code AS cc_cust_group_code
-         , d.cust_group_ccc_name AS cc_cust_group_name
       FROM dim.dim_fi_mr_customer_map_dd m
       LEFT JOIN dim.dim_fi_mr_customer_dd d
         ON NULLIF(LTRIM(NULLIF(TRIM(d.cust_code), ''), '0'), '') = NULLIF(LTRIM(NULLIF(TRIM(m.cust_mdg_code), ''), '0'), '')
@@ -775,8 +784,6 @@ policy_customer_dim AS (
             , d.com_2nd_name
             , d.com_3rd_code
             , d.com_3rd_name
-            , d.cust_group_ccc_code
-            , d.cust_group_ccc_name
 ),
 -- POLICY：读取目标月份有效的周转分析渠道规则，并按匹配键去重。
 policy_tov_rule_1 AS (
@@ -818,8 +825,8 @@ policy_src_base AS (
          , c.channel_l2_name
          , c.channel_l3_code
          , c.channel_l3_name
-         , c.cc_cust_group_code
-         , c.cc_cust_group_name
+         , cc.crg_cust_group_code AS cc_cust_group_code
+         , cc.crg_cust_group_name AS cc_cust_group_name
          , NULLIF(LTRIM(TRIM(p.profit_center), '0'), '') AS profitcenter_code
          , NULL AS profitcenter_name
          , p.policy_list
@@ -831,6 +838,9 @@ policy_src_base AS (
       FROM dwd.dwd_mrs_mc_report_reward_account_detail_new_hi p
       LEFT JOIN policy_customer_dim c
         ON c.cust_sap_code = LTRIM(NULLIF(TRIM(p.customer_code), ''), '0')
+      LEFT JOIN policy_customer_ccc_dim cc
+        ON cc.company_code_mdg = NULLIF(LTRIM(TRIM(p.sales_group), '0'), '')
+       AND cc.cust_sap_code = LTRIM(NULLIF(TRIM(p.customer_code), ''), '0')
       LEFT JOIN policy_tov_rule_1 t1
         ON t1.company_code = p.sales_group
        AND t1.cust_code = c.cust_mdg_code

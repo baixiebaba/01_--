@@ -9,7 +9,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   上一版本信息：
   名称：CPM_SP_M2M_ARP_AG_M_PHASE2
   用途：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
-  源表：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO、ODSS600_TCURR
+  源表：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO、SQF_TEST
   目标表：AW_MR9_ARPM02_000001
   逻辑文档：经分二期-应收-数据模型详细设计文档.xlsx，ARPM02-账龄结果表
   特殊逻辑：
@@ -21,6 +21,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
     6. 汇率及法人重分类除税由第一个包完成，本过程直接读取ARPM01已处理的BCY/QCY账龄分段。
 
   版本信息：最新修改记录放最上面
+    20261010 撤销交易币折算本位币结果保留两位小数调整并恢复原精度
+    20261010 交易币折算本位币金额保留两位小数
+    20261010 RESULT_FACT最终将交易币字段映射为本位币字段
     20261010 新增周转分析渠道和商冷客户群字段，直接对应ARPM01来源字段
     20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
     20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
@@ -154,7 +157,8 @@ BEGIN
        AND COD_PERIODO = V_PERIODO
      GROUP BY COD_VALUTA
   ),
-  -- 2023公司沿用SAP TCURR汇率；其他公司使用DATI_CAMBIO人民币基准汇率。
+  -- 2023公司沿用SAP TCURR汇率；测试环境使用SQF_TEST，其他公司使用DATI_CAMBIO人民币基准汇率。
+  -- 上线前将SQF_TEST替换为DWD_FI_MR_SAP_TCURR_DD，并增加 MANDT = '600' 条件以区分S600。
   TCURR_CONVERSION_RATE AS (
     SELECT TRIM(B.TCURR) AS TCURR
          , TRIM(B.FCURR) AS FCURR
@@ -163,7 +167,7 @@ BEGIN
                            WHEN B.TCURR = 'VND' THEN 100
                            ELSE 1
                        END AS RATE
-      FROM ODS.ODSS600_TCURR@FMSLK B
+      FROM SQF_TEST B
      WHERE B.KURST = 'M'
        AND TO_CHAR(99999999 - B.GDATU) = TO_CHAR(
              TRUNC(
@@ -1080,7 +1084,7 @@ BEGIN
          , R.D_SALE_DEPT
          , R.TAX_RATE
          , R.COD_VALUTA
-         , R.COD_VALUTA_ORIGINARIA
+         , R.COD_VALUTA AS COD_VALUTA_ORIGINARIA
          , R.BY_BCY_0_AMT
          , R.LM_BCY_0_AMT
          , R.CALC_BCY_0_AMT AS BCY_0_AMT
@@ -1099,22 +1103,22 @@ BEGIN
          , R.CALC_BCY_13_AMT AS BCY_13_AMT
          , R.CALC_BCY_14_AMT AS BCY_14_AMT
          , R.CALC_BCY_15_AMT AS BCY_15_AMT
-         , R.ORG_QCY_0_AMT AS QCY_0_AMT
-         , R.ORG_QCY_1_AMT AS QCY_1_AMT
-         , R.ORG_QCY_2_AMT AS QCY_2_AMT
-         , R.ORG_QCY_3_AMT AS QCY_3_AMT
-         , R.ORG_QCY_4_AMT AS QCY_4_AMT
-         , R.ORG_QCY_5_AMT AS QCY_5_AMT
-         , R.ORG_QCY_6_AMT AS QCY_6_AMT
-         , R.ORG_QCY_7_AMT AS QCY_7_AMT
-         , R.ORG_QCY_8_AMT AS QCY_8_AMT
-         , R.ORG_QCY_9_AMT AS QCY_9_AMT
-         , R.ORG_QCY_10_AMT AS QCY_10_AMT
-         , R.ORG_QCY_11_AMT AS QCY_11_AMT
-         , R.ORG_QCY_12_AMT AS QCY_12_AMT
-         , R.ORG_QCY_13_AMT AS QCY_13_AMT
-         , R.ORG_QCY_14_AMT AS QCY_14_AMT
-         , R.ORG_QCY_15_AMT AS QCY_15_AMT
+         , R.CALC_BCY_0_AMT AS QCY_0_AMT
+         , R.CALC_BCY_1_AMT AS QCY_1_AMT
+         , R.CALC_BCY_2_AMT AS QCY_2_AMT
+         , R.CALC_BCY_3_AMT AS QCY_3_AMT
+         , R.CALC_BCY_4_AMT AS QCY_4_AMT
+         , R.CALC_BCY_5_AMT AS QCY_5_AMT
+         , R.CALC_BCY_6_AMT AS QCY_6_AMT
+         , R.CALC_BCY_7_AMT AS QCY_7_AMT
+         , R.CALC_BCY_8_AMT AS QCY_8_AMT
+         , R.CALC_BCY_9_AMT AS QCY_9_AMT
+         , R.CALC_BCY_10_AMT AS QCY_10_AMT
+         , R.CALC_BCY_11_AMT AS QCY_11_AMT
+         , R.CALC_BCY_12_AMT AS QCY_12_AMT
+         , R.CALC_BCY_13_AMT AS QCY_13_AMT
+         , R.CALC_BCY_14_AMT AS QCY_14_AMT
+         , R.CALC_BCY_15_AMT AS QCY_15_AMT
          , R.SHP_NINV_AMT
          , R.RET_NTRF_AMT
          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'

@@ -1,0 +1,36 @@
+FUNCTION bapi_currency_conv_to_external.
+*"----------------------------------------------------------------------
+*"*"Lokale Schnittstelle:
+*"       IMPORTING
+*"             VALUE(CURRENCY) LIKE  TCURC-WAERS
+*"             VALUE(AMOUNT_INTERNAL)
+*"       EXPORTING
+*"             VALUE(AMOUNT_EXTERNAL) LIKE  BAPICURR-BAPICURR
+*"----------------------------------------------------------------------
+
+  DATA: int_shift TYPE i,
+        dec_amount_int LIKE bapicurr-bapicurr,
+        struct_tcurx TYPE tcurx.
+
+  IF currency NE last_currency.
+    SELECT SINGLE * FROM  tcurx
+                    INTO  struct_tcurx
+                    WHERE currkey = currency.
+
+    IF sy-subrc = 0. "Currency has a number of decimals not equal two
+      int_shift = 2 - struct_tcurx-currdec.
+    ELSE. "Currency is no exceptional currency. It has two decimals
+      int_shift = 0.
+    ENDIF.
+    last_currency = currency.
+    last_int_shift = int_shift.
+  ELSE.
+    int_shift = last_int_shift.
+  ENDIF.
+
+*Fill AMOUNT_EXTERNAL and shift decimal point depending on CURRENCY
+  MOVE amount_internal TO dec_amount_int.
+  amount_external = 10 ** int_shift.
+  amount_external = amount_external * dec_amount_int.
+
+ENDFUNCTION.

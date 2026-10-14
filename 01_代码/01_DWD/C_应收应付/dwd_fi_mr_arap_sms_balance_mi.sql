@@ -9,8 +9,8 @@
 */
 
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
---SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
-SET @year_month_day = '20260801';
+SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 统计截止日期：取参数月份月末，供SMS外围系统SQL使用。
@@ -32,7 +32,9 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sms_balance_mi PARTITION (*)
     , fanli           --返利额
     , yishiyong       --已经使用
     , yue             --余额
+    , update_dt       --sms更新时间
     , load_dt         --更新时间
+    
 )
 --注意：@end_date  -->  '2026-08-31'  (替换时需要携带单引号)
           SELECT
@@ -48,6 +50,7 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sms_balance_mi PARTITION (*)
               t.fanli,                                                     -- 返利额(截止累计)
               t.yishiyong,                                                 -- 已经使用(截止累计)
               t.yue,                                                       -- 返利余额(截止累计)
+              t.load_dt AS update_dt,
               NOW() AS load_dt                                     
           FROM dw.dwd_ltc_cem_reportpay_balance_summary_dd t
 

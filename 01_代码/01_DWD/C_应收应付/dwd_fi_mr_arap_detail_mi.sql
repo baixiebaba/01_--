@@ -170,6 +170,39 @@ src_t001 AS (
     SELECT 'S810' AS system_src, bukrs, ktopl, waers
       FROM ods.odss810_t001
 ),
+-- S610统一读取610客户端TCURX并按币种去重计算转换因子；currdec缺失或无效时因子为1。
+s610_tcurx_factor AS (
+    SELECT UPPER(TRIM(tx.currkey)) AS currkey
+         , CASE
+               WHEN MAX(CASE
+                            WHEN tx.currdec IS NOT NULL
+                             AND tx.currdec >= 0
+                             AND tx.currdec <= 9
+                                THEN CAST(tx.currdec AS INT)
+                        END) IS NULL
+                   THEN 1
+               ELSE POW(
+                        10
+                      , 2 - MAX(CASE
+                                    WHEN tx.currdec IS NOT NULL
+                                     AND tx.currdec >= 0
+                                     AND tx.currdec <= 9
+                                        THEN CAST(tx.currdec AS INT)
+                                END)
+                    )
+           END AS conversion_factor
+      FROM ods.odss810_tcurx tx
+     GROUP BY UPPER(TRIM(tx.currkey))
+),
+-- 聚合公司本位币配置，供凭证明细和总账余额按S610公司取得本位币。
+company_dim AS (
+    SELECT system_src
+         , bukrs
+         , MAX(waers) AS waers
+      FROM src_t001
+     GROUP BY system_src
+            , bukrs
+),
 -- 汇总六套SAP公司科目及统驭标识，用于识别统驭/非统驭科目。
 src_skb1 AS (
     SELECT 'S600' AS system_src, bukrs, saknr, mitkz
@@ -239,11 +272,20 @@ customer_supplier_dim AS (
          , d.country_name
          , d.cp_company_mr_code
          , d.cp_company_code
-         , d.cust_group_ccc_code
-         , d.cust_group_ccc_name
       FROM cust_sap_map_dim m
       LEFT JOIN dim.dim_fi_mr_customer_dd d
         ON NULLIF(LTRIM(TRIM(d.cust_code), '0'), '') = m.cust_mdg_code
+),
+-- 商冷客户群维度：按标准化公司+客商分组，直接取客户群编码和名称最大值，确保每个公司+客商一行。
+customer_ccc_group_dim AS (
+    SELECT NULLIF(LTRIM(TRIM(d.company_code_mdg), '0'), '') AS company_code_mdg
+         , NULLIF(LTRIM(TRIM(d.cust_sap_code), '0'), '') AS cust_sap_code
+         , MAX(d.crg_cust_group_code) AS crg_cust_group_code
+         , MAX(d.crg_cust_group_name) AS crg_cust_group_name
+      FROM dw.dim_customer_company_info_dd d
+     WHERE d.crg_cust_group_code IS NOT NULL
+     GROUP BY NULLIF(LTRIM(TRIM(d.company_code_mdg), '0'), '')
+            , NULLIF(LTRIM(TRIM(d.cust_sap_code), '0'), '')
 ),
 -- 汇总六套SAP公司级客商主数据KVERM，按系统、公司、客商类型和主户编码聚合非空付款条件。
 cust_kverm_dim AS (
@@ -696,8 +738,17 @@ all_items AS (
          , b.zbd1t
          , b.augdt
          , b.shkzg
-         , b.dmbtr
-         , b.wrbtr
+         -- S610的dmbtr按公司本位币转换，wrbtr按凭证明细交易币waers转换。
+         , CASE
+               WHEN b.system_src = 'S610'
+                   THEN b.dmbtr * COALESCE(cf.conversion_factor, 1)
+               ELSE b.dmbtr
+           END AS dmbtr
+         , CASE
+               WHEN b.system_src = 'S610'
+                   THEN b.wrbtr * COALESCE(tf.conversion_factor, 1)
+               ELSE b.wrbtr
+           END AS wrbtr
          , b.bstat
          , b.rstgr
          , b.zlsch
@@ -709,6 +760,15 @@ all_items AS (
        AND c.company_code = b.bukrs
        AND c.acct_code = b.hkont
        AND c.acct_type_code = b.acct_type_code
+      LEFT JOIN company_dim co
+        ON co.system_src = b.system_src
+       AND co.bukrs = b.bukrs
+      LEFT JOIN s610_tcurx_factor cf
+        ON b.system_src = 'S610'
+       AND cf.currkey = UPPER(TRIM(co.waers))
+      LEFT JOIN s610_tcurx_factor tf
+        ON b.system_src = 'S610'
+       AND tf.currkey = UPPER(TRIM(b.waers))
 ),
 -- 按目标月份筛选有效科目映射，并按原始科目和系统聚合。
 acct_mapping AS (
@@ -886,8 +946,8 @@ normalized_items AS (
 aging_seg_cfg AS (
     SELECT r.aging_seg_code
          , r.aging_seg_name
-         , CAST(r.aging_seg_fr AS DECIMALV3(27, 9)) AS aging_seg_fr
-         , CAST(r.aging_seg_to AS DECIMALV3(27, 9)) AS aging_seg_to
+         , r.aging_seg_fr  AS aging_seg_fr
+         , r.aging_seg_to  AS aging_seg_to
       FROM dim.dim_rule_fi_mr_ar_aging_seg r
      WHERE NVL(r.valid_fr, '202401') <= @dt_month
        AND NVL(r.valid_to, '999999') >= @dt_month
@@ -1649,15 +1709,6 @@ ar_business_mapping AS (
       LEFT JOIN ar_busdept_pick bd
         ON bd.fact_key = b.fact_key
 ),
--- 聚合公司本位币配置。
-company_dim AS (
-    SELECT system_src
-         , bukrs
-         , MAX(waers) AS waers
-      FROM src_t001
-     GROUP BY system_src
-            , bukrs
-),
 -- 仅保留语言为1的利润中心文本，并按系统/利润中心聚合。
 profitcenter_dim AS (
     SELECT system_src
@@ -1722,8 +1773,8 @@ SELECT @dt_month
      , ch.com_3rd_name AS channel_l3_name
      , tc.tov_channel_code
      , tc.tov_channel_name
-     , ch.cust_group_ccc_code AS cc_cust_group_code
-     , ch.cust_group_ccc_name AS cc_cust_group_name
+     , cc.crg_cust_group_code AS cc_cust_group_code
+     , cc.crg_cust_group_name AS cc_cust_group_name
      -- 客商和供应商均按应收渠道分组规则取值，未命中时使用传统零售默认值。
      , CASE
            WHEN nf.fact_key IS NOT NULL THEN nf.onoffline_code
@@ -1748,8 +1799,8 @@ SELECT @dt_month
      , a.pay_reason_code
      , COALESCE(co.waers, '') AS bcy_code
      , a.qcy_code
-     , a.bcy_amt
-     , a.qcy_amt
+     , ROUND(a.bcy_amt ,2) AS bcy_amt
+     , ROUND(a.qcy_amt ,2) AS qcy_amt
      , a.aging_days
      -- 账龄分段未匹配或配置值为空时，统一归入5年以上。
      , COALESCE(NULLIF(TRIM(seg.aging_seg_code), ''), '9') AS aging_seg_code
@@ -1835,6 +1886,13 @@ SELECT @dt_month
        AND ch.cust_supp_type = CASE
                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
                                   ELSE 'S'
+                              END
+      LEFT JOIN customer_ccc_group_dim cc
+        ON cc.company_code_mdg = NULLIF(LTRIM(TRIM(a.company_code), '0'), '')
+       AND cc.cust_sap_code = CASE
+                                  WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
+                                      THEN a.cust_branch_code
+                                  ELSE a.cust_head_code
                               END
       LEFT JOIN customer_supplier_dim ci
         ON ci.cust_sap_code = CASE
@@ -1997,6 +2055,39 @@ src_t001 AS (
     SELECT 'S810' AS system_src, bukrs, ktopl, waers
       FROM ods.odss810_t001
 ),
+-- S610统一读取610客户端TCURX并按币种去重计算转换因子；currdec缺失或无效时因子为1。
+s610_tcurx_factor AS (
+    SELECT UPPER(TRIM(tx.currkey)) AS currkey
+         , CASE
+               WHEN MAX(CASE
+                            WHEN tx.currdec IS NOT NULL
+                             AND tx.currdec >= 0
+                             AND tx.currdec <= 9
+                                THEN CAST(tx.currdec AS INT)
+                        END) IS NULL
+                   THEN 1
+               ELSE POW(
+                        10
+                      , 2 - MAX(CASE
+                                    WHEN tx.currdec IS NOT NULL
+                                     AND tx.currdec >= 0
+                                     AND tx.currdec <= 9
+                                        THEN CAST(tx.currdec AS INT)
+                                END)
+                    )
+           END AS conversion_factor
+      FROM ods.odss810_tcurx tx
+     GROUP BY UPPER(TRIM(tx.currkey))
+),
+-- 聚合公司本位币配置，供凭证明细和总账余额按S610公司取得本位币。
+company_dim AS (
+    SELECT system_src
+         , bukrs
+         , MAX(waers) AS waers
+      FROM src_t001
+     GROUP BY system_src
+            , bukrs
+),
 -- 汇总六套SAP公司科目及统驭标识，用于识别统驭/非统驭科目。
 src_skb1 AS (
     SELECT 'S600' AS system_src, bukrs, saknr, mitkz
@@ -2144,41 +2235,49 @@ balance_detail AS (
          , g.bus_range_code
          , g.qcy_code
          , g.ods_src
-         , (
-               IFNULL(g.hslvt, 0)
-               + CASE WHEN @fiscal_month >= '01' THEN IFNULL(g.hsl01, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '02' THEN IFNULL(g.hsl02, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '03' THEN IFNULL(g.hsl03, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '04' THEN IFNULL(g.hsl04, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '05' THEN IFNULL(g.hsl05, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '06' THEN IFNULL(g.hsl06, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '07' THEN IFNULL(g.hsl07, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '08' THEN IFNULL(g.hsl08, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '09' THEN IFNULL(g.hsl09, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '10' THEN IFNULL(g.hsl10, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '11' THEN IFNULL(g.hsl11, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '12' THEN IFNULL(g.hsl12, 0) ELSE 0 END
-           ) AS bcy_amt
-         , (
-               IFNULL(g.tslvt, 0)
-               + CASE WHEN @fiscal_month >= '01' THEN IFNULL(g.tsl01, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '02' THEN IFNULL(g.tsl02, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '03' THEN IFNULL(g.tsl03, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '04' THEN IFNULL(g.tsl04, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '05' THEN IFNULL(g.tsl05, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '06' THEN IFNULL(g.tsl06, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '07' THEN IFNULL(g.tsl07, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '08' THEN IFNULL(g.tsl08, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '09' THEN IFNULL(g.tsl09, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '10' THEN IFNULL(g.tsl10, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '11' THEN IFNULL(g.tsl11, 0) ELSE 0 END
-               + CASE WHEN @fiscal_month >= '12' THEN IFNULL(g.tsl12, 0) ELSE 0 END
-           ) AS qcy_amt
+         , (ROUND(IFNULL(g.hslvt, 0), 2)
+         + CASE WHEN @fiscal_month >= '01' THEN ROUND(IFNULL(g.hsl01, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '02' THEN ROUND(IFNULL(g.hsl02, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '03' THEN ROUND(IFNULL(g.hsl03, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '04' THEN ROUND(IFNULL(g.hsl04, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '05' THEN ROUND(IFNULL(g.hsl05, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '06' THEN ROUND(IFNULL(g.hsl06, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '07' THEN ROUND(IFNULL(g.hsl07, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '08' THEN ROUND(IFNULL(g.hsl08, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '09' THEN ROUND(IFNULL(g.hsl09, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '10' THEN ROUND(IFNULL(g.hsl10, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '11' THEN ROUND(IFNULL(g.hsl11, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '12' THEN ROUND(IFNULL(g.hsl12, 0), 2) ELSE 0 END)
+         * CASE WHEN g.system_src = 'S610' THEN COALESCE(cf.conversion_factor, 1) ELSE 1 END AS bcy_amt
+         -- S610的tsl按余额记录交易币rtcur转换，不能复用本位币因子。
+         , (ROUND(IFNULL(g.tslvt, 0), 2)
+         + CASE WHEN @fiscal_month >= '01' THEN ROUND(IFNULL(g.tsl01, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '02' THEN ROUND(IFNULL(g.tsl02, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '03' THEN ROUND(IFNULL(g.tsl03, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '04' THEN ROUND(IFNULL(g.tsl04, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '05' THEN ROUND(IFNULL(g.tsl05, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '06' THEN ROUND(IFNULL(g.tsl06, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '07' THEN ROUND(IFNULL(g.tsl07, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '08' THEN ROUND(IFNULL(g.tsl08, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '09' THEN ROUND(IFNULL(g.tsl09, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '10' THEN ROUND(IFNULL(g.tsl10, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '11' THEN ROUND(IFNULL(g.tsl11, 0), 2) ELSE 0 END
+         + CASE WHEN @fiscal_month >= '12' THEN ROUND(IFNULL(g.tsl12, 0), 2) ELSE 0 END)
+         * CASE WHEN g.system_src = 'S610' THEN COALESCE(tf.conversion_factor, 1) ELSE 1 END AS qcy_amt
       FROM src_gl_balance g
      INNER JOIN gl_account_cfg c
         ON c.system_src = g.system_src
        AND c.company_code = g.company_code
        AND c.acct_code = g.acct_src_code
+      LEFT JOIN company_dim co
+        ON co.system_src = g.system_src
+       AND co.bukrs = g.company_code
+      LEFT JOIN s610_tcurx_factor cf
+        ON g.system_src = 'S610'
+       AND cf.currkey = UPPER(TRIM(co.waers))
+      LEFT JOIN s610_tcurx_factor tf
+        ON g.system_src = 'S610'
+       AND tf.currkey = UPPER(TRIM(g.qcy_code))
 ),
 -- 按余额粒度汇总，并保留至少一个币种非零的余额组合。
 balance_agg AS (
@@ -2208,8 +2307,8 @@ balance_agg AS (
 aging_seg_cfg AS (
     SELECT r.aging_seg_code
          , r.aging_seg_name
-         , CAST(r.aging_seg_fr AS DECIMALV3(27, 9)) AS aging_seg_fr
-         , CAST(r.aging_seg_to AS DECIMALV3(27, 9)) AS aging_seg_to
+         , r.aging_seg_fr  AS aging_seg_fr
+         , r.aging_seg_to  AS aging_seg_to
       FROM dim.dim_rule_fi_mr_ar_aging_seg r
      WHERE NVL(r.valid_fr, '202401') <= @dt_month
        AND NVL(r.valid_to, '999999') >= @dt_month
@@ -2224,15 +2323,6 @@ acct_mapping AS (
        AND NVL(a.valid_to, '999999') >= @dt_month
      GROUP BY a.acct_src_code
             , a.system_src
-),
--- 聚合公司本位币配置。
-company_dim AS (
-    SELECT system_src
-         , bukrs
-         , MAX(waers) AS waers
-      FROM src_t001
-     GROUP BY system_src
-            , bukrs
 ),
 -- 仅保留语言为1的利润中心文本，并按系统/利润中心聚合。
 profitcenter_dim AS (
@@ -2393,9 +2483,9 @@ SELECT @dt_month
      , NULL AS pay_reason_code
      , co.waers AS bcy_code
      , b.qcy_code
-     , CAST(b.bcy_amt AS DECIMALV3(27, 9)) AS bcy_amt
-     , CAST(b.qcy_amt AS DECIMALV3(27, 9)) AS qcy_amt
-     , CAST(1 AS DECIMALV3(27, 9)) AS aging_days
+     , ROUND(b.bcy_amt,2) AS bcy_amt
+     , ROUND(b.qcy_amt,2) AS qcy_amt
+     , 1  AS aging_days
      -- 账龄分段未匹配或配置值为空时，统一归入5年以上。
      , COALESCE(NULLIF(TRIM(seg.aging_seg_code), ''), '9') AS aging_seg_code
      , COALESCE(NULLIF(TRIM(seg.aging_seg_name), ''), '5年以上') AS aging_seg_name
