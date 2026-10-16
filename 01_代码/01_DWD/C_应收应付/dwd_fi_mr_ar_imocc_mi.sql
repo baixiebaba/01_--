@@ -1,10 +1,11 @@
 
 /*
 -- ============================================================================
--- 最新版修改记录： 20260917 ADD BY shiqingfeng.ex 新增
--- 上一版修改记录：
+-- 最新版修改记录： 20261014 MODIFY 替换MDG客户主数据及对方公司映射表为客商大表
+-- 上一版修改记录： 20260917 ADD BY shiqingfeng.ex 新增
 -- 目标表：国际营销应收占用明细表 test.dwd_fi_mr_ar_imocc_mi
 -- 修改记录：最新修改记录放最上面
+--   20261014 MODIFY 替换MDG客户主数据及对方公司映射表为客商大表
 --   20260917 ADD BY shiqingfeng.ex 新增
 -- ============================================================================
 */
@@ -87,46 +88,10 @@ product_category_dim AS (
             , prdctgy
             , prdctgy_zh
 ),
--- 汇总S810客户主数据，取得MDG统一客商编码。
-s810_customer_dim AS (
-    SELECT kunnr
-      , MAX(zkhjc) AS name1
-      , MAX(kunnrx) AS zkunnr_mdg
-   FROM (
-      SELECT kunnr
-        , kunnrx
-        , katr1
-        , CASE
-           WHEN name1 IS NULL OR TRIM(name1) = ''
-           THEN CASE WHEN TRIM(zkhjc) = '' THEN NULL ELSE zkhjc END
-           ELSE name1
-          END AS zkhjc
-        FROM dw.dwfi_im_td_customer_master_basic_infor
-       WHERE kunnrx NOT LIKE 'G%'
-       GROUP BY kunnr
-        , kunnrx
-        , katr1
-        , CASE
-           WHEN name1 IS NULL OR TRIM(name1) = ''
-           THEN CASE WHEN TRIM(zkhjc) = '' THEN NULL ELSE zkhjc END
-           ELSE name1
-          END
-     ) kk
-  GROUP BY kunnr
-
-     UNION ALL
-
-    SELECT saknr
-         , MAX(txt20) AS name1
-         , '' AS zkunnr_mdg
-      FROM ods.odsslt_s810_skat
-     WHERE MANDT = '810'
-       AND SPRAS = '1'
-    GROUP BY saknr
-),
--- 汇总MDG客商基础信息，提供国家和一至三级公司分类。
-customer_base_dim AS (
-    SELECT LTRIM(cust_code, '0') AS cust_code
+-- 汇总客商大表，按S810客户编码去重并提供客商名称、国家、公司分类和对方公司。
+customer_dim AS (
+    SELECT NULLIF(LTRIM(TRIM(cust_s810_code), '0'), '') AS cust_s810_code
+         , MAX(cust_name) AS name1
          , MAX(country_code) AS country_code
          , MAX(country_name) AS country_name
          , MAX(com_1st_code) AS com_1st_code
@@ -135,8 +100,24 @@ customer_base_dim AS (
          , MAX(com_2nd_name) AS com_2nd_name
          , MAX(com_3rd_code) AS com_3rd_code
          , MAX(com_3rd_name) AS com_3rd_name
-      FROM dw.dim_customer_base_info_dd
-     GROUP BY LTRIM(cust_code, '0')
+         , MAX(
+               COALESCE(
+                   NULLIF(TRIM(cp_company_mr_code), '')
+                 , NULLIF(TRIM(cp_company_code), '')
+               )
+           ) AS cp_company_code
+      FROM dim.dim_fi_mr_customer_dd
+     WHERE NULLIF(LTRIM(TRIM(cust_s810_code), '0'), '') IS NOT NULL
+     GROUP BY NULLIF(LTRIM(TRIM(cust_s810_code), '0'), '')
+),
+-- 汇总S810科目文本，作为客商大表未匹配时的名称兜底。
+s810_account_name_dim AS (
+    SELECT NULLIF(LTRIM(TRIM(saknr), '0'), '') AS cust_s810_code
+         , MAX(txt20) AS name1
+      FROM ods.odsslt_s810_skat
+     WHERE mandt = '810'
+       AND spras = '1'
+     GROUP BY NULLIF(LTRIM(TRIM(saknr), '0'), '')
 ),
 -- 汇总客户账期映射，未匹配到描述时由主查询回退为“其他”。
 payment_term_dim AS (
@@ -144,21 +125,6 @@ payment_term_dim AS (
          , MAX(col_ztermc) AS zterm_c
       FROM ods.odsmf_cm_tab1065
      GROUP BY col_zterm
-),
--- 汇总客商对方公司映射，优先使用管理会计对方公司编码。
-cp_company_dim AS (
-    SELECT LTRIM(cust_code, '0') AS cust_code
-         , MAX(
-               COALESCE(
-                   NULLIF(TRIM(cp_company_code_mr), '')
-                 , TRIM(cp_company_code)
-               )
-           ) AS cp_company_code
-      FROM dim.dim_rule_fi_mr_cust2ctp_mapping
-     WHERE cust_type_code = 'C'
-       AND NVL(valid_fr, '202401') <= @dt_month
-       AND NVL(valid_to, '999999') >= @dt_month
-     GROUP BY LTRIM(cust_code, '0')
 ),
 -- 读取参数月份ACT国际营销应收占用事实，先清理三类金额均为0的垃圾数据，再按业务维度汇总金额。
 imocc_source AS (
@@ -231,18 +197,18 @@ imocc_enriched AS (
          , CASE WHEN pt.zterm_c IS NULL THEN '其他' ELSE pt.zterm_c END AS cust_pay_term
          , a.extent AS data_scope_code
          , LTRIM(a.kunnr, '0') AS cust_code
-         , s8.name1 AS cust_name
+         , COALESCE(c.name1, s8.name1) AS cust_name
          , a.custfundcode AS cust_branch_code
          , a.custfundname AS cust_branch_name
-         , cp.cp_company_code
-         , cb.country_code
-         , cb.country_name
-         , cb.com_1st_code AS channel_l1_code
-         , cb.com_1st_name AS channel_l1_name
-         , cb.com_2nd_code AS channel_l2_code
-         , cb.com_2nd_name AS channel_l2_name
-         , cb.com_3rd_code AS channel_l3_code
-         , cb.com_3rd_name AS channel_l3_name
+         , c.cp_company_code
+         , c.country_code
+         , c.country_name
+         , c.com_1st_code AS channel_l1_code
+         , c.com_1st_name AS channel_l1_name
+         , c.com_2nd_code AS channel_l2_code
+         , c.com_2nd_name AS channel_l2_name
+         , c.com_3rd_code AS channel_l3_code
+         , c.com_3rd_name AS channel_l3_name
          , NULL AS bus_range_code
          , NULL AS bus_range_name
          , a.prdln AS src_profitcenter_code
@@ -259,14 +225,12 @@ imocc_enriched AS (
         ON g.grp = a.grp
       LEFT JOIN product_category_dim p
         ON p.prdln = a.prdln
-      LEFT JOIN s810_customer_dim s8
-        ON s8.kunnr = a.kunnr
-      LEFT JOIN customer_base_dim cb
-        ON cb.cust_code = LTRIM(s8.zkunnr_mdg, '0')
+      LEFT JOIN customer_dim c
+        ON c.cust_s810_code = NULLIF(LTRIM(TRIM(a.kunnr), '0'), '')
+      LEFT JOIN s810_account_name_dim s8
+        ON s8.cust_s810_code = NULLIF(LTRIM(TRIM(a.kunnr), '0'), '')
       LEFT JOIN payment_term_dim pt
         ON pt.zterm = a.zterm
-      LEFT JOIN cp_company_dim cp
-        ON cp.cust_code = LTRIM(a.kunnr, '0')
 )
 SELECT @dt_month AS dt_month
      , LEFT(@dt_month, 4) AS `year`
