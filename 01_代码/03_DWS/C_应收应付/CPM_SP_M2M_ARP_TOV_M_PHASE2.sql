@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_M2S_ARP_TOV_M_PHASE2(
+CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
     P_SCENARIO   IN VARCHAR2
   , P_PERIODO    IN VARCHAR2
   , P_AZIENDA    IN VARCHAR2
@@ -9,10 +9,10 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2S_ARP_TOV_M_PHASE2(
   最后更新时间：20261018
   本次修改：ARPM02与IMOCC先汇总后按公司、客商、利润中心匹配收入；未匹配收入追加。
             D_BG统一后置映射，增加多事业部客户的负周转行剔除规则。
-  名称：CPM_SP_M2S_ARP_TOV_M_PHASE2
+  名称：CPM_SP_M2M_ARP_TOV_M_PHASE2
   用途：装载应收周转计算汇总表
   源表：AW_MR9_ARPM02_000001、DWD_FI_MR_AR_IMOCC_MI、AW_MR9_REVM01_000001、AW_MR8_CPRS01_000001
-  目标表：AW_MR8_ARPS01_000001
+  目标表：AW_MR9_ARPM03_000001
   版本信息：最新修改记录放最上面
   **************************************************************************/
   V_SCENARIO   VARCHAR2(30);
@@ -53,12 +53,20 @@ BEGIN
      )
      AND ELEM IN (
            SELECT COD_AZIENDA
-             FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
-            WHERE VALID_FR <= V_YEARMONTH
-              AND NVL(VALID_TO, '999999') >= V_YEARMONTH
+             FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+            WHERE A.VALID_FR <= V_YEARMONTH
+              AND NVL(A.VALID_TO, '999999') >= V_YEARMONTH
               AND (
                     P_BG = 'ALL'
-                 OR INSTR(',' || P_BG || ',', ',' || COD_BG || ',') > 0
+                 OR INSTR(',' || P_BG || ',', ',' || A.COD_BG || ',') > 0
+              )
+              AND A.COD_BG NOT LIKE 'CXC%'
+              AND A.COD_BG IN (
+                    SELECT C.COD_BG
+                      FROM TGK_FIMA_HISENSE.AW_RUL_COSMAP_000001 C
+                     WHERE C.AR_TOV_FLAG = 'Y'
+                       AND C.VALID_FR <= V_YEARMONTH
+                       AND NVL(C.VALID_TO, '999999') >= V_YEARMONTH
               )
      )
      AND ELEM IN (
@@ -89,13 +97,13 @@ BEGIN
   INSERT INTO ZTAB_CPM_LOG(
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
-      'CPM_SP_M2S_ARP_TOV_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER,
+      'CPM_SP_M2M_ARP_TOV_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER,
       V_SCENARIO, V_PERIODO, V_AZIENDA
   );
   COMMIT;
 
   -- 删除当前批次未锁定事业部的本过程数据，锁定事业部保留既有结果且不参与重算。
-  DELETE FROM AW_MR8_ARPS01_000001 D
+  DELETE FROM AW_MR9_ARPM03_000001 D
    WHERE COD_SCENARIO = V_SCENARIO
      AND COD_PERIODO = V_PERIODO
      AND COD_AZIENDA IN (
@@ -103,7 +111,7 @@ BEGIN
              FROM SESSION_AZIENDA_LIST
             WHERE SESSION_ID = V_SESSION_ID
      )
-     AND PROVENIENZA = 'CPM_SP_M2S_ARP_TOV_M_PHASE2'
+     AND PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M_PHASE2'
      AND NOT EXISTS (
            SELECT 1
              FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
@@ -117,14 +125,14 @@ BEGIN
   INSERT INTO ZTAB_CPM_LOG(
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
-      'CPM_SP_M2S_ARP_TOV_M_PHASE2', '当前批次删除完成', SYSDATE, SESSION_USER,
+      'CPM_SP_M2M_ARP_TOV_M_PHASE2', '当前批次删除完成', SYSDATE, SESSION_USER,
       V_SCENARIO, V_PERIODO, V_AZIENDA
   );
 
   -- ============================================================================
   -- 目标表装载：先汇总周转，再匹配收入；事业部映射及负周转剔除均在合并后执行。
   -- ============================================================================
-  INSERT INTO AW_MR8_ARPS01_000001(
+  INSERT INTO AW_MR9_ARPM03_000001(
       OID
     , COD_SCENARIO
     , COD_PERIODO
@@ -175,16 +183,28 @@ BEGIN
        AND NVL(VALID_TO, '999999') >= V_YEARMONTH
      GROUP BY LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0')
   ),
-  -- 账套事业部映射：保留公司在P_BG范围内匹配到的全部事业部，后续与利润中心事业部比较。
+  -- 周转事业部范围：仅保留当前期间AR_TOV_FLAG为Y的有效事业部。
+  TOV_BG_SCOPE AS (
+    SELECT DISTINCT C.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_COSMAP_000001 C
+     WHERE C.AR_TOV_FLAG = 'Y'
+       AND C.VALID_FR <= V_YEARMONTH
+       AND NVL(C.VALID_TO, '999999') >= V_YEARMONTH
+  ),
+  -- 账套事业部映射：公司事业部必须属于有效周转事业部范围。
   ATS_BG_MAP AS (
-    SELECT COD_AZIENDA
-         , COD_BG
-      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 
-     WHERE VALID_FR <= V_YEARMONTH
-       AND NVL(VALID_TO, '999999') >= V_YEARMONTH
-       AND COD_BG NOT LIKE 'CXC%'
+    SELECT A.COD_AZIENDA
+         , A.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+     WHERE A.VALID_FR <= V_YEARMONTH
+       AND NVL(A.VALID_TO, '999999') >= V_YEARMONTH
+       AND A.COD_BG IN (
+           SELECT COD_BG
+             FROM TOV_BG_SCOPE
+       )
+       AND A.COD_BG NOT LIKE 'CXC%'
        AND (P_BG = 'ALL'
-          OR INSTR(',' || P_BG || ',', ',' || COD_BG || ',') > 0)
+          OR INSTR(',' || P_BG || ',', ',' || A.COD_BG || ',') > 0)
   ),
   -- 利润中心所属事业部映射：保留利润中心在P_BG范围内匹配到的全部事业部，最终与公司事业部比较。
   PCR_BG_MAP AS (
@@ -193,6 +213,10 @@ BEGIN
       FROM TGK_FIMA_HISENSE.AW_RUL_PCRMAP_000001 P
      WHERE P.VALID_FR <= V_YEARMONTH
        AND NVL(P.VALID_TO, '999999') >= V_YEARMONTH
+       AND P.COD_BG IN (
+           SELECT COD_BG
+             FROM TOV_BG_SCOPE
+       )
        AND P.COD_BG NOT LIKE 'CXC%'
        AND (
              P_BG = 'ALL'
@@ -856,50 +880,31 @@ BEGIN
        AND T.COD_PERIODO = V_PERIODO
        AND T.COD_CONTO = 'ZAW_M2S_LOCK'
   ),
-  -- 先按事业部汇总周转净额：收入、CPRS等AR_AMT为0的追加记录不会单独形成周转事业部。
+  -- 先按主户和完整事业部汇总周转净额：负数剔除使用CUST_HEAD_CODE，收入、CPRS等AR_AMT为0的追加记录不会单独形成周转事业部。
   BG_TURNOVER_NET AS (
     SELECT M.COD_SCENARIO
          , M.COD_PERIODO
          , M.COD_AZIENDA
          , CASE
-               WHEN TRIM(M.CUST_CODE) IS NULL THEN NULL
-               ELSE NVL(LTRIM(TRIM(M.CUST_CODE), '0'), '0')
+               WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
+               ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
            END AS CUST_MATCH_CODE
          , M.COD_CATEGORIA
          , M.D_BG
          , SUM(M.AR_AMT) AS AR_AMT
       FROM MAPPED_FACT M
-     WHERE TRIM(M.CUST_CODE) IS NOT NULL
+     WHERE TRIM(M.CUST_HEAD_CODE) IS NOT NULL
      GROUP BY M.COD_SCENARIO
             , M.COD_PERIODO
             , M.COD_AZIENDA
             , CASE
-                  WHEN TRIM(M.CUST_CODE) IS NULL THEN NULL
-                  ELSE NVL(LTRIM(TRIM(M.CUST_CODE), '0'), '0')
+                  WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
+                  ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
               END
             , M.COD_CATEGORIA
             , M.D_BG
   ),
-  -- 负周转判断键：保留完整D_BG，仅在窗口分区中按D_BG前五位汇总。
-  NEGATIVE_BG_PREFIX_NET AS (
-    SELECT B.COD_SCENARIO
-         , B.COD_PERIODO
-         , B.COD_AZIENDA
-         , B.CUST_MATCH_CODE
-         , B.COD_CATEGORIA
-         , B.D_BG
-         , B.AR_AMT
-         , SUM(B.AR_AMT) OVER (
-               PARTITION BY B.COD_SCENARIO
-                          , B.COD_PERIODO
-                          , B.COD_AZIENDA
-                          , B.CUST_MATCH_CODE
-                          , B.COD_CATEGORIA
-                          , SUBSTR(B.D_BG, 1, 5)
-           ) AS PREFIX_AR_AMT
-      FROM BG_TURNOVER_NET B
-  ),
-  -- 负事业部明细：前缀窗口净额为负时，保留完整D_BG供最终过滤精确匹配。
+  -- 负周转事业部：按场景、期间、公司、客户、类别和完整事业部汇总AR_AMT，净额小于0即剔除。
   NEGATIVE_BG_TURNOVER AS (
     SELECT B.COD_SCENARIO
          , B.COD_PERIODO
@@ -907,9 +912,34 @@ BEGIN
          , B.CUST_MATCH_CODE
          , B.COD_CATEGORIA
          , B.D_BG
-      FROM NEGATIVE_BG_PREFIX_NET B
-     WHERE B.PREFIX_AR_AMT < 0
- 
+      FROM (
+        SELECT N.COD_SCENARIO
+             , N.COD_PERIODO
+             , N.COD_AZIENDA
+             , N.CUST_MATCH_CODE
+             , N.COD_CATEGORIA
+             , N.D_BG
+             , SUM(N.AR_AMT) OVER (
+                   PARTITION BY N.COD_SCENARIO
+                              , N.COD_PERIODO
+                              , N.COD_AZIENDA
+                              , N.CUST_MATCH_CODE
+                              , N.COD_CATEGORIA
+                              , N.D_BG
+               ) AS BG_AR_AMT
+          FROM BG_TURNOVER_NET N
+      ) B
+     WHERE B.BG_AR_AMT < 0
+       AND EXISTS (
+           SELECT 1
+             FROM BG_TURNOVER_NET X
+            WHERE X.COD_SCENARIO = B.COD_SCENARIO
+              AND X.COD_PERIODO = B.COD_PERIODO
+              AND X.COD_AZIENDA = B.COD_AZIENDA
+              AND X.CUST_MATCH_CODE = B.CUST_MATCH_CODE
+              AND X.COD_CATEGORIA = B.COD_CATEGORIA
+              AND X.D_BG <> B.D_BG
+       )
   ),
   -- 排除负净额事业部的整行数据；单事业部负数及净额非负事业部均保留。
   FILTERED_FACT AS (
@@ -957,8 +987,8 @@ BEGIN
               AND N.COD_CATEGORIA = M.COD_CATEGORIA
               AND N.D_BG = M.D_BG
               AND N.CUST_MATCH_CODE = CASE
-                                          WHEN TRIM(M.CUST_CODE) IS NULL THEN NULL
-                                          ELSE NVL(LTRIM(TRIM(M.CUST_CODE), '0'), '0')
+                                          WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
+                                          ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
                                       END
      )
        AND NOT EXISTS (
@@ -1002,10 +1032,20 @@ BEGIN
        , SUM(F6_INVSM_AMT) AS F6_INVSM_AMT
        , SUM(F7_GSUB_AMT) AS F7_GSUB_AMT
        , SUM(F8_ADJ_AMT) AS F8_ADJ_AMT
-       , 'CPM_SP_M2S_ARP_TOV_M_PHASE2' AS PROVENIENZA
+       , 'CPM_SP_M2M_ARP_TOV_M_PHASE2' AS PROVENIENZA
        , SYSDATE AS DATEUPD
        , SESSION_USER AS USERUPD
     FROM FILTERED_FACT
+   WHERE NVL(AR_AMT, 0) <> 0
+      OR NVL(REV_AMT, 0) <> 0
+      OR NVL(F1_ODUE_AMT, 0) <> 0
+      OR NVL(F2_EPAY_AMT, 0) <> 0
+      OR NVL(F3_ECR_AMT, 0) <> 0
+      OR NVL(F4_UREB_AMT, 0) <> 0
+      OR NVL(F5_UFEE_AMT, 0) <> 0
+      OR NVL(F6_INVSM_AMT, 0) <> 0
+      OR NVL(F7_GSUB_AMT, 0) <> 0
+      OR NVL(F8_ADJ_AMT, 0) <> 0
    GROUP BY COD_SCENARIO, COD_PERIODO, D_BG, COD_AZIENDA, COD_CONTO, COD_CATEGORIA
           , GRP_SCOPE, CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
           , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_NAME, NATURE_L2_NAME
@@ -1015,7 +1055,7 @@ BEGIN
   INSERT INTO ZTAB_CPM_LOG(
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
-      'CPM_SP_M2S_ARP_TOV_M_PHASE2', '目标表装载完成', SYSDATE, SESSION_USER,
+      'CPM_SP_M2M_ARP_TOV_M_PHASE2', '目标表装载完成', SYSDATE, SESSION_USER,
       V_SCENARIO, V_PERIODO, V_AZIENDA
   );
 
@@ -1027,7 +1067,7 @@ BEGIN
   INSERT INTO ZTAB_CPM_LOG(
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
-      'CPM_SP_M2S_ARP_TOV_M_PHASE2', 'END 执行完成', SYSDATE, SESSION_USER,
+      'CPM_SP_M2M_ARP_TOV_M_PHASE2', 'END 执行完成', SYSDATE, SESSION_USER,
       V_SCENARIO, V_PERIODO, V_AZIENDA
   );
   COMMIT;
@@ -1039,10 +1079,10 @@ EXCEPTION
     INSERT INTO ZTAB_CPM_LOG(
         CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
     ) VALUES (
-        'CPM_SP_M2S_ARP_TOV_M_PHASE2', 'ERROR 执行报错',
+        'CPM_SP_M2M_ARP_TOV_M_PHASE2', 'ERROR 执行报错',
         V_ERROR_COD || ':' || SUBSTR(V_ERROR_MSG, 1, 3900),
         SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA
     );
     COMMIT;
     RAISE;
-END CPM_SP_M2S_ARP_TOV_M_PHASE2;
+END CPM_SP_M2M_ARP_TOV_M_PHASE2;
