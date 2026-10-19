@@ -547,13 +547,13 @@ BEGIN
              , COD_DEST3
              , D_SALE_DEPT
              , SRC_DETAIL
-             , ORG_REV
+             , 0-ORG_REV AS ORG_REV
              , POLICY_AMT
-             , MAP_DIS1
-             , MAP_DIS3
-             , MAP_DIS4
-             , MAP_DIS30
-             , MAP_DIS34
+             , 0-MAP_DIS1 AS MAP_DIS1
+             , 0-MAP_DIS3 AS MAP_DIS3
+             , 0-MAP_DIS4 AS MAP_DIS4
+             , 0-MAP_DIS30 AS MAP_DIS30
+             , 0-MAP_DIS34 AS MAP_DIS34
           FROM AW_MR9_REVM01_000001
          WHERE COD_SCENARIO = V_SCENARIO
            AND COD_PERIODO = V_PERIODO

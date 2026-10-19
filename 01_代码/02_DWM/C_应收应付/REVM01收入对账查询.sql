@@ -1,0 +1,575 @@
+
+WITH
+/* 公司层级来源：复刻存储过程对 V_REF_AZIENDA 的 HIE=10 公司筛选。 */
+/* 场景、期间、公司和事业部参数均直接写在各源表的 WHERE 限制中，参考坏账校验查询写法。 */
+REF_AZIENDA AS (
+    SELECT R.HIE
+         , R.NODE
+         , R.ELEM
+      FROM TGK_FIMA_HISENSE.V_REF_AZIENDA R
+),
+/* 当前期间有效的周转事业部范围。 */
+TOV_BG_SCOPE AS (
+    SELECT DISTINCT C.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_COSMAP_000001 C
+     WHERE C.AR_TOV_FLAG = 'Y'
+       AND C.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(C.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND C.COD_BG IN (${$ANL_D_BG.code})
+),
+/* 当前查询实际纳入的账套：公司入参、周转事业部、D2M进数规则和锁定规则同时生效。 */
+AZI_SCOPE AS (
+    SELECT DISTINCT R.ELEM AS COD_AZIENDA
+      FROM REF_AZIENDA R
+     WHERE R.HIE = '10'
+       AND R.ELEM IN (${$Entity.code})
+       AND EXISTS (
+           SELECT 1
+             FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+            WHERE A.COD_AZIENDA = R.ELEM
+              AND A.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+              AND NVL(A.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+              AND A.COD_BG IN (${$ANL_D_BG.code})
+              AND A.COD_BG NOT LIKE 'CXC%'
+              AND EXISTS (
+                  SELECT 1
+                    FROM TOV_BG_SCOPE C
+                   WHERE C.COD_BG = A.COD_BG
+              )
+       )
+       AND EXISTS (
+           SELECT 1
+             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 D
+            WHERE D.COD_AZIENDA = R.ELEM
+              AND D.ARP_FLAG = 'Y'
+              AND D.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+              AND NVL(D.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+              AND D.COD_CONTO = 'ZAW_D2M_IN'
+       )
+       AND NOT EXISTS (
+           SELECT 1
+             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 L
+            WHERE L.COD_AZIENDA = R.ELEM
+              AND L.ARP_FLAG = 'Y'
+              AND L.COD_SCENARIO = ${$Scenario.code}
+              AND L.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
+              AND L.COD_CONTO = 'ZAW_D2M_LOCK'
+       )
+),
+/* 收入利润中心标准化规则：与存储过程一致，仅按源利润中心和有效期匹配。 */
+PROFIT_CENTER_RULE AS (
+    SELECT LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
+         , MAX(M.PROFITCENTER_CODE) AS PROFITCENTER_CODE
+      FROM DIM_RULE_FI_MR_AR_PROFIT_MAPPING M
+     WHERE M.BATCH_ID = 2
+       AND M.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(M.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+     GROUP BY LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0')
+),
+/* 账套事业部映射：仅保留当前期间有效且属于周转事业部范围的公司映射。 */
+ATS_BG_MAP AS (
+    SELECT DISTINCT A.COD_AZIENDA
+         , A.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+     WHERE A.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(A.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND A.COD_BG NOT LIKE 'CXC%'
+       AND A.COD_BG IN (${$ANL_D_BG.code})
+       AND EXISTS (
+           SELECT 1
+             FROM TOV_BG_SCOPE C
+            WHERE C.COD_BG = A.COD_BG
+       )
+),
+/* 利润中心事业部映射：与存储过程一致，按去前导零后的利润中心匹配。 */
+PCR_BG_MAP AS (
+    SELECT DISTINCT LTRIM(TRIM(P.COD_DEST2), '0') AS COD_DEST2
+         , P.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_PCRMAP_000001 P
+     WHERE P.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(P.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND P.COD_BG NOT LIKE 'CXC%'
+       AND P.COD_BG IN (${$ANL_D_BG.code})
+       AND EXISTS (
+           SELECT 1
+             FROM TOV_BG_SCOPE C
+            WHERE C.COD_BG = P.COD_BG
+       )
+),
+/* 事业部编码按 ATSMAP/PCRMAP 的过程口径生成，描述统一使用 F_TGK_GET_DIMNAME('D_BG', ...)。 */
+
+/* 日立特殊节点清单：仅用于复刻收入侧集团归属判断。 */
+HITACHI_ELEM AS (
+    SELECT DISTINCT V.ELEM
+      FROM TGK_GB_HISENSE.V_REF_AZIENDA_TV V
+     WHERE V.COD_SCENARIO = ${$Scenario.code}
+       AND V.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
+       AND V.HIE = '30'
+       AND V.NODE = '1730'
+),
+/* 当前场景期间的公司节点关系：复刻存储过程的集团归属判断所需字段。 */
+NODE_MAP AS (
+    SELECT N.COD_SCENARIO
+         , N.COD_PERIODO
+         , N.ELEM
+         , N.NODE
+         , N.NODES
+         , CASE WHEN H.ELEM IS NOT NULL THEN 1 ELSE 0 END AS IS_HITACHI
+         , CASE WHEN H.ELEM IS NOT NULL THEN NVL(N.NODES, N.NODE) ELSE N.NODE END AS SELF_NODE
+         , N.HQ
+      FROM TGK_GB_HISENSE.V_APAR_ELEM_NODE_TAB N
+      LEFT JOIN HITACHI_ELEM H
+        ON H.ELEM = N.ELEM
+     WHERE N.COD_SCENARIO = ${$Scenario.code}
+       AND N.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
+),
+/* REVM01原始收入：按存储过程先对 ORG_REV、MAP_DIS 取负，再计算 REV_AMT。 */
+REVM01_BASE AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , R.CUST_CODE
+         , R.CUST_NAME
+         , R.COD_AZI_CTP
+         , R.SRC_SYSTEM
+         , R.SRC_DETAIL
+         , R.COD_DEST2
+         , R.D_ADJ_TYPE
+         , 0 - R.ORG_REV AS ORG_REV
+         , R.POLICY_AMT
+         , 0 - R.MAP_DIS1 AS MAP_DIS1
+         , 0 - R.MAP_DIS3 AS MAP_DIS3
+         , 0 - R.MAP_DIS4 AS MAP_DIS4
+         , 0 - R.MAP_DIS30 AS MAP_DIS30
+         , 0 - R.MAP_DIS34 AS MAP_DIS34
+         , R.D_SALE_DEPT
+      FROM AW_MR9_REVM01_000001 R
+     WHERE R.COD_SCENARIO = ${$Scenario.code}
+       AND R.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
+       AND R.COD_AZIENDA IN (
+           SELECT A.COD_AZIENDA
+             FROM AZI_SCOPE A
+       )
+       AND R.SRC_DETAIL <> 'BSEG_FLJC'
+       AND R.COD_CATEGORIA NOT IN ('GA00_PA_IN', 'GA00_PA_OUT')
+       AND R.D_ADJ_TYPE NOT IN ('REV_01_210', 'REV_01_212')
+),
+/* 收入明细：复刻集团外过滤、收入利润中心映射和管理口径收入公式。 */
+REVENUE_DETAIL AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , TRIM(R.CUST_CODE) AS CUST_CODE
+         , R.CUST_NAME
+         , R.COD_AZI_CTP AS COD_AZI_CTP
+         , NVL(PM.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ')) AS INCOME_PROFITCENTER_CODE
+         , F_TGK_GET_DIMNAME('DEST2', NVL(PM.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ'))) AS INCOME_PROFITCENTER_NAME
+         , CASE
+               WHEN CUR_NODE.SELF_NODE = CASE
+                   WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE)
+                   ELSE CTP_NODE.NODE
+                 END
+                AND CUR_NODE.HQ = CTP_NODE.HQ THEN 'SUB-子公司'
+               WHEN CUR_NODE.HQ = CTP_NODE.HQ THEN 'GIN-集团内'
+               ELSE 'GEX-集团外'
+           END AS GRP_SCOPE
+         , (CASE WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0 ELSE R.ORG_REV END)
+           - (CASE
+                WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0
+                WHEN R.SRC_DETAIL = 'VBRP' OR R.SRC_SYSTEM IN ('SMS', 'GSMS')
+                    THEN R.POLICY_AMT / CA.CAMBIO_PERIODO
+                ELSE R.POLICY_AMT
+              END)
+           - (CASE
+                WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0
+                WHEN R.SRC_DETAIL = 'VBRP' OR R.SRC_SYSTEM IN ('SMS', 'GSMS')
+                    THEN (NVL(R.MAP_DIS1, 0) + NVL(R.MAP_DIS3, 0)
+                        + NVL(R.MAP_DIS4, 0) + NVL(R.MAP_DIS30, 0)
+                        + NVL(R.MAP_DIS34, 0)) / CA.CAMBIO_PERIODO
+                ELSE NVL(R.MAP_DIS1, 0) + NVL(R.MAP_DIS3, 0)
+                   + NVL(R.MAP_DIS4, 0) + NVL(R.MAP_DIS30, 0)
+                   + NVL(R.MAP_DIS34, 0)
+              END) AS REV_AMT
+      FROM REVM01_BASE R
+      LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
+        ON AZ.COD_AZIENDA = R.COD_AZIENDA
+      LEFT JOIN TGK_FIMA_HISENSE.DATI_CAMBIO CA
+        ON CA.COD_SCENARIO = R.COD_SCENARIO
+       AND CA.COD_PERIODO = R.COD_PERIODO
+       AND CA.COD_VALUTA = AZ.COD_VALUTA
+      LEFT JOIN NODE_MAP CUR_NODE
+        ON CUR_NODE.COD_SCENARIO = R.COD_SCENARIO
+       AND CUR_NODE.COD_PERIODO = R.COD_PERIODO
+       AND CUR_NODE.ELEM = R.COD_AZIENDA
+      LEFT JOIN NODE_MAP CTP_NODE
+        ON CTP_NODE.COD_SCENARIO = R.COD_SCENARIO
+       AND CTP_NODE.COD_PERIODO = R.COD_PERIODO
+       AND CTP_NODE.ELEM = R.COD_AZI_CTP
+      LEFT JOIN PROFIT_CENTER_RULE PM
+        ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(R.COD_DEST2), '0')
+     WHERE CASE
+               WHEN CUR_NODE.SELF_NODE = CASE
+                   WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE)
+                   ELSE CTP_NODE.NODE
+                 END
+                AND CUR_NODE.HQ = CTP_NODE.HQ THEN 'SUB-子公司'
+               WHEN CUR_NODE.HQ = CTP_NODE.HQ THEN 'GIN-集团内'
+               ELSE 'GEX-集团外'
+           END = 'GEX-集团外'
+       AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) IS NOT NULL
+       AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) <> 'ZZZZ'
+),
+/* 收入汇总：按对账展示粒度聚合，避免 REVM01 明细与往来明细直接 JOIN 放大金额。 */
+REVENUE AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , R.CUST_CODE
+         , MAX(R.CUST_NAME) AS CUST_NAME
+         , R.COD_AZI_CTP
+         , R.INCOME_PROFITCENTER_CODE
+         , MAX(R.INCOME_PROFITCENTER_NAME) AS INCOME_PROFITCENTER_NAME
+         , R.GRP_SCOPE
+         , SUM(R.REV_AMT) AS REV_AMT
+      FROM REVENUE_DETAIL R
+     WHERE R.CUST_CODE IS NOT NULL
+       AND NVL(R.REV_AMT, 0) <> 0
+     GROUP BY R.COD_SCENARIO
+            , R.COD_PERIODO
+            , R.COD_AZIENDA
+            , R.CUST_CODE
+            , R.COD_AZI_CTP
+            , R.INCOME_PROFITCENTER_CODE
+            , R.GRP_SCOPE
+),
+/* ARPM02与IMOCC周转来源：只保留过程用于收入匹配的公司、客商和利润中心键。 */
+TURNOVER_SOURCE AS (
+    SELECT A.COD_SCENARIO
+         , A.COD_PERIODO
+         , A.COD_AZIENDA
+         , TRIM(A.CUST_CODE) AS CUST_CODE
+         , A.CUST_NAME
+         , A.CUST_HEAD_CODE
+         , A.COD_DEST2 AS TURNOVER_PROFITCENTER_CODE
+         , 'ZAMOUNT' AS COD_CATEGORIA
+         , NVL(A.BCY_ADJ_INCL_0_AMT, 0) AS AR_AMT
+      FROM AW_MR9_ARPM02_000001 A
+     WHERE A.COD_SCENARIO = ${$Scenario.code}
+       AND A.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
+       AND A.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
+       AND A.COD_DEST2 IS NOT NULL
+       AND A.COD_DEST2 <> 'ZZZZ'
+       AND A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
+
+    UNION ALL
+
+    SELECT A.COD_SCENARIO
+         , A.COD_PERIODO
+         , A.COD_AZIENDA
+         , TRIM(A.CUST_CODE) AS CUST_CODE
+         , A.CUST_NAME
+         , A.CUST_HEAD_CODE
+         , A.COD_DEST2 AS TURNOVER_PROFITCENTER_CODE
+         , 'ZAMOUNT_L2' AS COD_CATEGORIA
+         , NVL(A.BCY_ADJ_INCL_0_AMT, 0) AS AR_AMT
+      FROM AW_MR9_ARPM02_000001 A
+     WHERE A.COD_SCENARIO = ${$Scenario.code}
+       AND A.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
+       AND A.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
+       AND A.COD_DEST2 IS NOT NULL
+       AND A.COD_DEST2 <> 'ZZZZ'
+       AND A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
+
+    UNION ALL
+
+    SELECT ${$Scenario.code} AS COD_SCENARIO
+         , LPAD(${$Period.code}, 2, '0') AS COD_PERIODO
+         , I.COMPANY_CODE AS COD_AZIENDA
+         , TRIM(I.CUST_CODE) AS CUST_CODE
+         , I.CUST_NAME
+         , CAST(NULL AS VARCHAR2(100)) AS CUST_HEAD_CODE
+         , I.PROFITCENTER_CODE AS TURNOVER_PROFITCENTER_CODE
+         , 'ZAMOUNT' AS COD_CATEGORIA
+         , NVL(I.IMOCC_CNY_AMT, 0) AS AR_AMT
+      FROM DWD_FI_MR_AR_IMOCC_MI I
+     WHERE I.DT_MONTH = SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND I.COMPANY_CODE IN ('1740', '2080')
+       AND TRIM(I.CP_COMPANY_CODE) IS NULL
+       AND I.PROFITCENTER_CODE IS NOT NULL
+       AND I.PROFITCENTER_CODE <> 'ZZZZ'
+       AND NVL(I.IMOCC_CNY_AMT, 0) <> 0
+       AND I.COMPANY_CODE IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
+),
+/* 周转利润中心标准化：先按与收入侧相同的利润中心规则取得映射后编码，再进行事业部映射和收入匹配。 */
+TURNOVER_NORMALIZED AS (
+    SELECT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , T.CUST_CODE
+         , T.CUST_NAME
+         , T.CUST_HEAD_CODE
+         , NVL(PM.PROFITCENTER_CODE, T.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_CODE
+         , T.COD_CATEGORIA
+         , T.AR_AMT
+      FROM TURNOVER_SOURCE T
+      LEFT JOIN PROFIT_CENTER_RULE PM
+        ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(T.TURNOVER_PROFITCENTER_CODE), '0')
+),
+/* 周转收入匹配键：使用映射后的利润中心，与收入侧标准化利润中心保持一致。 */
+TURNOVER_KEY AS (
+    SELECT DISTINCT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , T.CUST_CODE
+         , T.TURNOVER_PROFITCENTER_CODE
+      FROM TURNOVER_NORMALIZED T
+     WHERE T.CUST_CODE IS NOT NULL
+       AND T.TURNOVER_PROFITCENTER_CODE IS NOT NULL
+       AND T.TURNOVER_PROFITCENTER_CODE <> 'ZZZZ'
+),
+/* 周转明细按事业部映射汇总，供负周转事业部和锁定事业部过滤使用。 */
+TURNOVER_FACT AS (
+    SELECT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , T.CUST_CODE
+         , T.CUST_NAME
+         , T.CUST_HEAD_CODE
+         , T.TURNOVER_PROFITCENTER_CODE
+         , T.COD_CATEGORIA
+         , PCR.COD_BG
+         , SUM(T.AR_AMT) AS AR_AMT
+      FROM TURNOVER_NORMALIZED T
+      JOIN PCR_BG_MAP PCR
+        ON PCR.COD_DEST2 = LTRIM(TRIM(T.TURNOVER_PROFITCENTER_CODE), '0')
+      JOIN ATS_BG_MAP ATS
+        ON ATS.COD_AZIENDA = T.COD_AZIENDA
+       AND ATS.COD_BG = PCR.COD_BG
+     GROUP BY T.COD_SCENARIO
+            , T.COD_PERIODO
+            , T.COD_AZIENDA
+            , T.CUST_CODE
+            , T.CUST_NAME
+            , T.CUST_HEAD_CODE
+            , T.TURNOVER_PROFITCENTER_CODE
+            , T.COD_CATEGORIA
+            , PCR.COD_BG
+),
+/* 负周转事业部：仅当同一主户、类别存在其他事业部时，按过程规则剔除负净额事业部。 */
+BG_TURNOVER_NET AS (
+    SELECT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , CASE
+               WHEN TRIM(T.CUST_HEAD_CODE) IS NULL THEN NULL
+               ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
+           END AS CUST_MATCH_CODE
+         , T.COD_CATEGORIA
+         , T.COD_BG
+         , SUM(T.AR_AMT) AS AR_AMT
+      FROM TURNOVER_FACT T
+     WHERE TRIM(T.CUST_HEAD_CODE) IS NOT NULL
+     GROUP BY T.COD_SCENARIO
+            , T.COD_PERIODO
+            , T.COD_AZIENDA
+            , CASE
+                  WHEN TRIM(T.CUST_HEAD_CODE) IS NULL THEN NULL
+                  ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
+              END
+            , T.COD_CATEGORIA
+            , T.COD_BG
+),
+NEGATIVE_BG_TURNOVER AS (
+    SELECT B.COD_SCENARIO
+         , B.COD_PERIODO
+         , B.COD_AZIENDA
+         , B.CUST_MATCH_CODE
+         , B.COD_CATEGORIA
+         , B.COD_BG
+      FROM BG_TURNOVER_NET B
+     WHERE B.AR_AMT < 0
+       AND EXISTS (
+           SELECT 1
+             FROM BG_TURNOVER_NET X
+            WHERE X.COD_SCENARIO = B.COD_SCENARIO
+              AND X.COD_PERIODO = B.COD_PERIODO
+              AND X.COD_AZIENDA = B.COD_AZIENDA
+              AND X.CUST_MATCH_CODE = B.CUST_MATCH_CODE
+              AND X.COD_CATEGORIA = B.COD_CATEGORIA
+              AND X.COD_BG <> B.COD_BG
+       )
+),
+/* 当前场景期间锁定的事业部：与过程最终 FILTERED_FACT 的锁定条件一致。 */
+LOCKED_BG AS (
+    SELECT DISTINCT L.D_BG AS COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 L
+     WHERE L.ARP_FLAG = 'Y'
+       AND L.COD_SCENARIO = ${$Scenario.code}
+       AND L.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
+       AND L.COD_CONTO = 'ZAW_M2S_LOCK'
+),
+/* 经过负周转和锁定过滤后，保留收入匹配所需的公司、客商、利润中心、事业部键。 */
+ELIGIBLE_TURNOVER_KEY AS (
+    SELECT DISTINCT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , T.CUST_CODE
+         , T.TURNOVER_PROFITCENTER_CODE
+         , T.COD_BG
+      FROM TURNOVER_FACT T
+     WHERE NOT EXISTS (
+           SELECT 1
+             FROM NEGATIVE_BG_TURNOVER N
+            WHERE N.COD_SCENARIO = T.COD_SCENARIO
+              AND N.COD_PERIODO = T.COD_PERIODO
+              AND N.COD_AZIENDA = T.COD_AZIENDA
+              AND N.COD_CATEGORIA = T.COD_CATEGORIA
+              AND N.COD_BG = T.COD_BG
+              AND N.CUST_MATCH_CODE = CASE
+                                          WHEN TRIM(T.CUST_HEAD_CODE) IS NULL THEN NULL
+                                          ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
+                                      END
+     )
+       AND NOT EXISTS (
+           SELECT 1
+             FROM LOCKED_BG L
+            WHERE L.COD_BG = T.COD_BG
+       )
+),
+/* 收入利润中心自身可映射的事业部：供未匹配收入追加分支使用。 */
+INCOME_BG_KEY AS (
+    SELECT DISTINCT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , R.CUST_CODE
+         , R.INCOME_PROFITCENTER_CODE
+         , PCR.COD_BG
+      FROM REVENUE R
+      JOIN PCR_BG_MAP PCR
+        ON PCR.COD_DEST2 = LTRIM(TRIM(R.INCOME_PROFITCENTER_CODE), '0')
+      JOIN ATS_BG_MAP ATS
+        ON ATS.COD_AZIENDA = R.COD_AZIENDA
+       AND ATS.COD_BG = PCR.COD_BG
+),
+/* 已匹配收入：匹配键存在且周转事业部经过最终过滤后，按事业部展示一行。 */
+MATCHED_RESULT AS (
+    SELECT R.COD_SCENARIO AS SCENARIO
+         , R.COD_PERIODO AS PERIODO
+         , R.COD_AZIENDA AS COMPANY_CODE
+         , R.CUST_CODE
+         , R.CUST_NAME
+         , R.GRP_SCOPE
+         , R.COD_AZI_CTP AS CP_COMPANY_CODE
+         , R.INCOME_PROFITCENTER_CODE
+         , R.INCOME_PROFITCENTER_NAME
+         , T.TURNOVER_PROFITCENTER_CODE
+         , F_TGK_GET_DIMNAME('DEST2', T.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME
+         , T.COD_BG AS BUSINESS_UNIT_CODE
+         , F_TGK_GET_DIMNAME('D_BG', T.COD_BG) AS BUSINESS_UNIT_NAME
+         , R.REV_AMT AS MANAGE_REV_AMT
+         , '已匹配往来利润中心' AS MATCH_FLAG
+      FROM REVENUE R
+      JOIN ELIGIBLE_TURNOVER_KEY T
+        ON T.COD_SCENARIO = R.COD_SCENARIO
+       AND T.COD_PERIODO = R.COD_PERIODO
+       AND T.COD_AZIENDA = R.COD_AZIENDA
+       AND T.CUST_CODE = R.CUST_CODE
+       AND T.TURNOVER_PROFITCENTER_CODE = R.INCOME_PROFITCENTER_CODE
+),
+/* 未匹配收入：复刻过程 UNMATCHED_REVENUE，使用收入自身利润中心映射事业部。 */
+UNMATCHED_RESULT AS (
+    SELECT R.COD_SCENARIO AS SCENARIO
+         , R.COD_PERIODO AS PERIODO
+         , R.COD_AZIENDA AS COMPANY_CODE
+         , R.CUST_CODE
+         , R.CUST_NAME
+         , R.GRP_SCOPE
+         , R.COD_AZI_CTP AS CP_COMPANY_CODE
+         , R.INCOME_PROFITCENTER_CODE
+         , R.INCOME_PROFITCENTER_NAME
+         , CAST(NULL AS VARCHAR2(100)) AS TURNOVER_PROFITCENTER_CODE
+         , CAST(NULL AS VARCHAR2(255)) AS TURNOVER_PROFITCENTER_NAME
+         , B.COD_BG AS BUSINESS_UNIT_CODE
+         , F_TGK_GET_DIMNAME('D_BG', B.COD_BG) AS BUSINESS_UNIT_NAME
+         , R.REV_AMT AS MANAGE_REV_AMT
+         , '未匹配往来利润中心' AS MATCH_FLAG
+      FROM REVENUE R
+      JOIN INCOME_BG_KEY B
+        ON B.COD_SCENARIO = R.COD_SCENARIO
+       AND B.COD_PERIODO = R.COD_PERIODO
+       AND B.COD_AZIENDA = R.COD_AZIENDA
+       AND B.CUST_CODE = R.CUST_CODE
+       AND B.INCOME_PROFITCENTER_CODE = R.INCOME_PROFITCENTER_CODE
+     WHERE NOT EXISTS (
+           SELECT 1
+             FROM TURNOVER_KEY T
+            WHERE T.COD_SCENARIO = R.COD_SCENARIO
+              AND T.COD_PERIODO = R.COD_PERIODO
+              AND T.COD_AZIENDA = R.COD_AZIENDA
+              AND T.CUST_CODE = R.CUST_CODE
+              AND T.TURNOVER_PROFITCENTER_CODE = R.INCOME_PROFITCENTER_CODE
+     )
+       AND NOT EXISTS (
+           SELECT 1
+             FROM LOCKED_BG L
+            WHERE L.COD_BG = B.COD_BG
+       )
+),
+/* 合并两类收入结果，最终只输出过程可落目标表的非零收入记录。 */
+FINAL_RESULT AS (
+    SELECT M.SCENARIO
+         , M.PERIODO
+         , M.COMPANY_CODE
+         , M.CUST_CODE
+         , M.CUST_NAME
+         , M.GRP_SCOPE
+         , M.CP_COMPANY_CODE
+         , M.INCOME_PROFITCENTER_CODE
+         , M.INCOME_PROFITCENTER_NAME
+         , M.TURNOVER_PROFITCENTER_CODE
+         , M.TURNOVER_PROFITCENTER_NAME
+         , M.BUSINESS_UNIT_CODE
+         , M.BUSINESS_UNIT_NAME
+         , M.MANAGE_REV_AMT
+         , M.MATCH_FLAG
+      FROM MATCHED_RESULT M
+    UNION ALL
+    SELECT U.SCENARIO
+         , U.PERIODO
+         , U.COMPANY_CODE
+         , U.CUST_CODE
+         , U.CUST_NAME
+         , U.GRP_SCOPE
+         , U.CP_COMPANY_CODE
+         , U.INCOME_PROFITCENTER_CODE
+         , U.INCOME_PROFITCENTER_NAME
+         , U.TURNOVER_PROFITCENTER_CODE
+         , U.TURNOVER_PROFITCENTER_NAME
+         , U.BUSINESS_UNIT_CODE
+         , U.BUSINESS_UNIT_NAME
+         , U.MANAGE_REV_AMT
+         , U.MATCH_FLAG
+      FROM UNMATCHED_RESULT U
+)
+SELECT F.SCENARIO
+     , F.PERIODO
+     , F.COMPANY_CODE
+     , F.CUST_CODE
+     , F.CUST_NAME
+     , F.GRP_SCOPE
+     , F.CP_COMPANY_CODE
+     , F.INCOME_PROFITCENTER_CODE
+     , F.INCOME_PROFITCENTER_NAME
+     , F.TURNOVER_PROFITCENTER_CODE
+     , F.TURNOVER_PROFITCENTER_NAME
+     , F.BUSINESS_UNIT_CODE
+     , F.BUSINESS_UNIT_NAME
+     , F.MANAGE_REV_AMT
+     , F.MATCH_FLAG
+  FROM FINAL_RESULT F
+ ORDER BY F.COMPANY_CODE
+        , F.CUST_CODE
+        , F.INCOME_PROFITCENTER_CODE
+        , F.TURNOVER_PROFITCENTER_CODE
+        , F.BUSINESS_UNIT_CODE
+;
