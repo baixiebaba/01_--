@@ -1,0 +1,265 @@
+/*
+============================================================================
+REVM01收入校验查询：2026ACT / 08 / 2600 / BG001_BU001
+用途：仅核对REVM01管理口径收入，并按固定参数映射收入利润中心和事业部。
+口径：收入计算复刻CPM_SP_M2M_ARP_TOV_M_PHASE2的REVENUE_CALC，不参与周转匹配。
+参数：场景2026ACT，期间08，公司2600，事业部BG001_BU001；同时保留事业部为空的记录。
+说明：仅输出场景、期间、账套、客商、集团所属范围、对方公司、收入利润中心、往来利润中心、事业部和管理口径收入，管理口径收入按展示粒度汇总。
+版本信息：
+  20261020 重构为独立收入校验，不再读取ARPM02、IMOCC和周转匹配结果。
+  20261020 事业部限制调整为BG001_BU001，并保留事业部为空的映射结果。
+  20261020 按最终展示粒度汇总管理口径收入。
+============================================================================
+*/
+WITH
+-- 公司范围：固定账套2600，不依赖周转输入规则。
+REF_AZIENDA AS (
+    SELECT R.HIE
+         , R.NODE
+         , R.ELEM
+      FROM TGK_FIMA_HISENSE.V_REF_AZIENDA R
+),
+-- 当前查询实际纳入的账套：仅保留HIE=10且为2600的公司。
+AZI_SCOPE AS (
+    SELECT DISTINCT R.ELEM AS COD_AZIENDA
+      FROM REF_AZIENDA R
+     WHERE R.HIE = '10'
+       AND R.ELEM IN ('2600')
+),
+-- 收入利润中心标准化规则：按源利润中心和有效期匹配。
+PROFIT_CENTER_RULE AS (
+    SELECT LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
+         , MAX(M.PROFITCENTER_CODE) AS PROFITCENTER_CODE
+      FROM DIM_RULE_FI_MR_AR_PROFIT_MAPPING M
+     WHERE M.BATCH_ID = 2
+       AND M.VALID_FR <= '202608'
+       AND NVL(M.VALID_TO, '999999') >= '202608'
+     GROUP BY LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0')
+),
+-- 账套事业部映射：限制为BG001_BU001，并保留事业部为空的记录。
+ATS_BG_MAP AS (
+    SELECT DISTINCT A.COD_AZIENDA
+         , A.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+     WHERE A.VALID_FR <= '202608'
+       AND NVL(A.VALID_TO, '999999') >= '202608'
+       AND (A.COD_BG IS NULL
+         OR (A.COD_BG NOT LIKE 'CXC%' AND A.COD_BG IN ('BG001_BU001')))
+),
+-- 利润中心事业部映射：限制为BG001_BU001，并保留事业部为空的记录。
+PCR_BG_MAP AS (
+    SELECT DISTINCT LTRIM(TRIM(P.COD_DEST2), '0') AS COD_DEST2
+         , P.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_PCRMAP_000001 P
+     WHERE P.VALID_FR <= '202608'
+       AND NVL(P.VALID_TO, '999999') >= '202608'
+       AND (P.COD_BG IS NULL
+         OR (P.COD_BG NOT LIKE 'CXC%' AND P.COD_BG IN ('BG001_BU001')))
+),
+-- 日立特殊节点清单：用于复刻收入集团归属判断。
+HITACHI_ELEM AS (
+    SELECT DISTINCT V.ELEM
+      FROM TGK_GB_HISENSE.V_REF_AZIENDA_TV V
+     WHERE V.COD_SCENARIO = '2026ACT'
+       AND V.COD_PERIODO = '08'
+       AND V.HIE = '30'
+       AND V.NODE = '1730'
+),
+-- 当前场景期间的公司节点关系：用于计算集团归属范围。
+NODE_MAP AS (
+    SELECT N.COD_SCENARIO
+         , N.COD_PERIODO
+         , N.ELEM
+         , N.NODE
+         , N.NODES
+         , CASE WHEN H.ELEM IS NOT NULL THEN 1 ELSE 0 END AS IS_HITACHI
+         , CASE WHEN H.ELEM IS NOT NULL THEN NVL(N.NODES, N.NODE) ELSE N.NODE END AS SELF_NODE
+         , N.HQ
+      FROM TGK_GB_HISENSE.V_APAR_ELEM_NODE_TAB N
+      LEFT JOIN HITACHI_ELEM H
+        ON H.ELEM = N.ELEM
+     WHERE N.COD_SCENARIO = '2026ACT'
+       AND N.COD_PERIODO = '08'
+),
+-- REVM01原始收入：保留存储过程REVENUE_CALC使用的源字段和过滤条件。
+REVM01_BASE AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , R.CUST_CODE
+         , R.CUST_NAME
+         , R.COD_AZI_CTP
+         , R.SRC_SYSTEM
+         , R.SRC_DETAIL
+         , R.COD_DEST2
+         , R.D_ADJ_TYPE
+         , 0 - R.ORG_REV AS ORG_REV
+         , R.POLICY_AMT
+         , 0 - R.MAP_DIS1 AS MAP_DIS1
+         , 0 - R.MAP_DIS3 AS MAP_DIS3
+         , 0 - R.MAP_DIS4 AS MAP_DIS4
+         , 0 - R.MAP_DIS30 AS MAP_DIS30
+         , 0 - R.MAP_DIS34 AS MAP_DIS34
+         , R.D_SALE_DEPT
+      FROM AW_MR9_REVM01_000001 R
+     WHERE R.COD_SCENARIO = '2026ACT'
+       AND R.COD_PERIODO = '08'
+       AND R.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
+       AND R.SRC_DETAIL <> 'BSEG_FLJC'
+       AND R.COD_CATEGORIA NOT IN ('GA00_PA_IN', 'GA00_PA_OUT')
+       AND R.D_ADJ_TYPE NOT IN ('REV_01_210', 'REV_01_212')
+),
+-- REVENUE_CALC：仅计算收入，不读取ARPM02、IMOCC或其他周转数据。
+REVENUE_CALC AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , TRIM(R.CUST_CODE) AS CUST_CODE
+         , R.CUST_NAME
+         , R.COD_AZI_CTP
+         , R.COD_DEST2 AS SRC_PROFITCENTER_CODE
+         , NVL(PM.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ')) AS INCOME_PROFITCENTER_CODE
+         , F_TGK_GET_DIMNAME('DEST2', NVL(PM.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ'))) AS INCOME_PROFITCENTER_NAME
+         , CASE
+               WHEN PM.PROFITCENTER_CODE IS NULL THEN '未命中收入利润中心映射'
+               ELSE '已命中收入利润中心映射'
+           END AS INCOME_PC_MAP_STATUS
+         , CASE
+               WHEN CUR_NODE.SELF_NODE = CASE
+                   WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE)
+                   ELSE CTP_NODE.NODE
+                 END
+                AND CUR_NODE.HQ = CTP_NODE.HQ THEN 'SUB-子公司'
+               WHEN CUR_NODE.HQ = CTP_NODE.HQ THEN 'GIN-集团内'
+               ELSE 'GEX-集团外'
+           END AS GRP_SCOPE
+         , (CASE WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0 ELSE R.ORG_REV END)
+           - (CASE
+                WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0
+                WHEN R.SRC_DETAIL = 'VBRP' OR R.SRC_SYSTEM IN ('SMS', 'GSMS')
+                    THEN R.POLICY_AMT / CA.CAMBIO_PERIODO
+                ELSE R.POLICY_AMT
+              END)
+           - (CASE
+                WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0
+                WHEN R.SRC_DETAIL = 'VBRP' OR R.SRC_SYSTEM IN ('SMS', 'GSMS')
+                    THEN (NVL(R.MAP_DIS1, 0) + NVL(R.MAP_DIS3, 0)
+                        + NVL(R.MAP_DIS4, 0) + NVL(R.MAP_DIS30, 0)
+                        + NVL(R.MAP_DIS34, 0)) / CA.CAMBIO_PERIODO
+                ELSE NVL(R.MAP_DIS1, 0) + NVL(R.MAP_DIS3, 0)
+                   + NVL(R.MAP_DIS4, 0) + NVL(R.MAP_DIS30, 0)
+                   + NVL(R.MAP_DIS34, 0)
+              END) AS REV_AMT
+      FROM REVM01_BASE R
+      LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
+        ON AZ.COD_AZIENDA = R.COD_AZIENDA
+      LEFT JOIN TGK_FIMA_HISENSE.DATI_CAMBIO CA
+        ON CA.COD_SCENARIO = R.COD_SCENARIO
+       AND CA.COD_PERIODO = R.COD_PERIODO
+       AND CA.COD_VALUTA = AZ.COD_VALUTA
+      LEFT JOIN NODE_MAP CUR_NODE
+        ON CUR_NODE.COD_SCENARIO = R.COD_SCENARIO
+       AND CUR_NODE.COD_PERIODO = R.COD_PERIODO
+       AND CUR_NODE.ELEM = R.COD_AZIENDA
+      LEFT JOIN NODE_MAP CTP_NODE
+        ON CTP_NODE.COD_SCENARIO = R.COD_SCENARIO
+       AND CTP_NODE.COD_PERIODO = R.COD_PERIODO
+       AND CTP_NODE.ELEM = R.COD_AZI_CTP
+      LEFT JOIN PROFIT_CENTER_RULE PM
+        ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(R.COD_DEST2), '0')
+     WHERE CASE
+             WHEN CUR_NODE.SELF_NODE = CASE
+                 WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE)
+                 ELSE CTP_NODE.NODE
+               END
+              AND CUR_NODE.HQ = CTP_NODE.HQ THEN 'SUB-子公司'
+             WHEN CUR_NODE.HQ = CTP_NODE.HQ THEN 'GIN-集团内'
+             ELSE 'GEX-集团外'
+           END = 'GEX-集团外'
+       AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) IS NOT NULL
+       AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) <> 'ZZZZ'
+),
+-- REVENUE_BG_MAP：仅将收入利润中心和账套映射到事业部，不与周转数据关联。
+REVENUE_BG_MAP AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , R.CUST_CODE
+         , R.CUST_NAME
+         , R.COD_AZI_CTP
+         , R.SRC_PROFITCENTER_CODE
+         , R.INCOME_PROFITCENTER_CODE
+         , R.INCOME_PROFITCENTER_NAME
+         , R.INCOME_PC_MAP_STATUS
+         , R.GRP_SCOPE
+         , PCR.COD_BG AS PROFITCENTER_BG_CODE
+         , ATS.COD_BG AS BUSINESS_UNIT_CODE
+         , F_TGK_GET_DIMNAME('D_BG', ATS.COD_BG) AS BUSINESS_UNIT_NAME
+         , CASE
+               WHEN PCR.COD_BG IS NULL THEN '利润中心未映射事业部'
+               WHEN ATS.COD_BG IS NULL THEN '账套未映射事业部'
+               ELSE '利润中心和账套已映射事业部'
+           END AS BUSINESS_UNIT_MAP_STATUS
+         , R.REV_AMT AS MANAGE_REV_AMT
+      FROM REVENUE_CALC R
+      LEFT JOIN PCR_BG_MAP PCR
+        ON PCR.COD_DEST2 = LTRIM(TRIM(R.INCOME_PROFITCENTER_CODE), '0')
+      LEFT JOIN ATS_BG_MAP ATS
+        ON ATS.COD_AZIENDA = R.COD_AZIENDA
+       AND ATS.COD_BG = PCR.COD_BG
+),
+-- REVENUE_AGG：按最终展示字段汇总管理口径收入。
+REVENUE_AGG AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , R.CUST_CODE
+         , R.CUST_NAME
+         , R.GRP_SCOPE
+         , R.COD_AZI_CTP
+         , R.INCOME_PROFITCENTER_CODE
+         , R.INCOME_PROFITCENTER_NAME
+         , R.SRC_PROFITCENTER_CODE AS TURNOVER_PROFITCENTER_CODE
+         , CASE
+               WHEN R.SRC_PROFITCENTER_CODE IS NULL THEN NULL
+               ELSE F_TGK_GET_DIMNAME('DEST2', R.SRC_PROFITCENTER_CODE)
+           END AS TURNOVER_PROFITCENTER_NAME
+         , R.BUSINESS_UNIT_CODE
+         , R.BUSINESS_UNIT_NAME
+         , SUM(R.MANAGE_REV_AMT) AS MANAGE_REV_AMT
+      FROM REVENUE_BG_MAP R
+     WHERE R.CUST_CODE IS NOT NULL
+     GROUP BY R.COD_SCENARIO
+            , R.COD_PERIODO
+            , R.COD_AZIENDA
+            , R.CUST_CODE
+            , R.CUST_NAME
+            , R.GRP_SCOPE
+            , R.COD_AZI_CTP
+            , R.INCOME_PROFITCENTER_CODE
+            , R.INCOME_PROFITCENTER_NAME
+            , R.SRC_PROFITCENTER_CODE
+            , R.BUSINESS_UNIT_CODE
+            , R.BUSINESS_UNIT_NAME
+    HAVING NVL(SUM(R.MANAGE_REV_AMT), 0) <> 0
+)
+SELECT R.COD_SCENARIO AS SCENARIO
+     , R.COD_PERIODO AS PERIODO
+     , R.COD_AZIENDA AS COMPANY_CODE
+     , R.CUST_CODE
+     , R.CUST_NAME
+     , R.GRP_SCOPE
+     , R.COD_AZI_CTP AS CP_COMPANY_CODE
+     , R.INCOME_PROFITCENTER_CODE
+     , R.INCOME_PROFITCENTER_NAME
+     , R.TURNOVER_PROFITCENTER_CODE
+     , R.TURNOVER_PROFITCENTER_NAME
+     , R.BUSINESS_UNIT_CODE
+     , R.BUSINESS_UNIT_NAME
+     , R.MANAGE_REV_AMT
+  FROM REVENUE_AGG R
+ ORDER BY R.COD_AZIENDA
+        , R.CUST_CODE
+        , R.TURNOVER_PROFITCENTER_CODE
+        , R.INCOME_PROFITCENTER_CODE
+;

@@ -1,0 +1,309 @@
+/*
+============================================================================
+ARPM02与IMOCC周转校验查询：2026ACT / 08 / 2600 / ALL
+用途：按 CPM_SP_M2M_ARP_TOV_M_PHASE2 口径查询周转和国际营销应收占用数据。
+参数：场景 2026ACT，期间 08，公司 2600，事业部 ALL。
+口径：周转利润中心先按利润中心规则映射，再使用映射后利润中心关联事业部。
+说明：利润中心和事业部描述统一通过 F_TGK_GET_DIMNAME 获取。
+版本信息：
+  20261020 新增固定参数周转校验查询。
+============================================================================
+*/
+WITH
+/* 公司层级来源：复刻存储过程对 V_REF_AZIENDA 的 HIE=10 公司筛选。 */
+REF_AZIENDA AS (
+    SELECT R.HIE
+         , R.NODE
+         , R.ELEM
+      FROM TGK_FIMA_HISENSE.V_REF_AZIENDA R
+),
+/* 当前期间有效的周转事业部范围：ALL 不限定入参事业部。 */
+TOV_BG_SCOPE AS (
+    SELECT DISTINCT C.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_COSMAP_000001 C
+     WHERE C.AR_TOV_FLAG = 'Y'
+       AND C.VALID_FR <= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+       AND NVL(C.VALID_TO, '999999') >= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+),
+/* 当前查询实际纳入的账套：固定公司 2600、周转事业部范围和D2M进数规则同时生效。 */
+AZI_SCOPE AS (
+    SELECT DISTINCT R.ELEM AS COD_AZIENDA
+      FROM REF_AZIENDA R
+     WHERE R.HIE = '10'
+       AND R.ELEM IN ('2600')
+       AND EXISTS (
+           SELECT 1
+             FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+            WHERE A.COD_AZIENDA = R.ELEM
+              AND A.VALID_FR <= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+              AND NVL(A.VALID_TO, '999999') >= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+              AND A.COD_BG NOT LIKE 'CXC%'
+              AND EXISTS (
+                  SELECT 1
+                    FROM TOV_BG_SCOPE C
+                   WHERE C.COD_BG = A.COD_BG
+              )
+       )
+       AND EXISTS (
+           SELECT 1
+             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 D
+            WHERE D.COD_AZIENDA = R.ELEM
+              AND D.ARP_FLAG = 'Y'
+              AND D.VALID_FR <= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+              AND NVL(D.VALID_TO, '999999') >= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+              AND D.COD_CONTO = 'ZAW_D2M_IN'
+       )
+),
+/* 利润中心标准化规则：周转侧使用批次2的有效利润中心映射。 */
+PROFIT_CENTER_RULE AS (
+    SELECT LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
+         , MAX(M.PROFITCENTER_CODE) AS PROFITCENTER_CODE
+      FROM DIM_RULE_FI_MR_AR_PROFIT_MAPPING M
+     WHERE M.BATCH_ID = 2
+       AND M.VALID_FR <= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+       AND NVL(M.VALID_TO, '999999') >= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+     GROUP BY LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0')
+),
+/* 账套事业部映射：仅保留当前期间有效且属于周转事业部范围的公司映射。 */
+ATS_BG_MAP AS (
+    SELECT DISTINCT A.COD_AZIENDA
+         , A.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+     WHERE A.VALID_FR <= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+       AND NVL(A.VALID_TO, '999999') >= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+       AND A.COD_BG NOT LIKE 'CXC%'
+       AND EXISTS (
+           SELECT 1
+             FROM TOV_BG_SCOPE C
+            WHERE C.COD_BG = A.COD_BG
+       )
+),
+/* 利润中心事业部映射：按映射后的利润中心编码关联 PCRMAP。 */
+PCR_BG_MAP AS (
+    SELECT DISTINCT LTRIM(TRIM(P.COD_DEST2), '0') AS COD_DEST2
+         , P.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_PCRMAP_000001 P
+     WHERE P.VALID_FR <= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+       AND NVL(P.VALID_TO, '999999') >= SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+       AND P.COD_BG NOT LIKE 'CXC%'
+       AND EXISTS (
+           SELECT 1
+             FROM TOV_BG_SCOPE C
+            WHERE C.COD_BG = P.COD_BG
+       )
+),
+/* 周转原始来源：ARPM02按两个账龄标识取数，IMOCC按国际营销应收占用条件取数。 */
+TURNOVER_SOURCE AS (
+    SELECT A.COD_SCENARIO
+         , A.COD_PERIODO
+         , A.COD_AZIENDA
+         , 'ARPM02' AS DATA_SOURCE
+         , 'ZAMOUNT' AS COD_CATEGORIA
+         , TRIM(A.CUST_CODE) AS CUST_CODE
+         , A.CUST_NAME
+         , A.CUST_HEAD_CODE
+         , A.GRP_SCOPE
+         , A.COD_AZI_CTP AS CP_COMPANY_CODE
+         , A.COD_DEST2 AS SRC_PROFITCENTER_CODE
+         , NVL(A.BCY_ADJ_INCL_0_AMT, 0) AS TURNOVER_AMT
+      FROM AW_MR9_ARPM02_000001 A
+     WHERE A.COD_SCENARIO = '2026ACT'
+       AND A.COD_PERIODO = LPAD('08', 2, '0')
+       AND A.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
+       AND A.COD_DEST2 IS NOT NULL
+       AND A.COD_DEST2 <> 'ZZZZ'
+       AND A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
+
+    UNION ALL
+
+    SELECT A.COD_SCENARIO
+         , A.COD_PERIODO
+         , A.COD_AZIENDA
+         , 'ARPM02' AS DATA_SOURCE
+         , 'ZAMOUNT_L2' AS COD_CATEGORIA
+         , TRIM(A.CUST_CODE) AS CUST_CODE
+         , A.CUST_NAME
+         , A.CUST_HEAD_CODE
+         , A.GRP_SCOPE
+         , A.COD_AZI_CTP AS CP_COMPANY_CODE
+         , A.COD_DEST2 AS SRC_PROFITCENTER_CODE
+         , NVL(A.BCY_ADJ_INCL_0_AMT, 0) AS TURNOVER_AMT
+      FROM AW_MR9_ARPM02_000001 A
+     WHERE A.COD_SCENARIO = '2026ACT'
+       AND A.COD_PERIODO = LPAD('08', 2, '0')
+       AND A.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
+       AND A.COD_DEST2 IS NOT NULL
+       AND A.COD_DEST2 <> 'ZZZZ'
+       AND A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
+
+    UNION ALL
+
+    SELECT '2026ACT' AS COD_SCENARIO
+         , LPAD('08', 2, '0') AS COD_PERIODO
+         , I.COMPANY_CODE AS COD_AZIENDA
+         , 'IMOCC' AS DATA_SOURCE
+         , 'ZAMOUNT' AS COD_CATEGORIA
+         , TRIM(I.CUST_CODE) AS CUST_CODE
+         , I.CUST_NAME
+         , CAST(NULL AS VARCHAR2(100)) AS CUST_HEAD_CODE
+         , 'GEX-集团外' AS GRP_SCOPE
+         , I.CP_COMPANY_CODE AS CP_COMPANY_CODE
+         , I.PROFITCENTER_CODE AS SRC_PROFITCENTER_CODE
+         , NVL(I.IMOCC_CNY_AMT, 0) AS TURNOVER_AMT
+      FROM DWD_FI_MR_AR_IMOCC_MI I
+     WHERE I.DT_MONTH = SUBSTR('2026ACT', 1, 4) || LPAD('08', 2, '0')
+       AND I.COMPANY_CODE IN ('1740', '2080')
+       AND TRIM(I.CP_COMPANY_CODE) IS NULL
+       AND I.PROFITCENTER_CODE IS NOT NULL
+       AND I.PROFITCENTER_CODE <> 'ZZZZ'
+       AND NVL(I.IMOCC_CNY_AMT, 0) <> 0
+       AND I.COMPANY_CODE IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
+),
+/* 周转利润中心标准化：先取得映射后利润中心，再做事业部映射。 */
+TURNOVER_NORMALIZED AS (
+    SELECT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , T.DATA_SOURCE
+         , T.COD_CATEGORIA
+         , T.CUST_CODE
+         , T.CUST_NAME
+         , T.CUST_HEAD_CODE
+         , T.GRP_SCOPE
+         , T.CP_COMPANY_CODE
+         , PM.PROFITCENTER_CODE AS TURNOVER_PROFITCENTER_CODE
+         , T.TURNOVER_AMT
+      FROM TURNOVER_SOURCE T
+      JOIN PROFIT_CENTER_RULE PM
+        ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(T.SRC_PROFITCENTER_CODE), '0')
+     WHERE PM.PROFITCENTER_CODE IS NOT NULL
+),
+/* 映射后的周转数据：要求公司事业部与映射后利润中心事业部一致。 */
+MAPPED_TURNOVER AS (
+    SELECT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , T.DATA_SOURCE
+         , T.COD_CATEGORIA
+         , T.CUST_CODE
+         , T.CUST_NAME
+         , T.CUST_HEAD_CODE
+         , T.GRP_SCOPE
+         , T.CP_COMPANY_CODE
+         , T.TURNOVER_PROFITCENTER_CODE
+         , PCR.COD_BG AS BUSINESS_UNIT_CODE
+         , T.TURNOVER_AMT
+      FROM TURNOVER_NORMALIZED T
+      JOIN PCR_BG_MAP PCR
+        ON PCR.COD_DEST2 = LTRIM(TRIM(T.TURNOVER_PROFITCENTER_CODE), '0')
+      JOIN ATS_BG_MAP ATS
+        ON ATS.COD_AZIENDA = T.COD_AZIENDA
+       AND ATS.COD_BG = PCR.COD_BG
+),
+/* 按主户、类别和事业部计算周转净额，用于复刻多事业部负周转剔除规则。 */
+BG_TURNOVER_NET AS (
+    SELECT M.COD_SCENARIO
+         , M.COD_PERIODO
+         , M.COD_AZIENDA
+         , CASE
+               WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
+               ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
+           END AS CUST_MATCH_CODE
+         , M.COD_CATEGORIA
+         , M.BUSINESS_UNIT_CODE
+         , SUM(M.TURNOVER_AMT) AS TURNOVER_AMT
+      FROM MAPPED_TURNOVER M
+     WHERE TRIM(M.CUST_HEAD_CODE) IS NOT NULL
+     GROUP BY M.COD_SCENARIO
+            , M.COD_PERIODO
+            , M.COD_AZIENDA
+            , CASE
+                  WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
+                  ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
+              END
+            , M.COD_CATEGORIA
+            , M.BUSINESS_UNIT_CODE
+),
+/* 负周转事业部：存在其他事业部时，净额小于0的事业部整体剔除。 */
+NEGATIVE_BG_TURNOVER AS (
+    SELECT B.COD_SCENARIO
+         , B.COD_PERIODO
+         , B.COD_AZIENDA
+         , B.CUST_MATCH_CODE
+         , B.COD_CATEGORIA
+         , B.BUSINESS_UNIT_CODE
+      FROM BG_TURNOVER_NET B
+     WHERE B.TURNOVER_AMT < 0
+       AND EXISTS (
+           SELECT 1
+             FROM BG_TURNOVER_NET X
+            WHERE X.COD_SCENARIO = B.COD_SCENARIO
+              AND X.COD_PERIODO = B.COD_PERIODO
+              AND X.COD_AZIENDA = B.COD_AZIENDA
+              AND X.CUST_MATCH_CODE = B.CUST_MATCH_CODE
+              AND X.COD_CATEGORIA = B.COD_CATEGORIA
+              AND X.BUSINESS_UNIT_CODE <> B.BUSINESS_UNIT_CODE
+       )
+),
+/* 最终周转校验数据：仅排除负净额事业部，并按用户展示粒度汇总。 */
+FILTERED_TURNOVER AS (
+    SELECT M.COD_SCENARIO
+         , M.COD_PERIODO
+         , M.COD_AZIENDA
+         , M.DATA_SOURCE
+         , M.COD_CATEGORIA
+         , M.CUST_CODE
+         , M.CUST_NAME
+         , M.GRP_SCOPE
+         , M.CP_COMPANY_CODE
+         , M.TURNOVER_PROFITCENTER_CODE
+         , M.BUSINESS_UNIT_CODE
+         , M.TURNOVER_AMT
+      FROM MAPPED_TURNOVER M
+     WHERE NOT EXISTS (
+           SELECT 1
+             FROM NEGATIVE_BG_TURNOVER N
+            WHERE N.COD_SCENARIO = M.COD_SCENARIO
+              AND N.COD_PERIODO = M.COD_PERIODO
+              AND N.COD_AZIENDA = M.COD_AZIENDA
+              AND N.COD_CATEGORIA = M.COD_CATEGORIA
+              AND N.BUSINESS_UNIT_CODE = M.BUSINESS_UNIT_CODE
+              AND N.CUST_MATCH_CODE = CASE
+                                          WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
+                                          ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
+                                      END
+     )
+
+)
+SELECT F.COD_SCENARIO AS SCENARIO
+     , F.COD_PERIODO AS PERIODO
+     , F.COD_AZIENDA AS COMPANY_CODE
+     , F.DATA_SOURCE
+     , F.COD_CATEGORIA
+     , F.CUST_CODE
+     , MAX(F.CUST_NAME) AS CUST_NAME
+     , F.GRP_SCOPE
+     , F.CP_COMPANY_CODE
+     , F.TURNOVER_PROFITCENTER_CODE
+     , F.BUSINESS_UNIT_CODE
+     , SUM(F.TURNOVER_AMT) AS TURNOVER_AMT
+     , F_TGK_GET_DIMNAME('DEST2', F.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME
+     , F_TGK_GET_DIMNAME('D_BG', F.BUSINESS_UNIT_CODE) AS BUSINESS_UNIT_NAME
+  FROM FILTERED_TURNOVER F
+ WHERE NVL(F.TURNOVER_AMT, 0) <> 0
+ GROUP BY F.COD_SCENARIO
+        , F.COD_PERIODO
+        , F.COD_AZIENDA
+        , F.DATA_SOURCE
+        , F.COD_CATEGORIA
+        , F.CUST_CODE
+        , F.GRP_SCOPE
+        , F.CP_COMPANY_CODE
+        , F.TURNOVER_PROFITCENTER_CODE
+        , F.BUSINESS_UNIT_CODE
+ ORDER BY F.COD_AZIENDA
+        , F.DATA_SOURCE
+        , F.CUST_CODE
+        , F.TURNOVER_PROFITCENTER_CODE
+        , F.BUSINESS_UNIT_CODE
+;

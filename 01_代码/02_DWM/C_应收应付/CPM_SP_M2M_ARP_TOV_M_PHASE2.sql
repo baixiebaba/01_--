@@ -6,8 +6,10 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   , SESSION_USER IN VARCHAR2
 ) AS
   /**************************************************************************
-  最后更新时间：20261018
-  本次修改：ARPM02与IMOCC先汇总后按公司、客商、利润中心匹配收入；未匹配收入追加。
+  最后更新时间：20261020
+  本次修改：增加AW_RUL_ARPTOV_000001特殊取数配置，支持BATCH_ID=1至4剔除和BATCH_ID=6按公司、二级性质取数。
+            ARPM02按配置过滤后再生成ZAMOUNT、ZAMOUNT_L2。
+  上次修改：ARPM02与IMOCC先汇总后按公司、客商、利润中心匹配收入；未匹配收入追加。
             D_BG统一后置映射，增加多事业部客户的负周转行剔除规则。
   名称：CPM_SP_M2M_ARP_TOV_M_PHASE2
   用途：装载应收周转计算汇总表
@@ -18,7 +20,6 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   V_SCENARIO   VARCHAR2(30);
   V_PERIODO    VARCHAR2(30);
   V_YEARMONTH  VARCHAR2(10);
-  V_LAST_DAY   DATE;
   V_AZIENDA    VARCHAR2(4000);
   V_SESSION_ID NUMBER;
   V_ERROR_COD  NUMBER;
@@ -38,7 +39,6 @@ BEGIN
   V_SCENARIO := P_SCENARIO;
   V_PERIODO := LPAD(P_PERIODO, 2, '0');
   V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
-  V_LAST_DAY := LAST_DAY(TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD'));
 
   -- 保持DWMCRS现状，仅以账套映射限制本次输入公司范围。
   INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
@@ -89,9 +89,7 @@ BEGIN
   SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
     INTO V_AZIENDA
     FROM (
-      SELECT DISTINCT ELEM
-        FROM SESSION_AZIENDA_LIST
-       WHERE SESSION_ID = V_SESSION_ID
+      SELECT DISTINCT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
     );
 
   INSERT INTO ZTAB_CPM_LOG(
@@ -107,9 +105,7 @@ BEGIN
    WHERE COD_SCENARIO = V_SCENARIO
      AND COD_PERIODO = V_PERIODO
      AND COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
+           SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
      )
      AND PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M_PHASE2'
      AND NOT EXISTS (
@@ -287,13 +283,28 @@ BEGIN
      WHERE N.COD_SCENARIO = V_SCENARIO
        AND N.COD_PERIODO = V_PERIODO
   ),
-  -- ARPM02来源：不提前映射D_BG，分别生成ZAMOUNT、ZAMOUNT_L2。
+  -- 应收周转特殊取数配置：仅读取当前期间有效的取数及剔除规则。
+  ARPTOV_RULE AS (
+    SELECT R.BATCH_ID
+         , TRIM(R.COD_AZIENDA) AS COD_AZIENDA
+         , TRIM(R.CUST_CODE) AS CUST_CODE
+         , TRIM(R.NATURE_L2_NAME) AS NATURE_L2_NAME
+         , TRIM(R.D_SALE_DEPT) AS D_SALE_DEPT
+      FROM AW_RUL_ARPTOV_000001 R
+     WHERE R.VALID_FR <= V_YEARMONTH
+       AND NVL(R.VALID_TO, '999999') >= V_YEARMONTH
+       AND R.BATCH_ID IN ('1', '2', '3', '4', '6')
+  ),
+  -- ARPM02来源：单次读取，根据ME_AGE_FLAG、MB_AGE_FLAG判断生成ZAMOUNT或ZAMOUNT_L2。
   ARPM02_SOURCE AS (
     SELECT A.COD_SCENARIO
          , A.COD_PERIODO
          , A.COD_AZIENDA
          , '1122000000' AS COD_CONTO
-         , 'ZAMOUNT' AS COD_CATEGORIA
+         , CASE
+               WHEN A.ME_AGE_FLAG IN ('AR', 'CA', 'A10') THEN 'ZAMOUNT'
+               WHEN A.MB_AGE_FLAG IN ('AR', 'CA', 'A10') THEN 'ZAMOUNT_L2'
+           END AS COD_CATEGORIA
          , A.GRP_SCOPE
          , TRIM(A.CUST_CODE) AS CUST_CODE
          , A.CUST_NAME
@@ -330,52 +341,60 @@ BEGIN
        )
        AND A.COD_DEST2 IS NOT NULL
        AND A.COD_DEST2 <> 'ZZZZ'
-       AND A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
-
-    UNION ALL
-
-    SELECT A.COD_SCENARIO
-         , A.COD_PERIODO
-         , A.COD_AZIENDA
-         , '1122000000' AS COD_CONTO
-         , 'ZAMOUNT_L2' AS COD_CATEGORIA
-         , A.GRP_SCOPE
-         , TRIM(A.CUST_CODE) AS CUST_CODE
-         , A.CUST_NAME
-         , A.CUST_HEAD_CODE
-         , A.CUST_HEAD_NAME
-         , A.CUST_BRANCH_CODE
-         , A.CUST_BRANCH_NAME
-         , A.COD_AZI_CTP
-         , A.COUNTRY_NAME
-         , A.NATURE_L2_NAME
-         , A.D_CHANNEL
-         , A.D_ONOFFLINE
-         , A.COD_DEST2
-         , A.COD_DEST3
-         , A.D_SALE_DEPT
-         , A.D_TOV_CHAN
-         , A.D_CC_CUSTGRP
-         , A.COD_VALUTA
-         , NVL(A.BCY_ADJ_INCL_0_AMT, 0) AS AR_AMT
-         , 0 AS REV_AMT
-         , NVL(A.OVERDUE_0_AMT, 0) AS F1_ODUE_AMT
-         , NVL(A.EPAY_AMT, 0) AS F2_EPAY_AMT
-         , NVL(A.ECLS_AMT, 0) AS F3_ECR_AMT
-         , NVL(A.UREB_AMT, 0) AS F4_UREB_AMT
-         , NVL(A.UFEE_AMT, 0) AS F5_UFEE_AMT
-         , NVL(A.INV_SAMPLE_AMT, 0) AS F6_INVSM_AMT
-         , 0 AS F7_GSUB_AMT
-         , 0 AS F8_ADJ_AMT
-      FROM AW_MR9_ARPM02_000001 A
-     WHERE A.COD_SCENARIO = V_SCENARIO
-       AND A.COD_PERIODO = V_PERIODO
-       AND A.COD_AZIENDA IN (
-           SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
+       -- 至少有一类账龄标识满足周转取数范围。
+       AND (
+             A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
+          OR A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
        )
-       AND A.COD_DEST2 IS NOT NULL
-       AND A.COD_DEST2 <> 'ZZZZ'
-       AND A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
+       -- BATCH_ID=6：公司有维护时仅保留配置的二级性质，公司无维护时默认全部取数。
+       AND (
+             NOT EXISTS (
+                 SELECT 1
+                   FROM ARPTOV_RULE R6
+                  WHERE R6.BATCH_ID = '6'
+                    AND R6.COD_AZIENDA IS NOT NULL
+                    AND R6.NATURE_L2_NAME IS NOT NULL
+                    AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+             )
+          OR EXISTS (
+                 SELECT 1
+                   FROM ARPTOV_RULE R6
+                  WHERE R6.BATCH_ID = '6'
+                    AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+                    AND R6.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
+             )
+       )
+       -- BATCH_ID=1至4：在取数范围确定后，统一执行特殊剔除规则。
+       AND NOT EXISTS (
+           SELECT 1
+             FROM ARPTOV_RULE R1
+            WHERE R1.BATCH_ID = '1'
+              AND R1.CUST_CODE IS NOT NULL
+              AND TRIM(A.CUST_CODE) LIKE '%' || R1.CUST_CODE || '%'
+       )
+       AND NOT EXISTS (
+           SELECT 1
+             FROM ARPTOV_RULE R2
+            WHERE R2.BATCH_ID = '2'
+              AND R2.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+              AND R2.CUST_CODE IS NOT NULL
+              AND R2.CUST_CODE = TRIM(A.CUST_CODE)
+       )
+       AND NOT EXISTS (
+           SELECT 1
+             FROM ARPTOV_RULE R3
+            WHERE R3.BATCH_ID = '3'
+              AND R3.NATURE_L2_NAME IS NOT NULL
+              AND R3.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
+       )
+       AND NOT EXISTS (
+           SELECT 1
+             FROM ARPTOV_RULE R4
+            WHERE R4.BATCH_ID = '4'
+              AND R4.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+              AND R4.D_SALE_DEPT IS NOT NULL
+              AND R4.D_SALE_DEPT = TRIM(A.D_SALE_DEPT)
+       )
   ),
   -- IMOCC来源：不提前映射D_BG，科目固定1122000000，保留来源国家名称和利润中心口径。
   IMOCC_SOURCE AS (
@@ -387,8 +406,8 @@ BEGIN
          , 'GEX-集团外' AS GRP_SCOPE
          , TRIM(I.CUST_CODE) AS CUST_CODE
          , I.CUST_NAME
-         , CAST(NULL AS VARCHAR2(100)) AS CUST_HEAD_CODE
-         , CAST(NULL AS VARCHAR2(200)) AS CUST_HEAD_NAME
+         , TRIM(I.CUST_CODE) AS CUST_HEAD_CODE
+         , I.CUST_NAME AS CUST_HEAD_NAME
          , I.CUST_BRANCH_CODE
          , I.CUST_BRANCH_NAME
          , I.CP_COMPANY_CODE AS COD_AZI_CTP
@@ -600,32 +619,116 @@ BEGIN
        AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) IS NOT NULL
        AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) <> 'ZZZZ'
   ),
-  -- REVENUE：仅保留非零收入及非空客商，供后续匹配或未匹配追加使用。
+  -- REVENUE：管理口径收入先按ZAMOUNT和ZAMOUNT_L2两个周转类别展开。
   REVENUE AS (
     SELECT R.*
+         , C.COD_CATEGORIA AS REV_COD_CATEGORIA
       FROM REVENUE_CALC R
+      CROSS JOIN (
+        SELECT 'ZAMOUNT' AS COD_CATEGORIA FROM DUAL
+        UNION ALL
+        SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
+      ) C
      WHERE R.CUST_CODE IS NOT NULL
        AND NVL(R.REV_AMT, 0) <> 0
   ),
-  -- 周转收入匹配键集合：从所有周转记录提取公司、客商、利润中心，供收入筛选和未匹配收入剔除共用。
+  -- 周转预映射：收入匹配前先完成利润中心与账套事业部映射。
+  TURNOVER_MAPPED AS (
+    SELECT T.*
+         , PCR.COD_BG AS D_BG
+      FROM TURNOVER T
+      JOIN PCR_BG_MAP PCR
+        ON PCR.COD_DEST2 = LTRIM(TRIM(T.COD_DEST2), '0')
+      JOIN ATS_BG_MAP ATS
+        ON ATS.COD_AZIENDA = T.COD_AZIENDA
+       AND ATS.COD_BG = PCR.COD_BG
+     WHERE T.GRP_SCOPE = 'GEX-集团外'
+  ),
+  -- 先按主户、类别和事业部计算周转净额，收入尚未参与匹配。
+  TURNOVER_BG_NET AS (
+    SELECT T.COD_SCENARIO
+         , T.COD_PERIODO
+         , T.COD_AZIENDA
+         , CASE
+               WHEN TRIM(T.CUST_HEAD_CODE) IS NULL THEN NULL
+               ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
+           END AS CUST_MATCH_CODE
+         , T.COD_CATEGORIA
+         , T.D_BG
+         , SUM(T.AR_AMT) AS AR_AMT
+      FROM TURNOVER_MAPPED T
+     WHERE TRIM(T.CUST_HEAD_CODE) IS NOT NULL
+     GROUP BY T.COD_SCENARIO
+            , T.COD_PERIODO
+            , T.COD_AZIENDA
+            , CASE
+                  WHEN TRIM(T.CUST_HEAD_CODE) IS NULL THEN NULL
+                  ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
+              END
+            , T.COD_CATEGORIA
+            , T.D_BG
+  ),
+  -- 负周转事业部：收入匹配前先识别需要剔除的整行周转数据。
+  NEGATIVE_TURNOVER_BG AS (
+    SELECT B.COD_SCENARIO
+         , B.COD_PERIODO
+         , B.COD_AZIENDA
+         , B.CUST_MATCH_CODE
+         , B.COD_CATEGORIA
+         , B.D_BG
+      FROM TURNOVER_BG_NET B
+     WHERE B.AR_AMT < 0
+       AND EXISTS (
+           SELECT 1
+             FROM TURNOVER_BG_NET X
+            WHERE X.COD_SCENARIO = B.COD_SCENARIO
+              AND X.COD_PERIODO = B.COD_PERIODO
+              AND X.COD_AZIENDA = B.COD_AZIENDA
+              AND X.CUST_MATCH_CODE = B.CUST_MATCH_CODE
+              AND X.COD_CATEGORIA = B.COD_CATEGORIA
+              AND X.D_BG <> B.D_BG
+       )
+  ),
+  -- 过滤负净额事业部后的有效周转，后续收入匹配只使用这部分数据。
+  FILTERED_TURNOVER AS (
+    SELECT T.*
+      FROM TURNOVER_MAPPED T
+     WHERE NOT EXISTS (
+           SELECT 1
+             FROM NEGATIVE_TURNOVER_BG N
+            WHERE N.COD_SCENARIO = T.COD_SCENARIO
+              AND N.COD_PERIODO = T.COD_PERIODO
+              AND N.COD_AZIENDA = T.COD_AZIENDA
+              AND N.COD_CATEGORIA = T.COD_CATEGORIA
+              AND N.D_BG = T.D_BG
+              AND N.CUST_MATCH_CODE = CASE
+                                          WHEN TRIM(T.CUST_HEAD_CODE) IS NULL THEN NULL
+                                          ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
+                                      END
+     )
+  ),
+  -- 周转收入匹配键集合：收入仅匹配集团外周转，避免将集团外收入回填到集团内或子公司周转行。
   TURNOVER_REVENUE_KEY AS (
     SELECT DISTINCT T.COD_SCENARIO
          , T.COD_PERIODO
          , T.COD_AZIENDA
          , T.CUST_CODE
          , T.COD_DEST2
-      FROM TURNOVER T
+         , T.COD_CATEGORIA
+      FROM FILTERED_TURNOVER T
      WHERE T.CUST_CODE IS NOT NULL
        AND T.COD_DEST2 IS NOT NULL
        AND T.COD_DEST2 <> 'ZZZZ'
+       AND T.COD_CATEGORIA IN ('ZAMOUNT', 'ZAMOUNT_L2')
   ),
-  -- 匹配收入：由周转收入匹配键集合筛选后按公司、客商、利润中心汇总，直接写入对应周转记录。
+  -- 匹配收入：按公司、客商、利润中心和周转类别汇总后写入对应周转记录。
   REVENUE_MATCH_KEY AS (
     SELECT R.COD_SCENARIO
          , R.COD_PERIODO
          , R.COD_AZIENDA
          , R.CUST_CODE
          , R.COD_DEST2
+         , R.REV_COD_CATEGORIA AS COD_CATEGORIA
          , SUM(R.REV_AMT) AS REV_AMT
       FROM REVENUE R
       JOIN TURNOVER_REVENUE_KEY K
@@ -634,13 +737,15 @@ BEGIN
        AND K.COD_AZIENDA = R.COD_AZIENDA
        AND K.CUST_CODE = R.CUST_CODE
        AND K.COD_DEST2 = R.COD_DEST2
+       AND K.COD_CATEGORIA = R.REV_COD_CATEGORIA
      GROUP BY R.COD_SCENARIO
             , R.COD_PERIODO
             , R.COD_AZIENDA
             , R.CUST_CODE
             , R.COD_DEST2
+            , R.REV_COD_CATEGORIA
   ),
-  -- MATCHED：保留全部周转，命中的收入金额直接写入对应周转记录。
+  -- MATCHED：保留全部周转，按周转类别回填对应类别的收入金额。
   MATCHED AS (
     SELECT T.COD_SCENARIO
          , T.COD_PERIODO
@@ -675,21 +780,22 @@ BEGIN
          , T.F6_INVSM_AMT
          , T.F7_GSUB_AMT
          , T.F8_ADJ_AMT
-      FROM TURNOVER T
+      FROM FILTERED_TURNOVER T
       LEFT JOIN REVENUE_MATCH_KEY R
         ON R.COD_SCENARIO = T.COD_SCENARIO
        AND R.COD_PERIODO = T.COD_PERIODO
        AND R.COD_AZIENDA = T.COD_AZIENDA
        AND R.CUST_CODE = T.CUST_CODE
        AND R.COD_DEST2 = T.COD_DEST2
+       AND R.COD_CATEGORIA = T.COD_CATEGORIA
   ),
-  -- 无周转匹配的收入保留自身维度；自身DEST3国家名称仅在此分支生效。
+  -- 无周转匹配的收入按自身周转类别追加；自身DEST3国家名称仅在此分支生效。
   UNMATCHED_REVENUE AS (
     SELECT R.COD_SCENARIO
          , R.COD_PERIODO
          , R.COD_AZIENDA
          , R.COD_CONTO
-         , C.COD_CATEGORIA
+         , R.REV_COD_CATEGORIA AS COD_CATEGORIA
          , R.GRP_SCOPE
          , R.CUST_CODE
          , R.CUST_NAME
@@ -719,12 +825,8 @@ BEGIN
          , R.F7_GSUB_AMT
          , R.F8_ADJ_AMT
       FROM REVENUE R
-      CROSS JOIN (
-        SELECT 'ZAMOUNT' AS COD_CATEGORIA FROM DUAL
-        UNION ALL
-        SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
-      ) C
-     WHERE NOT EXISTS (
+     WHERE NVL(R.REV_AMT, 0) <> 0
+       AND NOT EXISTS (
            SELECT 1
              FROM TURNOVER_REVENUE_KEY K
             WHERE K.COD_SCENARIO = R.COD_SCENARIO
@@ -732,6 +834,7 @@ BEGIN
               AND K.COD_AZIENDA = R.COD_AZIENDA
               AND K.CUST_CODE = R.CUST_CODE
               AND K.COD_DEST2 = R.COD_DEST2
+              AND K.COD_CATEGORIA = R.REV_COD_CATEGORIA
      )
   ),
   -- CPRS：独立调整来源，仅在本次公司范围包含2080时装载；事业部按BG001保留，集团归属固定GEX，利润中心按源值规则固定。
@@ -787,9 +890,7 @@ BEGIN
            )
            AND COD_AZIENDA = '2080'
            AND COD_AZIENDA IN (
-               SELECT ELEM
-                 FROM SESSION_AZIENDA_LIST
-                WHERE SESSION_ID = V_SESSION_ID
+               SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
            )
            AND D_BG = 'BG001'
            AND COD_CONTO = 'S600100'
@@ -879,123 +980,6 @@ BEGIN
        AND T.COD_SCENARIO = V_SCENARIO
        AND T.COD_PERIODO = V_PERIODO
        AND T.COD_CONTO = 'ZAW_M2S_LOCK'
-  ),
-  -- 先按主户和完整事业部汇总周转净额：负数剔除使用CUST_HEAD_CODE，收入、CPRS等AR_AMT为0的追加记录不会单独形成周转事业部。
-  BG_TURNOVER_NET AS (
-    SELECT M.COD_SCENARIO
-         , M.COD_PERIODO
-         , M.COD_AZIENDA
-         , CASE
-               WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
-               ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
-           END AS CUST_MATCH_CODE
-         , M.COD_CATEGORIA
-         , M.D_BG
-         , SUM(M.AR_AMT) AS AR_AMT
-      FROM MAPPED_FACT M
-     WHERE TRIM(M.CUST_HEAD_CODE) IS NOT NULL
-     GROUP BY M.COD_SCENARIO
-            , M.COD_PERIODO
-            , M.COD_AZIENDA
-            , CASE
-                  WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
-                  ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
-              END
-            , M.COD_CATEGORIA
-            , M.D_BG
-  ),
-  -- 负周转事业部：按场景、期间、公司、客户、类别和完整事业部汇总AR_AMT，净额小于0即剔除。
-  NEGATIVE_BG_TURNOVER AS (
-    SELECT B.COD_SCENARIO
-         , B.COD_PERIODO
-         , B.COD_AZIENDA
-         , B.CUST_MATCH_CODE
-         , B.COD_CATEGORIA
-         , B.D_BG
-      FROM (
-        SELECT N.COD_SCENARIO
-             , N.COD_PERIODO
-             , N.COD_AZIENDA
-             , N.CUST_MATCH_CODE
-             , N.COD_CATEGORIA
-             , N.D_BG
-             , SUM(N.AR_AMT) OVER (
-                   PARTITION BY N.COD_SCENARIO
-                              , N.COD_PERIODO
-                              , N.COD_AZIENDA
-                              , N.CUST_MATCH_CODE
-                              , N.COD_CATEGORIA
-                              , N.D_BG
-               ) AS BG_AR_AMT
-          FROM BG_TURNOVER_NET N
-      ) B
-     WHERE B.BG_AR_AMT < 0
-       AND EXISTS (
-           SELECT 1
-             FROM BG_TURNOVER_NET X
-            WHERE X.COD_SCENARIO = B.COD_SCENARIO
-              AND X.COD_PERIODO = B.COD_PERIODO
-              AND X.COD_AZIENDA = B.COD_AZIENDA
-              AND X.CUST_MATCH_CODE = B.CUST_MATCH_CODE
-              AND X.COD_CATEGORIA = B.COD_CATEGORIA
-              AND X.D_BG <> B.D_BG
-       )
-  ),
-  -- 排除负净额事业部的整行数据；单事业部负数及净额非负事业部均保留。
-  FILTERED_FACT AS (
-    SELECT M.COD_SCENARIO
-         , M.COD_PERIODO
-         , M.D_BG
-         , M.COD_AZIENDA
-         , M.COD_CONTO
-         , M.COD_CATEGORIA
-         , M.GRP_SCOPE
-         , M.CUST_CODE
-         , M.CUST_NAME
-         , M.CUST_HEAD_CODE
-         , M.CUST_HEAD_NAME
-         , M.CUST_BRANCH_CODE
-         , M.CUST_BRANCH_NAME
-         , M.COD_AZI_CTP
-         , M.COUNTRY_NAME
-         , M.NATURE_L2_NAME
-         , M.D_CHANNEL
-         , M.D_ONOFFLINE
-         , M.COD_DEST2
-         , M.COD_DEST3
-         , M.D_SALE_DEPT
-         , M.D_TOV_CHAN
-         , M.D_CC_CUSTGRP
-         , M.COD_VALUTA
-         , M.AR_AMT
-         , M.REV_AMT
-         , M.F1_ODUE_AMT
-         , M.F2_EPAY_AMT
-         , M.F3_ECR_AMT
-         , M.F4_UREB_AMT
-         , M.F5_UFEE_AMT
-         , M.F6_INVSM_AMT
-         , M.F7_GSUB_AMT
-         , M.F8_ADJ_AMT
-      FROM MAPPED_FACT M
-     WHERE NOT EXISTS (
-           SELECT 1
-             FROM NEGATIVE_BG_TURNOVER N
-            WHERE N.COD_SCENARIO = M.COD_SCENARIO
-              AND N.COD_PERIODO = M.COD_PERIODO
-              AND N.COD_AZIENDA = M.COD_AZIENDA
-              AND N.COD_CATEGORIA = M.COD_CATEGORIA
-              AND N.D_BG = M.D_BG
-              AND N.CUST_MATCH_CODE = CASE
-                                          WHEN TRIM(M.CUST_HEAD_CODE) IS NULL THEN NULL
-                                          ELSE NVL(LTRIM(TRIM(M.CUST_HEAD_CODE), '0'), '0')
-                                      END
-     )
-       AND NOT EXISTS (
-           SELECT 1
-             FROM LOCKED_BG L
-            WHERE L.D_BG = M.D_BG
-       )
   )
   SELECT NEWID() AS OID
        , COD_SCENARIO
@@ -1035,8 +1019,14 @@ BEGIN
        , 'CPM_SP_M2M_ARP_TOV_M_PHASE2' AS PROVENIENZA
        , SYSDATE AS DATEUPD
        , SESSION_USER AS USERUPD
-    FROM FILTERED_FACT
-   WHERE NVL(AR_AMT, 0) <> 0
+    FROM MAPPED_FACT M
+   WHERE M.GRP_SCOPE = 'GEX-集团外'
+     AND NOT EXISTS (
+           SELECT 1
+             FROM LOCKED_BG L
+            WHERE L.D_BG = M.D_BG
+     )
+     AND (NVL(AR_AMT, 0) <> 0
       OR NVL(REV_AMT, 0) <> 0
       OR NVL(F1_ODUE_AMT, 0) <> 0
       OR NVL(F2_EPAY_AMT, 0) <> 0
@@ -1045,7 +1035,7 @@ BEGIN
       OR NVL(F5_UFEE_AMT, 0) <> 0
       OR NVL(F6_INVSM_AMT, 0) <> 0
       OR NVL(F7_GSUB_AMT, 0) <> 0
-      OR NVL(F8_ADJ_AMT, 0) <> 0
+      OR NVL(F8_ADJ_AMT, 0) <> 0)
    GROUP BY COD_SCENARIO, COD_PERIODO, D_BG, COD_AZIENDA, COD_CONTO, COD_CATEGORIA
           , GRP_SCOPE, CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
           , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_NAME, NATURE_L2_NAME
