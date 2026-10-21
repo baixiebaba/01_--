@@ -1,0 +1,78 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "动态来源与HIE白名单缺失",
+      "problem": "SOURCE_TABLE只限制为当前owner下存在的对象，HIE只限制名称正则；未逐对象固定source/HIE白名单和直接授权，配置可进入未经批准的数据对象或HIE语义。",
+      "fix": "补齐source/HIE/字段/类型/直接grant部署矩阵，所有配置对象在读数前必须命中批准契约并拒绝其他对象。"
+    },
+    {
+      "id": 2,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "部署DDL契约未闭合",
+      "problem": "配置表owner、对象类型、完整维度列、GTT/日志表owner与权限、目标维度和天数字段类型没有被完整校验，静态表名也未统一限定owner；这些缺口可能在编译、parse或INSERT时才暴露。",
+      "fix": "补齐真实DDL和直接授权门禁，校验所有配置、source、target、GTT、日志和范围对象的owner、类型、列契约及非空默认列，并在DELETE前失败。"
+    },
+    {
+      "id": 3,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "规则标识使用ROWID哈希",
+      "problem": "代码用ROWIDTOCHAR(ROWID)与source/target计算哈希代替稳定RULE_ID；表迁移、重装或哈希碰撞会改变日志定位并削弱重复规则诊断。",
+      "fix": "使用配置表真实稳定主键；若不存在稳定RULE_ID，在配置门禁中阻断，不以ROWID或查询顺序替代。"
+    },
+    {
+      "id": 4,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "运行公司范围未对齐参考有效规则",
+      "problem": "实现仅按V_REF_AZIENDA的HIE=10选公司，省略参考程序的ATSMAP、COSMAP、DWMCRS有效期、周转标记和锁定规则，可能读写参考周转口径之外的公司。",
+      "fix": "冻结新引擎授权口径，或实现批准的有效交集，并让source、scope和DELETE共用同一运行范围。"
+    },
+    {
+      "id": 5,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "共享SESSION范围表隔离不足",
+      "problem": "过程仅用本过程DBMS_LOCK清理共享表按SESSION_ID的全部行，不能阻止其他过程或调用方状态被覆盖；异常路径也会无条件删除当前session行。",
+      "fix": "为共享范围表增加RUN_ID并在所有读写中携带，或建立跨过程统一互斥并只清理已证明属于本次运行的行。"
+    },
+    {
+      "id": 6,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "周转公式待确认口径被硬编码",
+      "problem": "六个周转天数公式把用户公式中的本月占用统一替换为*_END_OCP_AMT，六个零分母分支统一返回NULL，而设计仍把两项列为业务待确认。",
+      "fix": "在确认前显式阻断发布；确认后固化唯一字段映射、零分母0/NULL规则和边界样例。"
+    },
+    {
+      "id": 7,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "END日志早于业务提交且失败不可观测",
+      "problem": "正常路径先自治写入END执行完成日志再COMMIT，提交失败会留下错误成功日志；提交后日志失败时又只有DBMS_OUTPUT，没有可靠告警或返回状态。",
+      "fix": "将END日志放到业务提交后，并提供可观察的日志失败告警、事件或返回机制，不能只依赖DBMS_OUTPUT。"
+    },
+    {
+      "id": 8,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "ZZZZ删除归一化不对称",
+      "problem": "DELETE只把目标NULL/空格映射为ZZZZ，没有把历史目标维度值ALL归一化为ZZZZ；旧行可能保留并与新结果重复。",
+      "fix": "统一目标旧值、scope和INSERT的规范化表达式；若ALL应非法，发布前先处理历史ALL数据。"
+    },
+    {
+      "id": 9,
+      "severity": "HIGH",
+      "confidence": "confirmed",
+      "title": "静态验证不能证明可执行性",
+      "problem": "现有验证只做文本计数和关键字符串存在性检查，未证明Oracle编译、动态bind对应关系、1000/1001分块、权限、GTT、HIE类型、回滚和范围结果；数据库不可用证据也已记录。",
+      "fix": "数据库可用后补编译/错误视图和窄集成门禁；数据库不可用时保持CHANGES_REQUESTED，不把静态通过解释为可执行性通过。"
+    }
+  ],
+  "reviewDoc": "/Users/shiqingfeng/Documents/1_工作/01_海信/.agents/tasks/CPM_SP_S2S_TDAYS_M-review.md"
+}

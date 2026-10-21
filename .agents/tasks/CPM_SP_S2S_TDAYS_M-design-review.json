@@ -1,0 +1,134 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "HIGH",
+      "title": "目标对象身份与知识库冲突且未决策",
+      "location": "设计 Summary、§3.2、Implementation Step 1、待确认假设1",
+      "problem": "用户指定 AW_MR7_ARPA01_000001，但知识库登记的是 AW_MR7_ARPS02_000001；本地没有 ARPA01 的 DDL、SQL或台账，设计仍把 ARPA01 当作目标白名单和39列INSERT前提。",
+      "fix": "取得权威对象确认：ARPA01为新目标则补完整DDL、台账和owner；若为笔误则统一改为ARPS02。确认前阻断target白名单、DELETE和INSERT。"
+    },
+    {
+      "id": 2,
+      "severity": "HIGH",
+      "title": "部署对象与授权契约不完整",
+      "location": "设计§3.2~§3.3、§3.6~§3.7、Implementation Steps 1~2",
+      "problem": "配置表、source/target白名单、两个GTT、日志表的owner、完整DDL、列定义、索引、非空默认值和直接授权均未给出，不能据此写出可编译可部署过程。",
+      "fix": "补充固定部署矩阵和DDL摘要，冻结OWNER、对象类型、列/索引、ON COMMIT、AUTHID、日志长度和每项直接grant，并作为代码生成前硬门禁。"
+    },
+    {
+      "id": 3,
+      "severity": "HIGH",
+      "title": "动态target/source范围与实际白名单方案矛盾",
+      "location": "设计Summary、§3.2、§5、Implementation Steps 7~9",
+      "problem": "Summary称按配置动态target装载，但§5要求target必须来自白名单映射且没有实际条目；source也没有逐对象列契约。第二个target或不同字段名source的处理未定义。",
+      "fix": "v1固定支持已确认的单一target并拒绝其他TARGET_TABLE；为每个合法source列出owner、对象类型、18个金额、基础维度、过滤列和类型。多target时补逐目标INSERT契约。"
+    },
+    {
+      "id": 4,
+      "severity": "HIGH",
+      "title": "公司事业部运行范围未与参考周转口径对齐",
+      "location": "设计§1、§2、§5、Out of Scope",
+      "problem": "参考过程还使用ATSMAP、COSMAP、DWMCRS有效期和锁定规则，设计却仅按V_REF_AZIENDA并明确不继承这些规则，没有业务证据证明新引擎可以读取更宽范围。",
+      "fix": "明确复用现有周转公司/事业部范围，或正式批准V_REF_AZIENDA ELEM为v1授权范围；列出ALL、2600、6100和P_BG的期望结果，并让source与DELETE共用该范围。"
+    },
+    {
+      "id": 5,
+      "severity": "HIGH",
+      "title": "HIE对象映射和类型契约不可落地",
+      "location": "设计§4、§5、静态校验清单、验收标准7",
+      "problem": "V_REF_ED_D_GRAN_CAL未在知识库登记，V_REF_DEST2也没有批准owner、列类型和权限证据；设计没有实际映射矩阵。",
+      "fix": "建立来源列到批准HIE owner.object、对象类型、ELEM/HIE/NODE类型长度和直接grant的固定矩阵，两个示例对象缺失或不兼容时在DELETE前失败。"
+    },
+    {
+      "id": 6,
+      "severity": "HIGH",
+      "title": "目标独占性未证实，通配删除可能越界",
+      "location": "设计§7、§8、待确认假设10、验收标准12",
+      "problem": "目标没有已确认的过程归属列，类别和币种不进入删除scope；若存在其他来源或人工数据，完整11维scope仍可能删除非本过程数据。",
+      "fix": "取得目标独占证明并设为部署硬门禁；否则增加稳定归属键并纳入DELETE、唯一键和INSERT，提供ALL/ZZZZ/NULL/空格删除样例。"
+    },
+    {
+      "id": 7,
+      "severity": "HIGH",
+      "title": "source字段及18个金额语义未逐对象闭合",
+      "location": "设计§3.3、§5、§6、验收标准9",
+      "problem": "设计只假定所有source有同名18个金额和基础字段，没有真实source清单、逐字段映射或本月占用语义；同名并不能证明业务含义。",
+      "fix": "为每个source白名单条目冻结18个金额、5个基础字段的精确映射、类型/精度、空值和场景期间语义；缺列或语义未确认时拒绝配置。"
+    },
+    {
+      "id": 8,
+      "severity": "HIGH",
+      "title": "YTD本月占用映射与零分母策略仍是发布阻断假设",
+      "location": "设计§6、Implementation Step 9、待确认假设7~8、验收标准9",
+      "problem": "设计自行把缺失的本月占用字段映射为END，并暂选分母为零返回0；两者都会直接改变六个天数结果。",
+      "fix": "由业务确认三套YTD的本月占用字段和分母为零行为，并写入唯一字段映射表、公式SQL和边界样例，删除可由实现者替换的表述。"
+    },
+    {
+      "id": 9,
+      "severity": "MEDIUM",
+      "title": "直接对应的类别和币种被擅自改成ZZZZ",
+      "location": "设计§5固定聚合SQL、§7、验收标准10",
+      "problem": "用户资料对COD_CATEGORIA、COD_VALUTA写的是直接对应，只对配置生成维度规定空值放ZZZZ；设计将来源空类别/币种也归并为ZZZZ，改变结果。",
+      "fix": "明确保留NULL/空格，或取得正式确认后统一归ZZZZ；在result聚合、INSERT和DELETE验证中使用同一已确认表达式。"
+    },
+    {
+      "id": 10,
+      "severity": "MEDIUM",
+      "title": "配置字段ALL通配语义未经授权",
+      "location": "设计§2、§7 NORMALIZE、验收标准4/10",
+      "problem": "原始要求只明确参数P_AZIENDA/P_BG的ALL和配置字段空值规则，设计却把所有配置目标维度的ALL都当作通配并输出ZZZZ。",
+      "fix": "明确配置ALL为非法值，或逐字段定义ALL的展开、输出和删除语义；确认前不要统一按ALL处理。"
+    },
+    {
+      "id": 11,
+      "severity": "HIGH",
+      "title": "日志失败没有可执行的可观测返回机制",
+      "location": "设计§8、§9、验收标准15",
+      "problem": "设计要求日志失败不阻断主流程但必须监控可见，过程签名又没有OUT状态、告警表、事件接口或返回码；尤其主事务提交后END日志失败无法通过现有契约表达。",
+      "fix": "冻结具体策略：定义备用告警表/事件和返回状态，或在提交前将日志失败视为致命错误；明确END提交后失败的调用方可观察结果和验收方式。"
+    },
+    {
+      "id": 12,
+      "severity": "HIGH",
+      "title": "DBMS_LOCK分配的事务行为未纳入单事务设计",
+      "location": "设计§8锁、Implementation Step 6、异常顺序",
+      "problem": "设计要求最后才提交业务事务，却未定义ALLOCATE_UNIQUE的事务副作用和调用时点；若分配操作提交，会破坏配置暂存、删除和装载的原子性假设。",
+      "fix": "在业务DML前完成可提交的handle分配，或使用预生成handle；冻结REQUEST/RELEASE契约，并用事务哨兵验证目标DML的唯一提交点。"
+    },
+    {
+      "id": 13,
+      "severity": "MEDIUM",
+      "title": "共享会话表没有RUN_ID隔离",
+      "location": "设计§1、§8 GTT和事务边界",
+      "problem": "SESSION_AZIENDA_LIST和SESSION_V_REF_AZIENDA只按SESSION_ID清理和读取，设计只给新GTT增加RUN_ID；同一数据库session重入时第二次调用可清空第一次调用的范围。",
+      "fix": "给共享表增加RUN_ID并使用SESSION_ID+RUN_ID，或用session级互斥/状态标记禁止重入，并覆盖同一session重入测试。"
+    },
+    {
+      "id": 14,
+      "severity": "MEDIUM",
+      "title": "动态bind名称没有长度和碰撞契约",
+      "location": "设计§4、§5、Implementation Step 7",
+      "problem": "bind名包含未定义长度和字符集的RULE_ID；过长或不同规则编码碰撞会导致PARSE/BIND失败或错误绑定。",
+      "fix": "使用固定长度安全编码（例如固定长度哈希+组号+序号），校验同一SQL内唯一性；RULE_ID仅用于日志，不直接进入bind标识符。"
+    },
+    {
+      "id": 15,
+      "severity": "MEDIUM",
+      "title": "场景正则是设计新增限制",
+      "location": "设计§1参数校验",
+      "problem": "用户只给出了COD_SCENARIO长度15，没有给出四位年份加大写字符的正则；该硬限制可能拒绝项目已有合法场景。",
+      "fix": "获取正式场景格式；没有正式格式时只校验非空、长度和前四位年份，不自行禁止其他字符，并补充有效/非法样例。"
+    },
+    {
+      "id": 16,
+      "severity": "MEDIUM",
+      "title": "ALL公司展开时LISTAGG可能溢出",
+      "location": "设计§1、§9及参考过程V_AZIENDA模式",
+      "problem": "P_AZIENDA=ALL可能展开超过4000字节的公司清单，LISTAGG会在日志前抛ORA-01489，导致合法运行因日志字段失败。",
+      "fix": "日志记录原始参数、公司数量和RUN_ID，不承载完整清单；如必须展示清单，使用明确截断策略并记录已截断状态。"
+    }
+  ],
+  "reviewDoc": "/Users/shiqingfeng/Documents/1_工作/01_海信/.agents/tasks/CPM_SP_S2S_TDAYS_M-design-review.md"
+}
