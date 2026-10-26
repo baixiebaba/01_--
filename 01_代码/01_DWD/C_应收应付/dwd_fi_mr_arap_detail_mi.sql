@@ -1,10 +1,16 @@
-/*
+/****
 -- ============================================================================
--- 最新版修改记录：20261009 MODIFY 修复SAP多格式日期转换
--- 上一版修改记录：20260921 MODIFY 更正净收付日期借贷方向逻辑
--- 上一版修改记录：20260921 ADD 新增净收付日期 netrcp_dt
+-- 最新版修改记录：ALTER BY 20261026 15:18 SHIQINGFENG.EX 对方公司映射按客户供应商类型匹配
+-- 上一版修改记录：ALTER BY 20261026 11:31 SHIQINGFENG.EX MDG客户编码为空时回退使用SAP客户编码
 -- 目标表：往来账龄明细表 test.dwd_fi_mr_arap_detail_mi
--- 修改记录：最新修改记录放最上面
+-- 修改记录：
+--   20261026 15:18 ALTER BY SHIQINGFENG.EX 对方公司映射按客户供应商类型匹配
+--   20261026 11:31 ALTER BY SHIQINGFENG.EX MDG客户编码为空时回退使用SAP客户编码
+--   20261023 16:18 ALTER BY SHIQINGFENG.EX 恢复文件头完整修改记录并按最近到最早排序
+--   20261023 16:15 ALTER BY SHIQINGFENG.EX 利润中心映射业务管理单元增加有效期限制
+--   20261023 16:09 ALTER BY SHIQINGFENG.EX 补充业务管理单元按系统公司及映射后利润中心取值逻辑
+--   20261022 18:27 ALTER BY SHIQINGFENG.EX 对方公司映射统一固定取C类型，供应商同样适用
+--   20261009 MODIFY 修复SAP多格式日期转换
 --   20260921 MODIFY 更正净收付日期借贷方向逻辑
 --   20260921 ADD 新增净收付日期 netrcp_dt
 --   20260910 ADD BY shiqingfeng.ex 新增
@@ -239,8 +245,9 @@ src_skb1 AS (
       FROM ods.odss810_skb1
 ),
 -- 汇总SAP客商编码映射，并以MDG客商维度补充统一属性。
+-- ALTER BY SHIQINGFENG.EX 20261026 11:31 MDG客户编码为空或全零时回退使用SAP客户编码。
 cust_sap_map_dim AS (
-    SELECT NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '') AS cust_sap_code
+    SELECT DISTINCT NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '') AS cust_sap_code
          , CASE TRIM(m.cust_sap_client)
                WHEN '600' THEN 'S600'
                WHEN '700' THEN 'S700'
@@ -251,7 +258,10 @@ cust_sap_map_dim AS (
                ELSE CONCAT('S', TRIM(m.cust_sap_client))
            END AS cust_sap_client
          , TRIM(m.cust_supp_type) AS cust_supp_type
-         , NULLIF(LTRIM(TRIM(m.cust_mdg_code), '0'), '') AS cust_mdg_code
+         , COALESCE(
+               NULLIF(LTRIM(TRIM(m.cust_mdg_code), '0'), '')
+             , NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '')
+           ) AS cust_mdg_code
       FROM dim.dim_fi_mr_customer_map_dd m
      WHERE TRIM(m.cust_supp_type) IN ('C', 'S')
 ),
@@ -275,6 +285,16 @@ customer_supplier_dim AS (
       FROM cust_sap_map_dim m
       LEFT JOIN dim.dim_fi_mr_customer_dd d
         ON NULLIF(LTRIM(TRIM(d.cust_code), '0'), '') = m.cust_mdg_code
+),
+-- 对方公司映射维度：保留客户和供应商类型，供行项目按客商类型匹配对方公司。
+-- ALTER BY SHIQINGFENG.EX 20261026 15:18 对方公司映射按客户或供应商行项目匹配对应客商类型。
+cp_company_dim AS (
+    SELECT cust_sap_code
+         , cust_sap_client
+         , cust_supp_type
+         , cp_company_mr_code
+         , cp_company_code
+      FROM customer_supplier_dim
 ),
 -- 商冷客户群维度：按标准化公司+客商分组，直接取客户群编码和名称最大值，确保每个公司+客商一行。
 customer_ccc_group_dim AS (
@@ -1614,9 +1634,11 @@ ar_country_busrange_rule AS (
      GROUP BY country_code
 ),
 -- 聚合有效期内业务管理单元映射规则。
+-- ALTER BY SHIQINGFENG.EX 20261023 16:09 补充batch_id=3按系统号和公司编码映射业务管理单元。
 ar_busdept_rule AS (
     SELECT CAST(batch_id AS INT) AS batch_id
          , system_src
+         , company_code
          , profitcenter_code
          , nature_l3_name
          , MAX(marketing_dept_code) AS marketing_dept_code
@@ -1626,10 +1648,11 @@ ar_busdept_rule AS (
        AND NVL(valid_to, '999999') >= @dt_month
      GROUP BY CAST(batch_id AS INT)
             , system_src
+            , company_code
             , profitcenter_code
             , nature_l3_name
 ),
--- 按1（系统+映射后利润中心）→2（系统+三级性质）生成业务管理单元候选。
+-- 按1（系统+映射后利润中心）→2（系统+三级性质）→3（系统+公司）生成业务管理单元候选。
 ar_busdept_candidate AS (
     SELECT b.fact_key
          , r.batch_id
@@ -1652,6 +1675,16 @@ ar_busdept_candidate AS (
         ON r.batch_id = 2
        AND r.system_src = b.system_src
        AND r.nature_l3_name = n.nature_l3_name
+    UNION ALL
+    SELECT b.fact_key
+         , r.batch_id
+         , r.marketing_dept_code
+         , r.marketing_dept_name
+      FROM ar_mapping_base b
+     INNER JOIN ar_busdept_rule r
+        ON r.batch_id = 3
+       AND r.system_src = b.system_src
+       AND r.company_code = b.company_code
 ),
 -- 从业务管理单元候选中按最小批次选取映射结果。
 ar_busdept_pick AS (
@@ -1668,6 +1701,25 @@ ar_busdept_pick AS (
         ON p.fact_key = c.fact_key
        AND p.batch_id = c.batch_id
      GROUP BY c.fact_key
+),
+-- ALTER BY SHIQINGFENG.EX 20261023 16:15 仅保留dim_flag为01且当前月份在有效期内的利润中心映射业务管理单元，并按映射后利润中心聚合。
+ar_bmu_profitcenter_rule AS (
+    SELECT NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '') AS profitcenter_code
+         , MAX(bmu_code) AS bmu_code
+         , MAX(bmu_name) AS bmu_name
+      FROM dim.dim_rule_fi_mr_bmu_to_profitcenter
+     -- 仅使用启用且在参数月份有效的利润中心业务管理单元映射。
+     WHERE TRIM(dim_flag) = '01'
+     GROUP BY NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
+),
+-- ALTER BY SHIQINGFENG.EX 20261023 16:15 按映射后利润中心补充业务管理单元，作为业务管理单元映射表未命中时的兜底。
+ar_bmu_profitcenter_pick AS (
+    SELECT b.fact_key
+         , r.bmu_code
+         , r.bmu_name
+      FROM ar_mapping_base b
+     INNER JOIN ar_bmu_profitcenter_rule r
+        ON r.profitcenter_code = NULLIF(LTRIM(TRIM(b.profitcenter_code), '0'), '')
 ),
 -- 汇总业务范围与业务管理单元映射结果。
 ar_business_mapping AS (
@@ -1697,8 +1749,9 @@ ar_business_mapping AS (
                    THEN cr.bus_range_name
                ELSE br.bus_range_name
            END AS bus_range_name
-         , bd.marketing_dept_code
-         , bd.marketing_dept_name
+         -- ALTER BY SHIQINGFENG.EX 20261023 16:09 优先按业务管理单元映射表取值，未命中时使用映射后利润中心对应业务管理单元。
+         , COALESCE(NULLIF(TRIM(bd.marketing_dept_code), ''), bp.bmu_code) AS marketing_dept_code
+         , COALESCE(NULLIF(TRIM(bd.marketing_dept_name), ''), bp.bmu_name) AS marketing_dept_name
       FROM ar_mapping_base b
       LEFT JOIN ar_nature_pick n
         ON n.fact_key = b.fact_key
@@ -1708,6 +1761,8 @@ ar_business_mapping AS (
         ON cr.country_code = b.country_code
       LEFT JOIN ar_busdept_pick bd
         ON bd.fact_key = b.fact_key
+      LEFT JOIN ar_bmu_profitcenter_pick bp
+        ON bp.fact_key = b.fact_key
 ),
 -- 仅保留语言为1的利润中心文本，并按系统/利润中心聚合。
 profitcenter_dim AS (
@@ -1759,7 +1814,8 @@ SELECT @dt_month
                THEN COALESCE(bc.name1, '')
            ELSE COALESCE(bc.name1, '')
        END AS cust_branch_name
-     , COALESCE(c.cp_company_mr_code, c.cp_company_code) AS cp_company_code
+     -- ALTER BY SHIQINGFENG.EX 20261022 18:27:33 对方公司统一取C类型映射，供应商行同样适用。
+     , COALESCE(cp.cp_company_mr_code, cp.cp_company_code) AS cp_company_code
      , ci.country_code
      , ci.country_name
      , a.acct_type_code
@@ -1869,6 +1925,14 @@ SELECT @dt_month
                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
                                   ELSE 'S'
                               END
+      -- ALTER BY SHIQINGFENG.EX 20261026 15:18 对方公司映射按行项目来源匹配客户C或供应商S类型。
+      LEFT JOIN cp_company_dim cp
+        ON cp.cust_sap_code = a.cust_head_code
+       AND cp.cust_sap_client = a.system_src
+       AND cp.cust_supp_type = CASE
+                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                   ELSE 'S'
+                               END
       LEFT JOIN customer_supplier_dim bc
         ON bc.cust_sap_code = a.cust_branch_code
        AND bc.cust_sap_client = a.system_src

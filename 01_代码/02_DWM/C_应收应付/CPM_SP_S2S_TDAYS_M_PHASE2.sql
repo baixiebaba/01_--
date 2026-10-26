@@ -1,15 +1,19 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M(
+CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
     P_SCENARIO   IN VARCHAR2
   , P_PERIODO   IN VARCHAR2
   , P_AZIENDA   IN VARCHAR2
   , P_BG        IN VARCHAR2
+  , P_EXP       IN VARCHAR2
   , SESSION_USER IN VARCHAR2
-) AUTHID DEFINER AS
-  /**************************************************************************
+) AS
+  /****
   最后更新时间：20261021
-  本次修改：改为按AW_RUL_TOVCAL_000001有效配置逐条动态读取来源表，直接汇总并写入配置目标表。
+  本次修改：新增模块参数P_EXP，仅读取AW_RUL_TOVCAL_000001中EXP_TYPE=P_EXP的有效配置。
+            目标表新增IS_MTR_FLAG字段，直接写入配置表当前IS_MTR_FLAG。
+            日志COD_AZIENDA统一按参考TOV过程记录为P_BG || '|' || V_AZIENDA。
+  上次修改：按AW_RUL_TOVCAL_000001有效配置逐条动态读取来源表，直接汇总并写入配置目标表。
             不使用SESSION_TOVCAL_RESULT、SESSION_TOVCAL_SCOPE、GTT或DBMS_SQL暂存结果。
-  名称：CPM_SP_S2S_TDAYS_M
+  名称：CPM_SP_S2S_TDAYS_M_PHASE2
   用途：周转计算配置驱动的S2S装载过程。
   源表：AW_RUL_TOVCAL_000001配置的SOURCE_TABLE。
   目标表：AW_RUL_TOVCAL_000001配置的TARGET_TABLE，当前业务目标为AW_MR7_ARPA01_000001。
@@ -21,15 +25,18 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M(
   V_PERIODO        VARCHAR2(30);
   V_YEARMONTH      VARCHAR2(10);
   V_AZIENDA        VARCHAR2(4000);
-  V_SESSION_AZIENDA VARCHAR2(4000);
   V_BG             VARCHAR2(4000);
   V_SESSION_ID     NUMBER;
   V_SQL            CLOB;
   V_DELETE_SQL     VARCHAR2(32767);
   V_TARGET_OBJECT  VARCHAR2(261);
+  V_TARGET_SCOPE   VARCHAR2(4000);
+  V_TARGET_AZIENDA VARCHAR2(4000);
+  V_TARGET_BG      VARCHAR2(4000);
   V_SOURCE_OBJECT  VARCHAR2(261);
   V_CONFIG_COUNT   NUMBER := 0;
   V_INSERT_COUNT   NUMBER := 0;
+  V_SESSION_AZIENDA_COUNT NUMBER := 0;
   V_ERROR_COD      NUMBER;
   V_ERROR_MSG      VARCHAR2(4000);
   V_ERROR_STAGE    VARCHAR2(100) := '参数校验';
@@ -232,8 +239,8 @@ BEGIN
   V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
 
   IF V_SCENARIO IS NULL OR V_PERIODO IS NULL OR V_AZIENDA IS NULL OR V_BG IS NULL
-     OR TRIM(SESSION_USER) IS NULL THEN
-    RAISE_APPLICATION_ERROR(-20012, '场景、期间、公司、事业部和用户不能为空');
+     OR TRIM(P_EXP) IS NULL OR TRIM(SESSION_USER) IS NULL THEN
+    RAISE_APPLICATION_ERROR(-20012, '场景、期间、公司、事业部、模块和用户不能为空');
   END IF;
   IF NOT REGEXP_LIKE(SUBSTR(V_SCENARIO, 1, 4), '^[0-9]{4}$') THEN
     RAISE_APPLICATION_ERROR(-20013, 'P_SCENARIO前四位必须为年份');
@@ -308,9 +315,10 @@ BEGIN
               AND COD_CONTO = 'ZAW_D2M_LOCK'
      );
 
-  -- 日志记录实际SESSION公司范围，不把运行参数ALL误当成目标公司值。
+  -- TOV过程以V_AZIENDA保存当前SESSION实际公司清单，日志统一写P_BG || '|' || V_AZIENDA。
+  -- 本过程沿用该口径；SESSION表仅负责来源取数范围，不单独用于日志字段。
   SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
-    INTO V_SESSION_AZIENDA
+    INTO V_AZIENDA
     FROM (
       SELECT DISTINCT ELEM
         FROM SESSION_AZIENDA_LIST
@@ -324,9 +332,10 @@ BEGIN
   INSERT INTO ZTAB_CPM_LOG(
       CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
-      'CPM_SP_S2S_TDAYS_M', 'BEGIN 开始执行', '配置表=AW_RUL_TOVCAL_000001;期间=' || V_YEARMONTH,
+      'CPM_SP_S2S_TDAYS_M_PHASE2', 'BEGIN 开始执行',
+      '配置表=AW_RUL_TOVCAL_000001;模块=' || TRIM(P_EXP) || ';期间=' || V_YEARMONTH,
       SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO,
-      SUBSTR(NVL(V_SESSION_AZIENDA, V_AZIENDA), 1, 4000)
+      SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000)
   );
 
   -- ============================================================================
@@ -351,6 +360,8 @@ BEGIN
          , D_TOV_CHAN
          , D_CC_CUSTGRP
          , COD_DEST3
+         , EXP_TYPE
+         , IS_MTR_FLAG
          , COLUMN_NAME_1, COLUMN_FILTER_1, COLUMN_VALUE_1
          , COLUMN_NAME_2, COLUMN_FILTER_2, COLUMN_VALUE_2
          , COLUMN_NAME_3, COLUMN_FILTER_3, COLUMN_VALUE_3
@@ -364,6 +375,7 @@ BEGIN
       FROM AW_RUL_TOVCAL_000001
      WHERE TRIM(VALID_FR) <= V_YEARMONTH
        AND NVL(TRIM(VALID_TO), '999999') >= V_YEARMONTH
+       AND TRIM(EXP_TYPE) = TRIM(P_EXP)
      ORDER BY ROWIDTOCHAR(ROWID)
   ) LOOP
     V_CONFIG_COUNT := V_CONFIG_COUNT + 1;
@@ -382,14 +394,18 @@ BEGIN
     -- 运行参数范围与配置目标维度分开判断：
     -- 具体配置公司必须属于本次SESSION实际公司范围；当前资料未确认配置公司的通配字面量，
     -- 因此仅将空配置公司作为目标ZZZZ，来源仍只允许读取SESSION_AZIENDA_LIST中的公司。
-    IF TRIM(R.COD_AZIENDA) IS NOT NULL
-       AND NOT EXISTS (
-             SELECT 1
-               FROM SESSION_AZIENDA_LIST L
-              WHERE L.SESSION_ID = V_SESSION_ID
-                AND TRIM(L.ELEM) = TRIM(R.COD_AZIENDA)
-       ) THEN
-      CONTINUE;
+    -- PL/SQL控制流不能直接使用SQL子查询；这里先按当前SESSION_ID计数，
+    -- 保持配置R.COD_AZIENDA非空时仅命中SESSION_AZIENDA_LIST才处理，未命中则跳过。
+    IF TRIM(R.COD_AZIENDA) IS NOT NULL THEN
+      SELECT COUNT(*)
+        INTO V_SESSION_AZIENDA_COUNT
+        FROM SESSION_AZIENDA_LIST L
+       WHERE L.SESSION_ID = V_SESSION_ID
+         AND TRIM(L.ELEM) = TRIM(R.COD_AZIENDA);
+
+      IF V_SESSION_AZIENDA_COUNT = 0 THEN
+        CONTINUE;
+      END IF;
     END IF;
 
     -- P_BG是运行事业部范围；配置D_BG是目标事业部。
@@ -398,57 +414,49 @@ BEGIN
       CONTINUE;
     END IF;
 
+    -- 目标公司、目标事业部先在PL/SQL中标准化。
+    -- 不能在静态INSERT的VALUES中直接调用过程内函数，否则低版本Oracle会报PLS-00231。
+    V_TARGET_AZIENDA := TARGET_AZIENDA_VALUE(R.COD_AZIENDA);
+    V_TARGET_BG := DIM_VALUE(R.D_BG);
+
     -- ============================================================================
     -- 第五阶段：按本次所有适用配置目标范围执行清理。
     -- 删除同时限定场景、期间、来源、当前目标表，以及同一配置行的目标公司和目标事业部，
     -- 避免P_AZIENDA/P_BG=ALL时因公司与事业部分开匹配而交叉扩大删除范围。
     -- 同一目标表在本次运行中只删除一次。
     -- ============================================================================
-    IF NOT V_TARGET_SEEN.EXISTS(V_TARGET_OBJECT) THEN
+    V_TARGET_SCOPE := V_TARGET_OBJECT
+      || '|'
+      || V_TARGET_AZIENDA
+      || '|'
+      || V_TARGET_BG;
+
+    -- 同一目标公司、目标事业部范围只在首次装载前删除一次。
+    -- 删除条件直接使用当前已筛选的配置目标维度，避免多层EXISTS动态拼接产生括号错误。
+    IF NOT V_TARGET_SEEN.EXISTS(V_TARGET_SCOPE) THEN
+      -- 删除范围值均来自过程参数或当前有效配置，拼接前统一转义单引号。
+      -- 此处不使用USING绑定列表，避免当前Oracle版本对该动态DELETE绑定语法的解析错误。
       V_DELETE_SQL := 'DELETE FROM ' || V_TARGET_OBJECT
-        || ' D WHERE D.COD_SCENARIO = :B_SCENARIO'
-        || ' AND D.COD_PERIODO = :B_PERIODO'
-        || ' AND D.PROVENIENZA = ''' || 'CPM_SP_S2S_TDAYS_M' || ''''
-        || ' AND EXISTS ('
-        || 'SELECT 1 FROM AW_RUL_TOVCAL_000001 R'
-        || ' CROSS JOIN (SELECT :B_SESSION_ID AS SESSION_ID, :B_BG AS P_BG, :B_TARGET_TABLE AS TARGET_TABLE FROM DUAL) P'
-        || ' WHERE TRIM(R.VALID_FR) <= :B_YEARMONTH'
-        || ' AND NVL(TRIM(R.VALID_TO), ''999999'') >= :B_YEARMONTH'
-        || ' AND UPPER(TRIM(R.TARGET_TABLE)) = P.TARGET_TABLE'
-        || ' AND ('
-        || ' (TRIM(R.COD_AZIENDA) IS NULL'
-        || ' AND TRIM(D.COD_AZIENDA) = ''ZZZZ'''
-        || ' OR (TRIM(R.COD_AZIENDA) IS NOT NULL'
-        || ' AND TRIM(D.COD_AZIENDA) = TRIM(R.COD_AZIENDA)'
-        || ' AND EXISTS (SELECT 1 FROM SESSION_AZIENDA_LIST L'
-        || ' WHERE L.SESSION_ID = P.SESSION_ID AND TRIM(L.ELEM) = TRIM(R.COD_AZIENDA)))'
-        || ' )'
-        || ' AND ('
-        || ' (P.P_BG = ''ALL'' AND ('
-        || '   (TRIM(R.D_BG) IS NULL AND TRIM(D.D_BG) = ''ZZZZ'')'
-        || ' OR (TRIM(R.D_BG) IS NOT NULL AND TRIM(D.D_BG) = TRIM(R.D_BG))'
-        || ' ))'
-        || ' OR (P.P_BG <> ''ALL'' AND TRIM(R.D_BG) IS NOT NULL'
-        || ' AND INSTR('','' || P.P_BG || '','', '','' || UPPER(TRIM(R.D_BG)) || '','') > 0'
-        || ' AND TRIM(D.D_BG) = TRIM(R.D_BG))'
-        || ' )'
-        || ')';
-      EXECUTE IMMEDIATE V_DELETE_SQL USING
-          V_SCENARIO
-        , V_PERIODO
-        , V_SESSION_ID
-        , V_BG
-        , V_TARGET_OBJECT
-        , V_YEARMONTH
-        , V_YEARMONTH;
-      V_TARGET_SEEN(V_TARGET_OBJECT) := TRUE;
+        || ' D WHERE D.COD_SCENARIO = ''' || REPLACE(V_SCENARIO, '''', '''''') || ''''
+        || ' AND D.COD_PERIODO = ''' || REPLACE(V_PERIODO, '''', '''''') || ''''
+        || ' AND D.PROVENIENZA = ''CPM_SP_S2S_TDAYS_M_PHASE2'''
+        || ' AND NVL(NULLIF(TRIM(D.COD_AZIENDA), ''''), ''ZZZZ'') = '''
+        || REPLACE(V_TARGET_AZIENDA, '''', '''''') || ''''
+        || ' AND NVL(NULLIF(TRIM(D.D_BG), ''''), ''ZZZZ'') = '''
+        || REPLACE(V_TARGET_BG, '''', '''''') || '''';
+      EXECUTE IMMEDIATE V_DELETE_SQL;
+      V_TARGET_SEEN(V_TARGET_SCOPE) := TRUE;
+
       INSERT INTO ZTAB_CPM_LOG(
           CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
       ) VALUES (
-          'CPM_SP_S2S_TDAYS_M', '目标表删除完成',
-          'TARGET=' || V_TARGET_OBJECT || ';来源=' || 'CPM_SP_S2S_TDAYS_M',
+          'CPM_SP_S2S_TDAYS_M_PHASE2', '目标表删除完成',
+          'TARGET=' || V_TARGET_OBJECT
+          || ';目标公司=' || V_TARGET_AZIENDA
+          || ';目标事业部=' || V_TARGET_BG
+          || ';来源=CPM_SP_S2S_TDAYS_M_PHASE2',
           SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO,
-          SUBSTR(NVL(V_SESSION_AZIENDA, V_AZIENDA), 1, 4000)
+          SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000)
       );
     END IF;
 
@@ -470,7 +478,7 @@ BEGIN
       || ', ACT_BEG_OCP_AMT, ACT_LM_OCP_AMT, ACT_END_OCP_AMT, ACT_YTD_OCP_AMT, ACT_MTD_CSM_AMT, ACT_YTD_CSM_AMT'
       || ', LY_BEG_OCP_AMT, LY_LM_OCP_AMT, LY_END_OCP_AMT, LY_YTD_OCP_AMT, LY_MTD_CSM_AMT, LY_YTD_CSM_AMT'
       || ', PLN_MTD_TDAYS, PLN_YTD_TDAYS, ACT_MTD_TDAYS, ACT_YTD_TDAYS, LY_MTD_TDAYS, LY_YTD_TDAYS'
-      || ', PROVENIENZA, DATEUPD, USERUPD)'
+      || ', IS_MTR_FLAG, PROVENIENZA, DATEUPD, USERUPD)'
       || CHR(10) || 'WITH PARAMS AS ('
       || CHR(10) || '  SELECT :B_SCENARIO AS COD_SCENARIO'
       || ', :B_PERIODO AS COD_PERIODO'
@@ -486,6 +494,7 @@ BEGIN
       || ', :B_D_SALE_DEPT AS TARGET_D_SALE_DEPT'
       || ', :B_D_TOV_CHAN AS TARGET_D_TOV_CHAN'
       || ', :B_D_CC_CUSTGRP AS TARGET_D_CC_CUSTGRP'
+      || ', :B_IS_MTR_FLAG AS IS_MTR_FLAG'
       || ', :B_USER AS USERUPD'
       || ' FROM DUAL)'
       || CHR(10) || ', AGG AS ('
@@ -522,7 +531,7 @@ BEGIN
     -- 同表读写边界：目标删除先于本目标首次写入；来源等于目标时排除本过程来源，
     -- 避免同一过程前一条配置刚写入的结果被后一条配置再次读取并重复累加。
     IF V_SOURCE_OBJECT = V_TARGET_OBJECT THEN
-      V_SQL := V_SQL || CHR(10) || '     AND NVL(S.PROVENIENZA, ''ZZZZ'') <> ''' || 'CPM_SP_S2S_TDAYS_M' || '''';
+      V_SQL := V_SQL || CHR(10) || '     AND NVL(S.PROVENIENZA, ''ZZZZ'') <> ''' || 'CPM_SP_S2S_TDAYS_M_PHASE2' || '''';
     END IF;
 
     -- 第七阶段：逐组追加配置筛选条件。
@@ -569,7 +578,8 @@ BEGIN
       || ', CASE WHEN A.ACT_YTD_CSM_AMT = 0 THEN 0 ELSE ((A.ACT_BEG_OCP_AMT / 2 + A.ACT_YTD_OCP_AMT - A.ACT_END_OCP_AMT / 2) * 30) / A.ACT_YTD_CSM_AMT END'
       || ', CASE WHEN A.LY_MTD_CSM_AMT = 0 THEN 0 ELSE ((A.LY_LM_OCP_AMT + A.LY_END_OCP_AMT) / 2 * 30) / A.LY_MTD_CSM_AMT END'
       || ', CASE WHEN A.LY_YTD_CSM_AMT = 0 THEN 0 ELSE ((A.LY_BEG_OCP_AMT / 2 + A.LY_YTD_OCP_AMT - A.LY_END_OCP_AMT / 2) * 30) / A.LY_YTD_CSM_AMT END'
-      || ', ''' || 'CPM_SP_S2S_TDAYS_M' || ''''
+      || ', P.IS_MTR_FLAG'
+      || ', ''' || 'CPM_SP_S2S_TDAYS_M_PHASE2' || ''''
       || ', SYSDATE'
       || ', P.USERUPD'
       || CHR(10) || '  FROM AGG A CROSS JOIN PARAMS P';
@@ -591,6 +601,7 @@ BEGIN
       , DIM_VALUE(R.D_SALE_DEPT)
       , DIM_VALUE(R.D_TOV_CHAN)
       , DIM_VALUE(R.D_CC_CUSTGRP)
+      , R.IS_MTR_FLAG
       , SESSION_USER
       , V_BIND_VALUE(1), V_BIND_AUX(1), V_BIND_EXTRA(1)
       , V_BIND_VALUE(2), V_BIND_AUX(2), V_BIND_EXTRA(2)
@@ -612,10 +623,10 @@ BEGIN
   INSERT INTO ZTAB_CPM_LOG(
       CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
-      'CPM_SP_S2S_TDAYS_M', '目标表装载完成',
+      'CPM_SP_S2S_TDAYS_M_PHASE2', '目标表装载完成',
       '配置数量=' || V_CONFIG_COUNT || ';插入数量=' || V_INSERT_COUNT,
       SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO,
-      SUBSTR(NVL(V_SESSION_AZIENDA, V_AZIENDA), 1, 4000)
+      SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000)
   );
 
   -- 成功路径清理当前数据库SESSION的实际公司范围；字段和条件与参考TOV过程一致。
@@ -628,10 +639,10 @@ BEGIN
   INSERT INTO ZTAB_CPM_LOG(
       CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
-      'CPM_SP_S2S_TDAYS_M', 'END 执行完成',
+      'CPM_SP_S2S_TDAYS_M_PHASE2', 'END 执行完成',
       '配置数量=' || V_CONFIG_COUNT || ';插入数量=' || V_INSERT_COUNT,
       SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO,
-      SUBSTR(NVL(V_SESSION_AZIENDA, V_AZIENDA), 1, 4000)
+      SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000)
   );
   COMMIT;
   -- ============================================================================
@@ -653,7 +664,7 @@ EXCEPTION
     INSERT INTO ZTAB_CPM_LOG(
         CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
     ) VALUES (
-        'CPM_SP_S2S_TDAYS_M', 'ERROR 执行报错',
+        'CPM_SP_S2S_TDAYS_M_PHASE2', 'ERROR 执行报错',
         SUBSTR(
             '阶段=' || V_ERROR_STAGE || ';规则=' || V_ERROR_RULE
             || ';SOURCE=' || V_ERROR_SOURCE || ';TARGET=' || V_ERROR_TARGET
@@ -661,9 +672,9 @@ EXCEPTION
             1, 4000
         ),
         SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO,
-        SUBSTR(NVL(V_SESSION_AZIENDA, V_AZIENDA), 1, 4000)
+        SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000)
     );
     COMMIT;
     RAISE;
-END CPM_SP_S2S_TDAYS_M;
+END CPM_SP_S2S_TDAYS_M_PHASE2;
 /

@@ -7,9 +7,10 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
 ) AS
   /**************************************************************************
   最后更新时间：20261020
-  本次修改：增加AW_RUL_ARPTOV_000001特殊取数配置，支持BATCH_ID=1至4剔除和BATCH_ID=6按公司、二级性质取数。
+  本次修改：新增最终颗粒度口径字段D_GRAN_CAL，固定写入ARTO_CUST。
+  上次修改：增加AW_RUL_ARPTOV_000001特殊取数配置，支持BATCH_ID=1至4剔除和BATCH_ID=6按公司、二级性质取数。
             ARPM02按配置过滤后再生成ZAMOUNT、ZAMOUNT_L2。
-  上次修改：ARPM02与IMOCC先汇总后按公司、客商、利润中心匹配收入；未匹配收入追加。
+  上上次修改：ARPM02与IMOCC先汇总后按公司、客商、利润中心匹配收入；未匹配收入追加。
             D_BG统一后置映射，增加多事业部客户的负周转行剔除规则。
   名称：CPM_SP_M2M_ARP_TOV_M_PHASE2
   用途：装载应收周转计算汇总表
@@ -96,7 +97,7 @@ BEGIN
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
       'CPM_SP_M2M_ARP_TOV_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
+      V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA
   );
   COMMIT;
 
@@ -122,7 +123,7 @@ BEGIN
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
       'CPM_SP_M2M_ARP_TOV_M_PHASE2', '当前批次删除完成', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
+      V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA
   );
 
   -- ============================================================================
@@ -136,6 +137,7 @@ BEGIN
     , COD_AZIENDA
     , COD_CONTO
     , COD_CATEGORIA
+    , D_GRAN_CAL
     , GRP_SCOPE
     , CUST_CODE
     , CUST_NAME
@@ -898,7 +900,7 @@ BEGIN
          , 'ZZZZ' AS D_CC_CUSTGRP
          , 'CNY' AS COD_VALUTA
          , 0 AS AR_AMT
-         , 0 AS REV_AMT
+         , NVL(P.BCY_AMT, 0) AS REV_AMT
          , 0 AS F1_ODUE_AMT
          , 0 AS F2_EPAY_AMT
          , 0 AS F3_ECR_AMT
@@ -906,7 +908,7 @@ BEGIN
          , 0 AS F5_UFEE_AMT
          , 0 AS F6_INVSM_AMT
          , 0 AS F7_GSUB_AMT
-         , NVL(P.BCY_AMT, 0) AS F8_ADJ_AMT
+         , 0 AS F8_ADJ_AMT
       FROM (
         SELECT COD_SCENARIO
              , COD_AZIENDA
@@ -1020,6 +1022,7 @@ BEGIN
        , COD_AZIENDA
        , '1122000000' AS COD_CONTO
        , COD_CATEGORIA
+       , 'ARTO_CUST' AS D_GRAN_CAL
        , GRP_SCOPE
        , CUST_CODE
        , CUST_NAME
@@ -1078,7 +1081,7 @@ BEGIN
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
       'CPM_SP_M2M_ARP_TOV_M_PHASE2', '目标表装载完成', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
+      V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA
   );
 
   DELETE FROM SESSION_AZIENDA_LIST
@@ -1090,7 +1093,7 @@ BEGIN
       CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
   ) VALUES (
       'CPM_SP_M2M_ARP_TOV_M_PHASE2', 'END 执行完成', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
+      V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA
   );
   COMMIT;
 EXCEPTION
@@ -1103,7 +1106,7 @@ EXCEPTION
     ) VALUES (
         'CPM_SP_M2M_ARP_TOV_M_PHASE2', 'ERROR 执行报错',
         V_ERROR_COD || ':' || SUBSTR(V_ERROR_MSG, 1, 3900),
-        SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA
+        SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA
     );
     COMMIT;
     RAISE;

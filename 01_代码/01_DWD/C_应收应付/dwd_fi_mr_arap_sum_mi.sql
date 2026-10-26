@@ -1,13 +1,15 @@
-/*
+/****
 -- ============================================================================
--- 最新版修改记录：20261009 ADD BY Kiro 新增周转渠道及商冷客户群四字段
--- 上一版修改记录：20261009 ADD BY Kiro 调整POLICY取数限制
--- 上一版修改记录：
---   20261009 ADD BY Kiro 补充OVERDUE及POLICY利润中心映射
---   20261009 ADD BY Kiro 修改POLICY政策取数逻辑
---   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
+-- 最新版修改记录：ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
+-- 上一版修改记录：ALTER BY 20261026 13:53 SHIQINGFENG.EX POLICY客户维度关联在MDG客商编码为空时回退SAP客商编码
 -- 目标表：往来账龄汇总表 test.dwd_fi_mr_arap_sum_mi
 -- 修改记录：最新修改记录放最上面
+--   ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
+--   ALTER BY 20261026 13:53 SHIQINGFENG.EX POLICY客户维度关联在MDG客商编码为空时回退SAP客商编码
+--   20261009 ADD BY Kiro 新增周转渠道及商冷客户群四字段
+--   20261009 ADD BY Kiro 调整POLICY取数限制
+--   20261009 ADD BY Kiro 补充OVERDUE及POLICY利润中心映射
+--   20261009 ADD BY Kiro 修改POLICY政策取数逻辑
 --   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
 --   20260915 ADD BY shiqingfeng.ex 新增
 -- ============================================================================
@@ -769,9 +771,14 @@ policy_customer_dim AS (
          , d.com_3rd_name AS channel_l3_name
       FROM dim.dim_fi_mr_customer_map_dd m
       LEFT JOIN dim.dim_fi_mr_customer_dd d
-        ON NULLIF(LTRIM(NULLIF(TRIM(d.cust_code), ''), '0'), '') = NULLIF(LTRIM(NULLIF(TRIM(m.cust_mdg_code), ''), '0'), '')
+        -- ALTER BY SHIQINGFENG.EX 20261026 13:53 m.cust_mdg_code为空时回退cust_sap_code匹配客户维度。
+        ON NULLIF(LTRIM(NULLIF(TRIM(d.cust_code), ''), '0'), '') = COALESCE(
+               NULLIF(LTRIM(NULLIF(TRIM(m.cust_mdg_code), ''), '0'), '')
+             , NULLIF(LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0'), '')
+           )
      WHERE TRIM(m.cust_sap_client) = '600'
-       AND TRIM(m.cust_supp_type) IN ('C', 'S')
+       -- ALTER BY 20261026 15:25 SHIQINGFENG.EX 对方公司匹配仅保留客户类型C。
+       AND TRIM(m.cust_supp_type) IN ('C')
      GROUP BY LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0')
             , d.cust_code
             , d.cust_name
