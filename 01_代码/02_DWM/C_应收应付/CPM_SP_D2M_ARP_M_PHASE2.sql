@@ -4,25 +4,28 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   , P_AZIENDA   IN VARCHAR2
   , SESSION_USER IN VARCHAR2
 ) AS
-  /**************************************************************************
-  最后更新时间：20261010
-  上一版本信息：
-  名称：CPM_SP_D2M_ARP_M
-  用途：DWD->DWM往来账龄数据抽取
-  源表：DWD_FI_MR_ARAP_SUM_MI、AW_MR9_REVM01_000001
-  目标表：AW_MR9_ARPM01_000001
-  逻辑文档地址: https://hisenseex.feishu.cn/sheets/JVJsssmEqh9Uk6tSffEci4khnIf?from=from_copylink&sheet=jNeukA
-  特殊逻辑：仅取DWD_STANDARD和M01_FACT两个数据包
-
-  版本信息：最新修改记录放最上面
-    20261010 修正账龄标识对应科目映射、来源字段作用域及未命中时保留原科目
-    20260924 汇率和税率处理由AG过程负责，D2M仅完成ARPM01来源装载及重分类标识回写
-    20260923 修正日立公司GRP_SCOPE对方公司节点取数逻辑
-    20260921 SHIQINGFENG.EX 新增重分类标识及集团归属范围更新
-    20260920 SHIQINGFENG.EX 新增
-
-  手工执行：CALL CPM_SP_D2M_ARP_M_PHASE2('2025ACT','06','6700','USER');
-  **************************************************************************/
+  /*******************************************************************************
+   *                              存储过程说明
+   *-----------------------------------------------------------------------------
+   * 最后更新时间：20261027 18:36
+   * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   * 上次修改：ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *
+   * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2
+   * 功能描述  ：DWD->DWM往来账龄数据抽取
+   * 源表      ：DWD_FI_MR_ARAP_SUM_MI、AW_MR9_REVM01_000001、DIM_RULE_FI_MR_AR_PROFIT_MAPPING
+   * 目标表    ：AW_MR9_ARPM01_000001
+   *
+   * 修改历史：
+   *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *   ALTER BY 20261027 14:08 SHIQINGFENG.EX M01收入按BATCH_ID=2利润中心映射表转换为往来利润中心
+   *   20261010 修正账龄标识对应科目映射、来源字段作用域及未命中时保留原科目
+   *   20260924 汇率和税率处理由AG过程负责，D2M仅完成ARPM01来源装载及重分类标识回写
+   *   20260923 修正日立公司GRP_SCOPE对方公司节点取数逻辑
+   *   20260921 SHIQINGFENG.EX 新增重分类标识及集团归属范围更新
+   *   20260920 SHIQINGFENG.EX 新增
+   ******************************************************************************/
   V_SCENARIO      VARCHAR2(30);
   V_PERIODO       VARCHAR2(30);
   V_YEARMONTH     VARCHAR2(10);
@@ -196,6 +199,16 @@ BEGIN
     , USERUPD
   )
   WITH
+  -- ALTER BY 20261027 14:08 SHIQINGFENG.EX 收入利润中心按有效期及BATCH_ID=2映射为往来利润中心；按源利润中心去前导零去重。
+  PROFIT_CENTER_RULE AS (
+    SELECT LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
+         , MAX(PROFITCENTER_CODE) AS PROFITCENTER_CODE
+      FROM DIM_RULE_FI_MR_AR_PROFIT_MAPPING
+     WHERE BATCH_ID = 2
+       AND VALID_FR <= V_YEARMONTH
+       AND NVL(VALID_TO, '999999') >= V_YEARMONTH
+     GROUP BY LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0')
+  ),
   /* DWD普通账龄：读取源表并直接转换为目标事实接口 */
   DWD_STANDARD AS (
     SELECT V_SCENARIO AS COD_SCENARIO
@@ -348,7 +361,8 @@ BEGIN
          , CAST(NULL AS VARCHAR2(30)) AS D_TOV_CHAN
          , CAST(NULL AS VARCHAR2(30)) AS D_CC_CUSTGRP
          , T.D_ONOFFLINE
-         , T.COD_DEST2
+         -- ALTER BY 20261027 14:08 SHIQINGFENG.EX 收入利润中心映射为往来利润中心；规则未命中时保留收入原利润中心。
+         , NVL(PM.PROFITCENTER_CODE, T.COD_DEST2) AS COD_DEST2
          , T.COD_DEST3
          , T.D_SALE_DEPT
          , CAST(NULL AS VARCHAR2(2000)) AS NATURE_L1_NAME
@@ -379,6 +393,8 @@ BEGIN
          , 'TA' AS SYSTEM_SRC
          , NVL(T.D_ADJ_TYPE, 'ZZZZ') AS D_ADJ_TYPE
       FROM AW_MR9_REVM01_000001 T
+      LEFT JOIN PROFIT_CENTER_RULE PM
+        ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(T.COD_DEST2), '0')
      WHERE T.COD_SCENARIO = V_SCENARIO
        AND T.COD_PERIODO = V_PERIODO
        AND T.COD_AZIENDA IN (

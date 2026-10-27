@@ -4,37 +4,40 @@
     , P_AZIENDA    IN VARCHAR2
     , SESSION_USER IN VARCHAR2
   ) AS
-    /**************************************************************************
-    最后更新时间：20261008
-    上一版本信息：
-    名称：CPM_SP_M2M_ARP_BD_M_PHASE2
-    用途：ARPM02坏账计算表 STEP1坏账计提基数、STEP2坏账计算、STEP3坏账分摊
-    源表：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、AW_MR6_ARPINS_000001、AW_RUL_ARPBDR_000001、DWD_FI_MR_ARAP_SUM_MI
-    目标表：AW_MR9_ARPM02_000001
-    逻辑文档：经分二期-应收-数据模型详细设计文档.xlsx
-    特殊逻辑：三段按 STEP1 -> STEP2 -> STEP3 顺序执行；PROVENIENZA 不更新。
-
-    版本信息：最新修改记录放最上面
-      20261018 STEP2 个别认定来源改用ARPM02 SPID字段并限制ZAMOUNT目标类别
-      20261017 STEP2 个别认定MERGE增加来源存在性判断，无来源时跳过聚合查询
-      20261016 方案B优化STEP1主表过滤及垫资/返利单次扫描，前置STEP2规则有效期和批次过滤
-      20261015 全过程检查并补充STEP2个别认定聚合来源公司范围过滤
-      20261014 STEP2 个别认定来源查询前置场景、期间、公司及业务类型过滤
-      20261013 STEP2 坏账计算的BD_1_AMT至BD_15_AMT统一保留两位小数
-      20261012 STEP2 配置表按客商、科目匹配并在配置源内去重，保持 MERGE ON 仅按OID
-      20261011 STEP1至STEP3 全链路按公司、客商、科目粒度处理，MERGE ON统一按OID匹配
-      20261010 STEP1 第一段按公司、客商、科目粒度执行 FIFO 并回写
-      20261009 修复 STEP1 多明细行账龄累计重复导致 FIFO 扣减放大
-      20261009 按真实配置表结构修正 STEP2 客户匹配、有效期及1-9比例
-      20261009 修复公司范围空值判断及 STEP2 账龄基数字段覆盖
-      20261009 按三个坏账设计页修复规则表、返利扣减、1-15账龄、个别认定状态、重跑清零及异常边界
-      20261008 STEP3 将 AGE_ALLOC_0_AMT 改为各账龄分摊金额合计，并统一在 S 查询中计算回写字段
-      20261008 日志按 STEP1、STEP2、STEP3 分段记录，成功路径最后统一提交并优化排版
-      20261008 按最新设计文档合并坏账 STEP1、STEP2、STEP3，并完善账龄分摊逻辑
-      20261008 新增 ARPM02 坏账计算表 STEP2 坏账计算过程
-
-    手工执行：CALL CPM_SP_M2M_ARP_BD_M_PHASE2('2026ACT','08','6800','USER');
-    **************************************************************************/
+    /*******************************************************************************
+     *                              存储过程说明
+     *-----------------------------------------------------------------------------
+     * 最后更新时间：20261027 18:36
+     * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+     * 上次修改：ALTER BY 20261027 18:30 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+     *
+     * 过程名称  ：CPM_SP_M2M_ARP_BD_M_PHASE2
+     * 功能描述  ：ARPM02坏账计算表 STEP1坏账计提基数、STEP2坏账计算、STEP3坏账分摊
+     * 源表      ：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、AW_MR6_ARPINS_000001、AW_RUL_ARPBDR_000001、DWD_FI_MR_ARAP_SUM_MI
+     * 目标表    ：AW_MR9_ARPM02_000001
+     *
+     * 修改历史：
+     *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+     *   ALTER BY 20261027 18:30 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+     *   ALTER BY 20261026 16:35 SHIQINGFENG.EX STEP2 坏账比例按组织架构优先映射维护公司
+     *   20261018 STEP2 个别认定来源改用ARPM02 SPID字段并限制ZAMOUNT目标类别
+     *   20261017 STEP2 个别认定MERGE增加来源存在性判断，无来源时跳过聚合查询
+     *   20261016 方案B优化STEP1主表过滤及垫资/返利单次扫描，前置STEP2规则有效期和批次过滤
+     *   20261015 全过程检查并补充STEP2个别认定聚合来源公司范围过滤
+     *   20261014 STEP2 个别认定来源查询前置场景、期间、公司及业务类型过滤
+     *   20261013 STEP2 坏账计算的BD_1_AMT至BD_15_AMT统一保留两位小数
+     *   20261012 STEP2 配置表按客商、科目匹配并在配置源内去重，保持 MERGE ON 仅按OID
+     *   20261011 STEP1至STEP3 全链路按公司、客商、科目粒度处理，MERGE ON统一按OID匹配
+     *   20261010 STEP1 第一段按公司、客商、科目粒度执行 FIFO 并回写
+     *   20261009 修复 STEP1 多明细行账龄累计重复导致 FIFO 扣减放大
+     *   20261009 按真实配置表结构修正 STEP2 客户匹配、有效期及1-9比例
+     *   20261009 修复公司范围空值判断及 STEP2 账龄基数字段覆盖
+     *   20261009 按三个坏账设计页修复规则表、返利扣减、1-15账龄、个别认定状态、重跑清零及异常边界
+     *   20261008 STEP3 将 AGE_ALLOC_0_AMT 改为各账龄分摊金额合计，并统一在 S 查询中计算回写字段
+     *   20261008 日志按 STEP1、STEP2、STEP3 分段记录，成功路径最后统一提交并优化排版
+     *   20261008 按最新设计文档合并坏账 STEP1、STEP2、STEP3，并完善账龄分摊逻辑
+     *   20261008 新增 ARPM02 坏账计算表 STEP2 坏账计算过程
+     ******************************************************************************/
     V_SCENARIO       VARCHAR2(30);
     V_PERIODO        VARCHAR2(30);
     V_YEARMONTH      VARCHAR2(10);
@@ -430,7 +433,64 @@
            AND NVL(VALID_TO, '999999') >= V_YEARMONTH
            AND BATCH_ID IN (1, 2, 3)
       ),
-      -- 配置源按公司、科目及集团范围前三位建立基础匹配范围，并保留有效期条件。
+      -- ALTER BY 20261026 16:35 SHIQINGFENG.EX STEP2 坏账比例按组织架构优先映射维护公司
+      -- 按组织层级确定比例维护公司；CASE按业务需求顺序优先匹配，且每个OID只产生一个维护公司。
+      RATE_COMPANY_SOURCE AS (
+        SELECT A.*
+            , CASE
+                WHEN EXISTS (
+                      SELECT 1
+                        FROM SESSION_V_REF_AZIENDA R01
+                       WHERE R01.SESSION_ID = V_SESSION_ID
+                         AND R01.HIE = '01'
+                         AND R01.NODE = '2000'
+                         AND R01.ELEM = A.COD_AZIENDA
+                    )
+                 AND NOT EXISTS (
+                      SELECT 1
+                        FROM SESSION_V_REF_AZIENDA R01_EXCLUDE
+                       WHERE R01_EXCLUDE.SESSION_ID = V_SESSION_ID
+                         AND R01_EXCLUDE.HIE = '01'
+                         AND R01_EXCLUDE.ELEM = '2910'
+                         AND R01_EXCLUDE.ELEM = A.COD_AZIENDA
+                    ) THEN '2000'
+                WHEN EXISTS (
+                      SELECT 1
+                        FROM SESSION_V_REF_AZIENDA R10_04020
+                       WHERE R10_04020.SESSION_ID = V_SESSION_ID
+                         AND R10_04020.HIE = '10'
+                         AND R10_04020.NODE = '04020'
+                         AND R10_04020.ELEM = A.COD_AZIENDA
+                    )
+                 AND NOT EXISTS (
+                      SELECT 1
+                        FROM SESSION_V_REF_AZIENDA R10_6600
+                       WHERE R10_6600.SESSION_ID = V_SESSION_ID
+                         AND R10_6600.HIE = '10'
+                         AND R10_6600.ELEM = '6600'
+                         AND R10_6600.ELEM = A.COD_AZIENDA
+                    ) THEN '6800'
+                WHEN EXISTS (
+                      SELECT 1
+                        FROM SESSION_V_REF_AZIENDA R10_03020
+                       WHERE R10_03020.SESSION_ID = V_SESSION_ID
+                         AND R10_03020.HIE = '10'
+                         AND R10_03020.NODE = '03020'
+                         AND R10_03020.ELEM = A.COD_AZIENDA
+                    )
+                 AND NOT EXISTS (
+                      SELECT 1
+                        FROM SESSION_V_REF_AZIENDA R10_6000A
+                       WHERE R10_6000A.SESSION_ID = V_SESSION_ID
+                         AND R10_6000A.HIE = '10'
+                         AND R10_6000A.ELEM = '6000A'
+                         AND R10_6000A.ELEM = A.COD_AZIENDA
+                    ) THEN '6700'
+                ELSE A.COD_AZIENDA
+              END RATE_COD_AZIENDA
+          FROM CALCULATION_SOURCE A
+      ),
+      -- 配置源按比例维护公司、科目及集团范围前三位建立基础匹配范围，并保留有效期条件。
       -- BATCH_ID即优先级：1为公司+客商，2为公司+性质，3为公司级通用规则。
       -- 同一业务明细只保留最高优先级配置；有效期起始时间及真实配置字段用于并列消歧。
       FORM_RATE_SOURCE AS (
@@ -449,9 +509,9 @@
                         , R.BD_RATIO_4 DESC, R.BD_RATIO_5 DESC, R.BD_RATIO_6 DESC
                         , R.BD_RATIO_7 DESC, R.BD_RATIO_8 DESC, R.BD_RATIO_9 DESC
                   ) RATE_RN
-              FROM CALCULATION_SOURCE A
+              FROM RATE_COMPANY_SOURCE A
               JOIN RULE_SOURCE R
-                ON R.COD_AZIENDA = A.COD_AZIENDA
+                ON R.COD_AZIENDA = A.RATE_COD_AZIENDA
                AND R.COD_CONTO = A.COD_CONTO
                AND SUBSTR(R.GRP_SCOPE, 1, 3) = SUBSTR(A.GRP_SCOPE, 1, 3)
                AND (

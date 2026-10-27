@@ -4,30 +4,24 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_INS_M_PHASE2(
   , P_AZIENDA   IN VARCHAR2
   , SESSION_USER IN VARCHAR2
 ) AS
-  /**************************************************************************
-  最后更新时间：20260923
-  上一版本信息：
-  名称：CPM_SP_M2M_ARP_INS_M_PHASE2
-  用途：根据投保信息和往来账龄，更新投保本位币金额、账龄金额及未覆盖比例
-  源表：AW_MR6_ARPINS_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO
-  目标表：AW_MR6_ARPINS_000001
-  特殊逻辑：
-    1. 公司范围沿用D2M/M2M的SESSION_AZIENDA_LIST，并排除当前期间锁定公司。
-    2. 往来账龄按公司+客商编码匹配，且仅取LE_AGE_FLAG='AR'的数据。
-    3. MTD_END_RATE = 公司本位币（AZIENDA.COD_VALUTA）期末汇率 / 投保币种期末汇率；币种一致时为1。
-    4. INS_COV_DAYS按30、60-90、120-180、360分别累计账龄段0-3。
-    5. 未覆盖比例沿用投保旧逻辑中的A、B、R、D计算公式。
-
-  说明：
-    AW_MR9_ARPM02_000001按公司+客商汇总账龄金额；公司本位币取TGK_FIMA_HISENSE.AZIENDA.COD_VALUTA，
-    投保币种取QCY_INS_CODE，汇率表取当前场景和期间的CAMBIO_FINALE。
-
-  版本信息：最新修改记录放最上面
-    20260923 KIRO.EX 统一D2M/M2M过程格式及SESSION公司范围
-    20260923 KIRO.EX 新增投保未覆盖比例更新过程
-
-  手工执行：CALL CPM_SP_M2M_ARP_INS_M_PHASE2('2025ACT','06','6700','USER');
-  **************************************************************************/
+  /*******************************************************************************
+   *                              存储过程说明
+   *-----------------------------------------------------------------------------
+   * 最后更新时间：20261027 18:36
+   * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   * 上次修改：ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *
+   * 过程名称  ：CPM_SP_M2M_ARP_INS_M_PHASE2
+   * 功能描述  ：根据投保信息和往来账龄，更新投保本位币金额、账龄金额及未覆盖比例
+   * 源表      ：AW_MR6_ARPINS_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO
+   * 目标表    ：AW_MR6_ARPINS_000001
+   *
+   * 修改历史：
+   *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *   20260923 KIRO.EX 统一D2M/M2M过程格式及SESSION公司范围
+   *   20260923 KIRO.EX 新增投保未覆盖比例更新过程
+   ******************************************************************************/
   V_SCENARIO      VARCHAR2(30);
   V_PERIODO       VARCHAR2(30);
   V_YEARMONTH     VARCHAR2(10);

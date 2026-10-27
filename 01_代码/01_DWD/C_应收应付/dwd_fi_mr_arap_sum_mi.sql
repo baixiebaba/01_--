@@ -1,19 +1,26 @@
-/****
--- ============================================================================
--- 最新版修改记录：ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
--- 上一版修改记录：ALTER BY 20261026 13:53 SHIQINGFENG.EX POLICY客户维度关联在MDG客商编码为空时回退SAP客商编码
--- 目标表：往来账龄汇总表 test.dwd_fi_mr_arap_sum_mi
--- 修改记录：最新修改记录放最上面
---   ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
---   ALTER BY 20261026 13:53 SHIQINGFENG.EX POLICY客户维度关联在MDG客商编码为空时回退SAP客商编码
---   20261009 ADD BY Kiro 新增周转渠道及商冷客户群四字段
---   20261009 ADD BY Kiro 调整POLICY取数限制
---   20261009 ADD BY Kiro 补充OVERDUE及POLICY利润中心映射
---   20261009 ADD BY Kiro 修改POLICY政策取数逻辑
---   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
---   20260915 ADD BY shiqingfeng.ex 新增
--- ============================================================================
-*/
+/*******************************************************************************
+ *                                  脚本说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261027 18:46
+ * 本次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
+ * 上次修改：ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
+ *
+ * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
+ * 功能描述  ：汇总装载往来账龄数据。
+ * 源表      ：详见脚本正文（往来账龄明细及八类业务来源）。
+ * 目标表    ：test.dwd_fi_mr_arap_sum_mi
+ *
+ * 修改历史：
+ *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
+ *   ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
+ *   ALTER BY 20261026 13:53 SHIQINGFENG.EX POLICY客户维度关联在MDG客商编码为空时回退SAP客商编码
+ *   20261009 ADD BY Kiro 新增周转渠道及商冷客户群四字段
+ *   20261009 ADD BY Kiro 调整POLICY取数限制
+ *   20261009 ADD BY Kiro 补充OVERDUE及POLICY利润中心映射
+ *   20261009 ADD BY Kiro 修改POLICY政策取数逻辑
+ *   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
+ *   20260915 ADD BY shiqingfeng.ex 新增
+ ******************************************************************************/
 
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
 --SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');

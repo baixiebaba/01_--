@@ -4,35 +4,32 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   , P_AZIENDA   IN VARCHAR2
   , SESSION_USER IN VARCHAR2
 ) AS
-  /**************************************************************************
-  最后更新时间：20261010
-  上一版本信息：
-  名称：CPM_SP_M2M_ARP_AG_M_PHASE2
-  用途：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
-  源表：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO、SQF_TEST
-  目标表：AW_MR9_ARPM02_000001
-  逻辑文档：经分二期-应收-数据模型详细设计文档.xlsx，ARPM02-账龄结果表
-  特殊逻辑：
-    1. 当前期间按公司+科目+客商+利润中心汇总ARPM01来源，并将来源横向展开。
-    2. BY_BCY_0_AMT取上年12期ARPM02的BCY_0_AMT；LM_BCY_0_AMT取上月ARPM02的BCY_0_AMT。
-    3. 设计字段COD_CONTO兼容映射为ARPM01的ACCT_REC_CODE。
-    4. 过程自动行按场景+期间+公司限定删除；PROVENIENZA='INPUT_DEFORM'的界面行保留，并按业务键复用OID后更新过程字段。
-    5. ADJ_REB_AMT按金额口径使用UREB_AMT-LEAST(BCY_0_AMT,UREB_AMT)，ADJ_RET_AMT使用LEAST(BCY_0_AMT,RET_NTRF_AMT)，并对负数和零值做安全处理。
-    6. 汇率及法人重分类除税由第一个包完成，本过程直接读取ARPM01已处理的BCY/QCY账龄分段。
-
-  版本信息：最新修改记录放最上面
-    20261010 撤销交易币折算本位币结果保留两位小数调整并恢复原精度
-    20261010 交易币折算本位币金额保留两位小数
-    20261010 RESULT_FACT最终将交易币字段映射为本位币字段
-    20261010 新增周转分析渠道和商冷客户群字段，直接对应ARPM01来源字段
-    20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
-    20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
-    20260923 SHIQINGFENG.EX 汇率评估标识为空时，交易币金额先换算人民币再换算成本位币
-    20260923 SHIQINGFENG.EX 重构ARPM02装载逻辑，保留INPUT_DEFORM并按OID MERGE更新
-    20260922 SHIQINGFENG.EX 新增ARPM02账龄结果表过程
-
-  手工执行：CALL CPM_SP_M2M_ARP_AG_M_PHASE2('2025ACT','06','6700','USER');
-  **************************************************************************/
+  /*******************************************************************************
+   *                              存储过程说明
+   *-----------------------------------------------------------------------------
+   * 最后更新时间：20261027 18:36
+   * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   * 上次修改：ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *
+   * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
+   * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
+   * 源表      ：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO、SQF_TEST
+   * 目标表    ：AW_MR9_ARPM02_000001
+   *
+   * 修改历史：
+   *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *   ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录
+   *   20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
+   *   20261010 撤销交易币折算本位币结果保留两位小数调整并恢复原精度
+   *   20261010 交易币折算本位币金额保留两位小数
+   *   20261010 RESULT_FACT最终将交易币字段映射为本位币字段
+   *   20261010 新增周转分析渠道和商冷客户群字段，直接对应ARPM01来源字段
+   *   20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
+   *   20260923 SHIQINGFENG.EX 汇率评估标识为空时，交易币金额先换算人民币再换算成本位币
+   *   20260923 SHIQINGFENG.EX 重构ARPM02装载逻辑，保留INPUT_DEFORM并按OID MERGE更新
+   *   20260922 SHIQINGFENG.EX 新增ARPM02账龄结果表过程
+   ******************************************************************************/
   V_SCENARIO       VARCHAR2(30);
   V_PERIODO        VARCHAR2(30);
   V_YEARMONTH      VARCHAR2(10);
@@ -1623,10 +1620,95 @@ BEGIN
     , S.USERUPD
   );
 
+  -- ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录。
+  -- 不删除 INPUT_DEFORM 人工行，避免清理自动结果时误删界面维护的数据。
+  DELETE FROM AW_MR9_ARPM02_000001 T
+   WHERE T.COD_SCENARIO = V_SCENARIO
+     AND T.COD_PERIODO = V_PERIODO
+     AND T.COD_AZIENDA IN (
+           SELECT ELEM
+             FROM SESSION_AZIENDA_LIST
+            WHERE SESSION_ID = V_SESSION_ID
+     )
+     AND T.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+     AND NVL(T.BY_BCY_0_AMT, 0) = 0
+     AND NVL(T.LM_BCY_0_AMT, 0) = 0
+     AND NVL(T.BCY_0_AMT, 0) = 0
+     AND NVL(T.BCY_1_AMT, 0) = 0
+     AND NVL(T.BCY_2_AMT, 0) = 0
+     AND NVL(T.BCY_3_AMT, 0) = 0
+     AND NVL(T.BCY_4_AMT, 0) = 0
+     AND NVL(T.BCY_5_AMT, 0) = 0
+     AND NVL(T.BCY_6_AMT, 0) = 0
+     AND NVL(T.BCY_7_AMT, 0) = 0
+     AND NVL(T.BCY_8_AMT, 0) = 0
+     AND NVL(T.BCY_9_AMT, 0) = 0
+     AND NVL(T.BCY_10_AMT, 0) = 0
+     AND NVL(T.BCY_11_AMT, 0) = 0
+     AND NVL(T.BCY_12_AMT, 0) = 0
+     AND NVL(T.BCY_13_AMT, 0) = 0
+     AND NVL(T.BCY_14_AMT, 0) = 0
+     AND NVL(T.BCY_15_AMT, 0) = 0
+     AND NVL(T.QCY_0_AMT, 0) = 0
+     AND NVL(T.QCY_1_AMT, 0) = 0
+     AND NVL(T.QCY_2_AMT, 0) = 0
+     AND NVL(T.QCY_3_AMT, 0) = 0
+     AND NVL(T.QCY_4_AMT, 0) = 0
+     AND NVL(T.QCY_5_AMT, 0) = 0
+     AND NVL(T.QCY_6_AMT, 0) = 0
+     AND NVL(T.QCY_7_AMT, 0) = 0
+     AND NVL(T.QCY_8_AMT, 0) = 0
+     AND NVL(T.QCY_9_AMT, 0) = 0
+     AND NVL(T.QCY_10_AMT, 0) = 0
+     AND NVL(T.QCY_11_AMT, 0) = 0
+     AND NVL(T.QCY_12_AMT, 0) = 0
+     AND NVL(T.QCY_13_AMT, 0) = 0
+     AND NVL(T.QCY_14_AMT, 0) = 0
+     AND NVL(T.QCY_15_AMT, 0) = 0
+     AND NVL(T.SHP_NINV_AMT, 0) = 0
+     AND NVL(T.RET_NTRF_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_0_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_1_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_2_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_3_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_4_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_5_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_6_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_7_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_8_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_9_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_10_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_11_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_12_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_13_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_14_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_INCL_15_AMT, 0) = 0
+     AND NVL(T.BCY_ADJ_EXCL_0_AMT, 0) = 0
+     AND NVL(T.OVERDUE_0_AMT, 0) = 0
+     AND NVL(T.OVERDUE_1_AMT, 0) = 0
+     AND NVL(T.OVERDUE_2_AMT, 0) = 0
+     AND NVL(T.OVERDUE_3_AMT, 0) = 0
+     AND NVL(T.OVERDUE_4_AMT, 0) = 0
+     AND NVL(T.OVERDUE_5_AMT, 0) = 0
+     AND NVL(T.OVERDUE_6_AMT, 0) = 0
+     AND NVL(T.OVERDUE_7_AMT, 0) = 0
+     AND NVL(T.OVERDUE_8_AMT, 0) = 0
+     AND NVL(T.OVERDUE_9_AMT, 0) = 0
+     AND NVL(T.INV_SAMPLE_AMT, 0) = 0
+     AND NVL(T.EPAY_AMT, 0) = 0
+     AND NVL(T.ECLS_AMT, 0) = 0
+     AND NVL(T.UREB_AMT, 0) = 0
+     AND NVL(T.UFEE_AMT, 0) = 0
+     AND NVL(T.CLOSING_RATE_BCY_AMT, 0) = 0
+     AND NVL(T.POSTING_RATE_BCY_AMT, 0) = 0
+     AND NVL(T.TH_FX_EVAL_AMT, 0) = 0
+     AND NVL(T.ADJ_REB_AMT, 0) = 0
+     AND NVL(T.ADJ_RET_AMT, 0) = 0;
+
   INSERT INTO ZTAB_CPM_LOG(
       CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA
   ) VALUES (
-      'CPM_SP_M2M_ARP_AG_M_PHASE2' , '目标表装载完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA
+      'CPM_SP_M2M_ARP_AG_M_PHASE2' , '目标表装载完成并清理全零金额记录' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA
   );
   COMMIT;
 

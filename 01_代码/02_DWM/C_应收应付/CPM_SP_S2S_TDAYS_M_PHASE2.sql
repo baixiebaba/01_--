@@ -6,21 +6,24 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
   , P_EXP       IN VARCHAR2
   , SESSION_USER IN VARCHAR2
 ) AS
-  /****
-  最后更新时间：20261021
-  本次修改：新增模块参数P_EXP，仅读取AW_RUL_TOVCAL_000001中EXP_TYPE=P_EXP的有效配置。
-            目标表新增IS_MTR_FLAG字段，直接写入配置表当前IS_MTR_FLAG。
-            日志COD_AZIENDA统一按参考TOV过程记录为P_BG || '|' || V_AZIENDA。
-  上次修改：按AW_RUL_TOVCAL_000001有效配置逐条动态读取来源表，直接汇总并写入配置目标表。
-            不使用SESSION_TOVCAL_RESULT、SESSION_TOVCAL_SCOPE、GTT或DBMS_SQL暂存结果。
-  名称：CPM_SP_S2S_TDAYS_M_PHASE2
-  用途：周转计算配置驱动的S2S装载过程。
-  源表：AW_RUL_TOVCAL_000001配置的SOURCE_TABLE。
-  目标表：AW_RUL_TOVCAL_000001配置的TARGET_TABLE，当前业务目标为AW_MR7_ARPA01_000001。
-  说明：每条配置均按10组取数限制读取来源表，按COD_CATEGORIA、COD_VALUTA和配置目标维度汇总18个金额，
-        再在外层SELECT计算6个周转天数后直接插入目标表。
-  版本信息：最新修改记录放在最上面
-  **************************************************************************/
+  /*******************************************************************************
+   *                              存储过程说明
+   *-----------------------------------------------------------------------------
+   * 最后更新时间：20261027 18:36
+   * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   * 上次修改：ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *
+   * 过程名称  ：CPM_SP_S2S_TDAYS_M_PHASE2
+   * 功能描述  ：周转计算配置驱动的S2S装载过程。
+   * 源表      ：AW_RUL_TOVCAL_000001配置的SOURCE_TABLE。
+   * 目标表    ：AW_RUL_TOVCAL_000001配置的TARGET_TABLE，当前业务目标为AW_MR7_ARPA01_000001。
+   *
+   * 修改历史：
+   *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
+   *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *   待确认：原头“本次修改”内容为“新增模块参数P_EXP，仅读取AW_RUL_TOVCAL_000001中EXP_TYPE=P_EXP的有效配置。目标表新增IS_MTR_FLAG字段，直接写入配置表当前IS_MTR_FLAG。日志COD_AZIENDA统一按参考TOV过程记录为P_BG || '|' || V_AZIENDA。”
+   *   待确认：原头“上次修改”内容为“按AW_RUL_TOVCAL_000001有效配置逐条动态读取来源表，直接汇总并写入配置目标表。不使用SESSION_TOVCAL_RESULT、SESSION_TOVCAL_SCOPE、GTT或DBMS_SQL暂存结果。”
+   ******************************************************************************/
   V_SCENARIO       VARCHAR2(30);
   V_PERIODO        VARCHAR2(30);
   V_YEARMONTH      VARCHAR2(10);

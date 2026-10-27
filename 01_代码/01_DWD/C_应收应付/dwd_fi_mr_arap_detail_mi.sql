@@ -1,25 +1,34 @@
-/****
--- ============================================================================
--- 最新版修改记录：ALTER BY 20261026 15:18 SHIQINGFENG.EX 对方公司映射按客户供应商类型匹配
--- 上一版修改记录：ALTER BY 20261026 11:31 SHIQINGFENG.EX MDG客户编码为空时回退使用SAP客户编码
--- 目标表：往来账龄明细表 test.dwd_fi_mr_arap_detail_mi
--- 修改记录：
---   20261026 15:18 ALTER BY SHIQINGFENG.EX 对方公司映射按客户供应商类型匹配
---   20261026 11:31 ALTER BY SHIQINGFENG.EX MDG客户编码为空时回退使用SAP客户编码
---   20261023 16:18 ALTER BY SHIQINGFENG.EX 恢复文件头完整修改记录并按最近到最早排序
---   20261023 16:15 ALTER BY SHIQINGFENG.EX 利润中心映射业务管理单元增加有效期限制
---   20261023 16:09 ALTER BY SHIQINGFENG.EX 补充业务管理单元按系统公司及映射后利润中心取值逻辑
---   20261022 18:27 ALTER BY SHIQINGFENG.EX 对方公司映射统一固定取C类型，供应商同样适用
---   20261009 MODIFY 修复SAP多格式日期转换
---   20260921 MODIFY 更正净收付日期借贷方向逻辑
---   20260921 ADD 新增净收付日期 netrcp_dt
---   20260910 ADD BY shiqingfeng.ex 新增
--- ============================================================================
-*/
+/*******************************************************************************
+ *                                  脚本说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261027 18:46
+ * 本次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
+ * 上次修改：ALTER BY 20261026 18:46 SHIQINGFENG.EX 客商类型恢复按行项目客户供应商来源匹配
+ *
+ * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
+ * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
+ * 源表      ：六套SAP BSID、BSAD、BSIK、BSAK及脚本正文引用的客商、组织、汇率和规则表。
+ * 目标表    ：test.dwd_fi_mr_arap_detail_mi
+ *
+ * 修改历史：
+ *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
+ *   ALTER BY 20261026 18:46 SHIQINGFENG.EX 客商类型恢复按行项目客户供应商来源匹配
+ *   ALTER BY 20261026 16:22 SHIQINGFENG.EX 客户供应商类型改按KOART映射C或V
+ *   ALTER BY 20261026 15:18 SHIQINGFENG.EX 对方公司映射按客户供应商类型匹配
+ *   ALTER BY 20261026 11:31 SHIQINGFENG.EX MDG客户编码为空时回退使用SAP客户编码
+ *   ALTER BY 20261023 16:18 SHIQINGFENG.EX 恢复文件头完整修改记录并按最近到最早排序
+ *   ALTER BY 20261023 16:15 SHIQINGFENG.EX 利润中心映射业务管理单元增加有效期限制
+ *   ALTER BY 20261023 16:09 SHIQINGFENG.EX 补充业务管理单元按系统公司及映射后利润中心取值逻辑
+ *   ALTER BY 20261022 18:27 SHIQINGFENG.EX 对方公司映射统一固定取C类型，供应商同样适用
+ *   20261009 MODIFY 修复SAP多格式日期转换
+ *   20260921 MODIFY 更正净收付日期借贷方向逻辑
+ *   20260921 ADD 新增净收付日期 netrcp_dt
+ *   20260910 ADD BY shiqingfeng.ex 新增
+ ******************************************************************************/
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
 --SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
 SET @year_month_day = '20260801';
--- 分区月份：YYYYMM。
+-- 分区月份：YYYYMM
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 账龄关键日期：参数月月末DATE。
 SET @key_date = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
@@ -245,7 +254,7 @@ src_skb1 AS (
       FROM ods.odss810_skb1
 ),
 -- 汇总SAP客商编码映射，并以MDG客商维度补充统一属性。
--- ALTER BY SHIQINGFENG.EX 20261026 11:31 MDG客户编码为空或全零时回退使用SAP客户编码。
+-- ALTER BY 20261026 18:46 SHIQINGFENG.EX 恢复客商映射表原始C/S类型，供应商匹配S类型。
 cust_sap_map_dim AS (
     SELECT DISTINCT NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '') AS cust_sap_code
          , CASE TRIM(m.cust_sap_client)
@@ -287,7 +296,7 @@ customer_supplier_dim AS (
         ON NULLIF(LTRIM(TRIM(d.cust_code), '0'), '') = m.cust_mdg_code
 ),
 -- 对方公司映射维度：保留客户和供应商类型，供行项目按客商类型匹配对方公司。
--- ALTER BY SHIQINGFENG.EX 20261026 15:18 对方公司映射按客户或供应商行项目匹配对应客商类型。
+-- ALTER BY 20261026 15:18 SHIQINGFENG.EX 对方公司映射按客户或供应商行项目匹配对应客商类型。
 cp_company_dim AS (
     SELECT cust_sap_code
          , cust_sap_client
@@ -692,6 +701,7 @@ src_bsak AS (
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 ),
 -- 按系统、公司和科目区间识别统驭科目，仅保留D应收/K应付。
+-- ALTER BY 20261026 18:46 SHIQINGFENG.EX 撤销KOART判定，客商类型恢复按行项目客户或供应商来源匹配。
 account_cfg AS (
     SELECT DISTINCT t.system_src
          , t.bukrs AS company_code
@@ -1634,7 +1644,7 @@ ar_country_busrange_rule AS (
      GROUP BY country_code
 ),
 -- 聚合有效期内业务管理单元映射规则。
--- ALTER BY SHIQINGFENG.EX 20261023 16:09 补充batch_id=3按系统号和公司编码映射业务管理单元。
+-- ALTER BY 20261023 16:09 SHIQINGFENG.EX 补充batch_id=3按系统号和公司编码映射业务管理单元。
 ar_busdept_rule AS (
     SELECT CAST(batch_id AS INT) AS batch_id
          , system_src
@@ -1702,7 +1712,7 @@ ar_busdept_pick AS (
        AND p.batch_id = c.batch_id
      GROUP BY c.fact_key
 ),
--- ALTER BY SHIQINGFENG.EX 20261023 16:15 仅保留dim_flag为01且当前月份在有效期内的利润中心映射业务管理单元，并按映射后利润中心聚合。
+-- ALTER BY 20261023 16:15 SHIQINGFENG.EX 仅保留dim_flag为01且当前月份在有效期内的利润中心映射业务管理单元，并按映射后利润中心聚合。
 ar_bmu_profitcenter_rule AS (
     SELECT NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '') AS profitcenter_code
          , MAX(bmu_code) AS bmu_code
@@ -1712,7 +1722,7 @@ ar_bmu_profitcenter_rule AS (
      WHERE TRIM(dim_flag) = '01'
      GROUP BY NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
 ),
--- ALTER BY SHIQINGFENG.EX 20261023 16:15 按映射后利润中心补充业务管理单元，作为业务管理单元映射表未命中时的兜底。
+-- ALTER BY 20261023 16:15 SHIQINGFENG.EX 按映射后利润中心补充业务管理单元，作为业务管理单元映射表未命中时的兜底。
 ar_bmu_profitcenter_pick AS (
     SELECT b.fact_key
          , r.bmu_code
@@ -1749,7 +1759,7 @@ ar_business_mapping AS (
                    THEN cr.bus_range_name
                ELSE br.bus_range_name
            END AS bus_range_name
-         -- ALTER BY SHIQINGFENG.EX 20261023 16:09 优先按业务管理单元映射表取值，未命中时使用映射后利润中心对应业务管理单元。
+         -- ALTER BY 20261023 16:09 SHIQINGFENG.EX 优先按业务管理单元映射表取值，未命中时使用映射后利润中心对应业务管理单元。
          , COALESCE(NULLIF(TRIM(bd.marketing_dept_code), ''), bp.bmu_code) AS marketing_dept_code
          , COALESCE(NULLIF(TRIM(bd.marketing_dept_name), ''), bp.bmu_name) AS marketing_dept_name
       FROM ar_mapping_base b
@@ -1925,7 +1935,7 @@ SELECT @dt_month
                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
                                   ELSE 'S'
                               END
-      -- ALTER BY SHIQINGFENG.EX 20261026 15:18 对方公司映射按行项目来源匹配客户C或供应商S类型。
+      -- ALTER BY 20261026 18:46 SHIQINGFENG.EX 对方公司映射按行项目来源匹配客户C或供应商S类型。
       LEFT JOIN cp_company_dim cp
         ON cp.cust_sap_code = a.cust_head_code
        AND cp.cust_sap_client = a.system_src
