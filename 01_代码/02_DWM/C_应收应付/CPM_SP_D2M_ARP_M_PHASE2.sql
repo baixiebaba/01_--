@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261027 18:36
-   * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
-   * 上次修改：ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   * 最后更新时间：20261028 19:31
+   * 本次修改：ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。
+   * 上次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2
    * 功能描述  ：DWD->DWM往来账龄数据抽取
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM01_000001
    *
    * 修改历史：
+   *   ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。
    *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
    *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
    *   ALTER BY 20261027 14:08 SHIQINGFENG.EX M01收入按BATCH_ID=2利润中心映射表转换为往来利润中心
@@ -402,7 +403,10 @@ BEGIN
                FROM SESSION_AZIENDA_LIST
               WHERE SESSION_ID = V_SESSION_ID
        )
+       -- ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。
        AND (T.COD_CONTO LIKE 'S600101%' OR T.COD_CONTO LIKE 'S600102%')
+       AND NVL(T.SRC_DETAIL, 'ZZZZ') NOT LIKE '%LM'
+       AND (NVL(T.SRC_DETAIL, 'ZZZZ') <> 'ADJM01' OR T.D_ADJ_TYPE = 'REV_01_201')
   ),
   AGG_FACT AS (
     SELECT COD_SCENARIO

@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_INS_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261027 18:36
-   * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
-   * 上次修改：ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   * 最后更新时间：20261028 17:02
+   * 本次修改：ALTER BY 20261028 17:02 SHIQINGFENG.EX 删除测试用生产抄数语句（整表DELETE后从TGK_FIMA_HISENSE覆盖投保录入表），未修改业务主体。
+   * 上次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
    *
    * 过程名称  ：CPM_SP_M2M_ARP_INS_M_PHASE2
    * 功能描述  ：根据投保信息和往来账龄，更新投保本位币金额、账龄金额及未覆盖比例
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_INS_M_PHASE2(
    * 目标表    ：AW_MR6_ARPINS_000001
    *
    * 修改历史：
+   *   ALTER BY 20261028 17:02 SHIQINGFENG.EX 删除测试用生产抄数语句（整表DELETE后从TGK_FIMA_HISENSE覆盖投保录入表），未修改业务主体。
    *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
    *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
    *   20260923 KIRO.EX 统一D2M/M2M过程格式及SESSION公司范围
@@ -93,13 +94,7 @@ BEGIN
   );
   COMMIT;
 
-  /* 测试用 从生产环境拉取收录数据进行更新 */
-  DELETE FROM AW_MR6_ARPINS_000001;
-  INSERT INTO AW_MR6_ARPINS_000001
-  SELECT * FROM TGK_FIMA_HISENSE.AW_MR6_ARPINS_000001;
-  /* 测试用 从生产环境拉取收录数据进行更新 */
-
-
+  /* ALTER BY 20261028 17:02 SHIQINGFENG.EX 删除测试用"从生产环境整表覆盖投保录入表"的DELETE/INSERT语句，避免调度执行时清空当月手工录入数据 */
   /* 更新投保信息录入表的本位币金额、账龄金额及未覆盖比例 */
   MERGE INTO AW_MR6_ARPINS_000001 T
   USING (
