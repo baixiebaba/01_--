@@ -4,7 +4,7 @@
 -- 生成日期: 2026-09-29
 -- 说明: Doris 元数据在 information_schema.columns, 描述取 COLUMN_COMMENT
 -- =============================================================================
-
+  
 -- 【方案1 / 推荐】一条 SQL 搞定, CONCAT 拼接后 IN 过滤, 兼容性最好
 SELECT c.table_name                                   AS table_name        -- 表名
      , c.column_name                                  AS column_name       -- 字段名
