@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261027 18:46
- * 本次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- * 上次修改：ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
+ * 最后更新时间：20261028 13:49
+ * 本次修改：ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
+ * 上次修改：ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE限定问题资金超期款明细并改用batch_id=1利润中心映射。
  *
  * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -11,6 +11,8 @@
  * 目标表    ：test.dwd_fi_mr_arap_sum_mi
  *
  * 修改历史：
+ *   ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
+ *   ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE限定问题资金超期款明细并改用batch_id=1利润中心映射。
  *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
  *   ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
  *   ALTER BY 20261026 13:53 SHIQINGFENG.EX POLICY客户维度关联在MDG客商编码为空时回退SAP客商编码
@@ -580,7 +582,7 @@ xh_ap_fact AS (
        AND COALESCE(x.ap_bukrs, '') <> ''
        AND x.ap_bukrs NOT IN ('9000', '9002', '9003', '9005', '9008')
 ),
--- OVERDUE / INV_SAMPLE：直接取原字段金额，不再拆成两个冗余包；同一来源表一次聚合后再分流到两个事实输出。
+-- OVERDUE / INV_SAMPLE：同一来源表一次聚合后分流；两类金额均仅取问题资金超期款明细行。
 overdue_sample_src AS (
     SELECT s.ledge_code AS company_code
          , s.gl_account AS acct_src_code
@@ -598,6 +600,8 @@ overdue_sample_src AS (
                                )
                              , '%Y%m%d'
                          )
+       -- ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE均仅取data_class以“问题资金超期款明细”结尾的数据。
+       AND s.data_class LIKE '%问题资金超期款明细'
      GROUP BY s.ledge_code
             , s.gl_account
             , s.cust_code
@@ -607,13 +611,14 @@ overdue_sample_src AS (
     HAVING SUM(COALESCE(s.overdue_adj_after_amt, 0)) <> 0
         OR SUM(COALESCE(s.inv_sample_amt, 0)) <> 0
 ),
--- OVERDUE：读取目标月份有效的batch_id=2利润中心映射，并按去前导0后的旧利润中心去重，避免放大金额。
+-- OVERDUE：读取目标月份有效的batch_id=1利润中心映射，并按去前导0后的旧利润中心去重，避免放大金额。
 overdue_profitcenter_rule AS (
     SELECT NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '') AS src_profitcenter_code
          , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
          , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
-     WHERE CAST(pm.batch_id AS INT) = 2
+     -- ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE利润中心改用应收应付-利润中心映射表batch_id=1配置。
+     WHERE CAST(pm.batch_id AS INT) = 1
        AND NVL(pm.valid_fr, '202401') <= @dt_month
        AND NVL(pm.valid_to, '999999') >= @dt_month
      GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
