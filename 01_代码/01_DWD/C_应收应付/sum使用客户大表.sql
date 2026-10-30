@@ -5,12 +5,14 @@
  * 本次修改：ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
  * 上次修改：ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
  *
- * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
+ * 脚本名称  ：sum使用客户大表.sql
  * 功能描述  ：汇总装载往来账龄数据。
  * 源表      ：详见脚本正文（往来账龄明细及八类业务来源）。
  * 目标表    ：test.dwd_fi_mr_arap_sum_mi
- * 版本说明  ：本文件为「不使用客户大表」并行版本，与 dwd_fi_mr_arap_sum_mi.sql 逻辑一致，
- *             唯一差异是客商维度不依赖 dim_fi_mr_customer_map_dd / dim_fi_mr_customer_dd。
+ * 版本说明  ：备用版本 —— 使用客户大表 dim_fi_mr_customer_map_dd / dim_fi_mr_customer_dd。
+ *             客户大表正在改造、存在数据问题，暂不启用（2026-10-30 业务确认）。
+ *             待改造完成并验证通过后，再把本文件内容覆盖到 dwd_fi_mr_arap_sum_mi.sql 并推 hidata。
+ *             注意：线上当前跑的是「不使用客户大表」版，直接覆盖等于换实现。
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
@@ -785,60 +787,42 @@ policy_customer_ccc_dim AS (
      GROUP BY NULLIF(LTRIM(TRIM(d.company_code_mdg), '0'), '')
             , NULLIF(LTRIM(TRIM(d.cust_sap_code), '0'), '')
 ),
--- POLICY：读取S600客户主数据，提供客户名称与MDG客商编码；不再依赖客户大表dim_fi_mr_customer_map_dd/dim_fi_mr_customer_dd。
--- ALTER BY 20261029 18:40 SHIQINGFENG.EX 本文件为「不使用客户大表」并行版本，客商维度直读SAP KNA1 + 客户基础信息表 + 对方公司规则表。
-policy_customer_kna1 AS (
-    SELECT NULLIF(LTRIM(TRIM(k.kunnr), '0'), '') AS cust_sap_code
-         , MAX(k.name1) AS cust_name
-         , COALESCE(MAX(NULLIF(LTRIM(TRIM(k.zkunnr_mdg), '0'), ''))
-                  , NULLIF(LTRIM(TRIM(k.kunnr), '0'), '')) AS cust_mdg_code
-      FROM ods.odss600_kna1 k
-     GROUP BY NULLIF(LTRIM(TRIM(k.kunnr), '0'), '')
-),
--- POLICY：MDG客商编码维度的三级公司分类与国家，源表cust_code唯一。
-policy_customer_class_dim AS (
-    SELECT LTRIM(TRIM(c.cust_code), '0') AS cust_code
-         , c.com_1st_code
-         , c.com_1st_name
-         , c.com_2nd_code
-         , c.com_2nd_name
-         , c.com_3rd_code
-         , c.com_3rd_name
-         , c.country_code
-         , c.country_name
-      FROM dw.dim_customer_base_info_dd c
-     WHERE NULLIF(LTRIM(TRIM(c.cust_code), '0'), '') IS NOT NULL
-),
--- POLICY：客商对方公司映射，仅客户类型C；同一键重复配置取MAX。
-policy_customer_ctp AS (
-    SELECT LTRIM(TRIM(r.cust_code), '0') AS cust_code
-         , MAX(NULLIF(TRIM(r.cp_company_code_mr), '')) AS cp_company_mr_code
-         , MAX(NULLIF(TRIM(r.cp_company_code), '')) AS cp_company_code
-      FROM dim.dim_rule_fi_mr_cust2ctp_mapping r
-     WHERE TRIM(r.cust_type_code) = 'C'
-       AND NVL(r.valid_fr, '202401') <= @dt_month
-       AND NVL(r.valid_to, '999999') >= @dt_month
-     GROUP BY LTRIM(TRIM(r.cust_code), '0')
-),
--- POLICY：按S600客商补充对方公司、国家及三级公司分类，避免政策事实缺少组织维度。
+-- POLICY：按S600客商映射补充对方公司、国家及三级公司分类，避免政策事实缺少组织维度。
 policy_customer_dim AS (
-    SELECT m.cust_sap_code
-         , m.cust_mdg_code
-         , m.cust_name
-         , COALESCE(ctp.cp_company_mr_code, ctp.cp_company_code) AS cp_company_code
-         , cl.country_code
-         , cl.country_name
-         , cl.com_1st_code AS channel_l1_code
-         , cl.com_1st_name AS channel_l1_name
-         , cl.com_2nd_code AS channel_l2_code
-         , cl.com_2nd_name AS channel_l2_name
-         , cl.com_3rd_code AS channel_l3_code
-         , cl.com_3rd_name AS channel_l3_name
-      FROM policy_customer_kna1 m
-      LEFT JOIN policy_customer_class_dim cl
-        ON cl.cust_code = m.cust_mdg_code
-      LEFT JOIN policy_customer_ctp ctp
-        ON ctp.cust_code = m.cust_sap_code
+    SELECT LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0') AS cust_sap_code
+         , d.cust_code AS cust_mdg_code
+         , d.cust_name
+         , d.cp_company_code
+         , d.country_code
+         , d.country_name
+         , d.com_1st_code AS channel_l1_code
+         , d.com_1st_name AS channel_l1_name
+         , d.com_2nd_code AS channel_l2_code
+         , d.com_2nd_name AS channel_l2_name
+         , d.com_3rd_code AS channel_l3_code
+         , d.com_3rd_name AS channel_l3_name
+      FROM dim.dim_fi_mr_customer_map_dd m
+      LEFT JOIN dim.dim_fi_mr_customer_dd d
+        -- ALTER BY SHIQINGFENG.EX 20261026 13:53 m.cust_mdg_code为空时回退cust_sap_code匹配客户维度。
+        ON NULLIF(LTRIM(NULLIF(TRIM(d.cust_code), ''), '0'), '') = COALESCE(
+               NULLIF(LTRIM(NULLIF(TRIM(m.cust_mdg_code), ''), '0'), '')
+             , NULLIF(LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0'), '')
+           )
+     WHERE TRIM(m.cust_sap_client) = '600'
+       -- ALTER BY 20261026 15:25 SHIQINGFENG.EX 对方公司匹配仅保留客户类型C。
+       AND TRIM(m.cust_supp_type) IN ('C')
+     GROUP BY LTRIM(NULLIF(TRIM(m.cust_sap_code), ''), '0')
+            , d.cust_code
+            , d.cust_name
+            , d.cp_company_code
+            , d.country_code
+            , d.country_name
+            , d.com_1st_code
+            , d.com_1st_name
+            , d.com_2nd_code
+            , d.com_2nd_name
+            , d.com_3rd_code
+            , d.com_3rd_name
 ),
 -- POLICY：读取目标月份有效的周转分析渠道规则，并按匹配键去重。
 policy_tov_rule_1 AS (

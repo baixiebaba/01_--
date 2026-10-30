@@ -34,8 +34,10 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_detail_mi (
     , channel_l2_name VARCHAR(200) COMMENT '二级公司分类名称'
     , channel_l3_code VARCHAR(30) COMMENT '三级公司分类编码'
     , channel_l3_name VARCHAR(200) COMMENT '三级公司分类名称'
-    , tov_channel_code VARCHAR(30) COMMENT '周转分析渠道编码'
-    , tov_channel_name VARCHAR(200) COMMENT '周转分析渠道名称'
+    , channel_bu_code VARCHAR(50) COMMENT '渠道BU编码：按三级公司分类匹配渠道BU关系表'      -- ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030新增
+    , channel_bu_name VARCHAR(200) COMMENT '渠道BU名称：按三级公司分类匹配渠道BU关系表'      -- ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030新增
+    , tov_channel_code VARCHAR(30) COMMENT '周转分析渠道编码：1030废弃，不再取数，列暂保留'
+    , tov_channel_name VARCHAR(200) COMMENT '周转分析渠道名称：1030废弃，不再取数，列暂保留'
     , cc_cust_group_code VARCHAR(30) COMMENT '商冷客户群编码'
     , cc_cust_group_name VARCHAR(200) COMMENT '商冷客户群名称'
     , onoffline_code VARCHAR(30) COMMENT '线上线下编码'

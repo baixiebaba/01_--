@@ -1,16 +1,24 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261027 18:46
- * 本次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- * 上次修改：ALTER BY 20261026 18:46 SHIQINGFENG.EX 客商类型恢复按行项目客户供应商来源匹配
+ * 最后更新时间：20261030 17:50
+ * 本次修改：ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段按1030变更停用（注释保留）。
+ * 上次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
  * 源表      ：六套SAP BSID、BSAD、BSIK、BSAK及脚本正文引用的客商、组织、汇率和规则表。
  * 目标表    ：test.dwd_fi_mr_arap_detail_mi
+ * 版本说明  ：★ 当前生效版本（2026-10-30 起）—— 客商维度不依赖客户大表
+ *             dim_fi_mr_customer_map_dd / dim_fi_mr_customer_dd，改为直读 SAP KNA1/LFA1 +
+ *             dw.dim_customer_base_info_dd + dim_rule_fi_mr_cust2ctp_mapping。
+ *             生效原因：客户大表仍在改造、存在数据问题，暂不启用（2026-10-30 业务确认）。
+ *             线上 hidata 脚本 36135 部署的就是本版，2026-10-30 核对逐字一致。
+ *             待客户大表改造完成并验证通过后，再切换到 detail使用客户大表.sql。
+ *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段停用（注释保留）。
  *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
  *   ALTER BY 20261026 18:46 SHIQINGFENG.EX 客商类型恢复按行项目客户供应商来源匹配
  *   ALTER BY 20261026 16:22 SHIQINGFENG.EX 客户供应商类型改按KOART映射C或V
@@ -80,8 +88,11 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_detail_mi PARTITION (*)
     , channel_l2_name          -- 二级公司分类名称
     , channel_l3_code          -- 三级公司分类编码
     , channel_l3_name          -- 三级公司分类名称
-    , tov_channel_code         -- 周转分析渠道编码
-    , tov_channel_name         -- 周转分析渠道名称
+    , channel_bu_code          -- 渠道BU编码
+    , channel_bu_name          -- 渠道BU名称
+--  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道两字段停用，列保留，待业务确认替代口径后再删列
+--  , tov_channel_code         -- 周转分析渠道编码
+--  , tov_channel_name         -- 周转分析渠道名称
     , cc_cust_group_code       -- 商冷客户群编码
     , cc_cust_group_name       -- 商冷客户群名称
     , onoffline_code           -- 渠道分组编码
@@ -253,47 +264,151 @@ src_skb1 AS (
     SELECT 'S810' AS system_src, bukrs, saknr, mitkz
       FROM ods.odss810_skb1
 ),
--- 汇总SAP客商编码映射，并以MDG客商维度补充统一属性。
--- ALTER BY 20261026 18:46 SHIQINGFENG.EX 恢复客商映射表原始C/S类型，供应商匹配S类型。
-cust_sap_map_dim AS (
-    SELECT DISTINCT NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '') AS cust_sap_code
-         , CASE TRIM(m.cust_sap_client)
-               WHEN '600' THEN 'S600'
-               WHEN '700' THEN 'S700'
-               WHEN '800' THEN 'S800'
-               WHEN '900' THEN 'S900'
-               WHEN '610' THEN 'S610'
-               WHEN '810' THEN 'S810'
-               ELSE CONCAT('S', TRIM(m.cust_sap_client))
-           END AS cust_sap_client
-         , TRIM(m.cust_supp_type) AS cust_supp_type
-         , COALESCE(
-               NULLIF(LTRIM(TRIM(m.cust_mdg_code), '0'), '')
-             , NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '')
-           ) AS cust_mdg_code
-      FROM dim.dim_fi_mr_customer_map_dd m
-     WHERE TRIM(m.cust_supp_type) IN ('C', 'S')
+-- SAP客户主数据：六套系统统一，提供客户名称与MDG客商编码。
+src_kna1 AS (
+    SELECT 'S600' AS system_src, kunnr, name1, zkunnr_mdg
+      FROM ods.odss600_kna1
+
+    UNION ALL
+
+    SELECT 'S700' AS system_src, kunnr, name1, zkunnr_mdg
+      FROM ods.odss700_kna1
+
+    UNION ALL
+
+    SELECT 'S800' AS system_src, kunnr, name1, zkunnr_mdg
+      FROM ods.odss800_kna1
+
+    UNION ALL
+
+    SELECT 'S900' AS system_src, kunnr, name1, zkunnr_mdg
+      FROM ods.odss900_kna1
+
+    UNION ALL
+
+    SELECT 'S610' AS system_src, kunnr, name1, zkunnr_mdg
+      FROM ods.odss610_kna1
+
+    UNION ALL
+
+    SELECT 'S810' AS system_src, kunnr, name1, zkunnr_mdg
+      FROM ods.odss810_kna1
 ),
--- 统一匹配客户和供应商SAP编码，关联MDG客商属性并保护空串、全零编码。
+-- SAP供应商主数据：六套系统统一，提供供应商名称与MDG客商编码。
+src_lfa1 AS (
+    SELECT 'S600' AS system_src, lifnr, name1, zlifnr_mdg
+      FROM ods.odss600_lfa1
+
+    UNION ALL
+
+    SELECT 'S700' AS system_src, lifnr, name1, zlifnr_mdg
+      FROM ods.odss700_lfa1
+
+    UNION ALL
+
+    SELECT 'S800' AS system_src, lifnr, name1, zlifnr_mdg
+      FROM ods.odss800_lfa1
+
+    UNION ALL
+
+    SELECT 'S900' AS system_src, lifnr, name1, zlifnr_mdg
+      FROM ods.odss900_lfa1
+
+    UNION ALL
+
+    SELECT 'S610' AS system_src, lifnr, name1, zlifnr_mdg
+      FROM ods.odss610_lfa1
+
+    UNION ALL
+
+    SELECT 'S810' AS system_src, lifnr, name1, zlifnr_mdg
+      FROM ods.odss810_lfa1
+),
+-- 汇总SAP客商编码映射：客户取KNA1、供应商取LFA1，输出C/S两类（与大表cust_supp_type口径一致）；MDG编码为空时回退SAP编码。
+-- ALTER BY 20261029 18:45 SHIQINGFENG.EX 客商维度改为直读SAP主数据KNA1/LFA1，不再依赖客户大表dim_fi_mr_customer_map_dd/dim_fi_mr_customer_dd。
+cust_sap_map_dim AS (
+    SELECT NULLIF(LTRIM(TRIM(k.kunnr), '0'), '') AS cust_sap_code
+         , k.system_src AS cust_sap_client
+         , 'C' AS cust_supp_type
+         , MAX(k.name1) AS cust_sap_name
+         , COALESCE(MAX(NULLIF(LTRIM(TRIM(k.zkunnr_mdg), '0'), ''))
+                  , NULLIF(LTRIM(TRIM(k.kunnr), '0'), '')) AS cust_mdg_code
+      FROM src_kna1 k
+     GROUP BY k.system_src
+            , NULLIF(LTRIM(TRIM(k.kunnr), '0'), '')
+
+    UNION ALL
+
+    SELECT NULLIF(LTRIM(TRIM(l.lifnr), '0'), '') AS cust_sap_code
+         , l.system_src AS cust_sap_client
+         , 'S' AS cust_supp_type
+         , MAX(l.name1) AS cust_sap_name
+         , COALESCE(MAX(NULLIF(LTRIM(TRIM(l.zlifnr_mdg), '0'), ''))
+                  , NULLIF(LTRIM(TRIM(l.lifnr), '0'), '')) AS cust_mdg_code
+      FROM src_lfa1 l
+     GROUP BY l.system_src
+            , NULLIF(LTRIM(TRIM(l.lifnr), '0'), '')
+),
+-- MDG客商编码维度的公司三级分类与国家：源表cust_code唯一，客户与供应商共用。
+-- ALTER BY 20261029 18:45 SHIQINGFENG.EX 客户分类/国家改读dw.dim_customer_base_info_dd，替代dim_fi_mr_customer_dd。
+cust_class_dim AS (
+    SELECT LTRIM(TRIM(c.cust_code), '0') AS cust_code
+         , c.com_1st_code
+         , c.com_1st_name
+         , c.com_2nd_code
+         , c.com_2nd_name
+         , c.com_3rd_code
+         , c.com_3rd_name
+         , c.country_code
+         , c.country_name
+      FROM dw.dim_customer_base_info_dd c
+     WHERE NULLIF(LTRIM(TRIM(c.cust_code), '0'), '') IS NOT NULL
+),
+-- 客商对方公司映射：规则表按SAP客商编码存放，类型V代表供应商，此处统一转换为S，与行项目口径一致；同一键重复配置取MAX。
+cust_ctp_rule AS (
+    SELECT LTRIM(TRIM(r.cust_code), '0') AS cust_code
+         , CASE TRIM(r.cust_type_code)
+               WHEN 'C' THEN 'C'
+               ELSE 'S'
+           END AS cust_supp_type
+         , TRIM(r.system_src) AS cust_sap_client
+         , MAX(NULLIF(TRIM(r.cp_company_code_mr), '')) AS cp_company_mr_code
+         , MAX(NULLIF(TRIM(r.cp_company_code), '')) AS cp_company_code
+      FROM dim.dim_rule_fi_mr_cust2ctp_mapping r
+     WHERE TRIM(r.cust_type_code) IN ('C', 'V')
+       AND NVL(r.valid_fr, '202401') <= @dt_month
+       AND NVL(r.valid_to, '999999') >= @dt_month
+     GROUP BY LTRIM(TRIM(r.cust_code), '0')
+            , CASE TRIM(r.cust_type_code)
+                  WHEN 'C' THEN 'C'
+                  ELSE 'S'
+              END
+            , TRIM(r.system_src)
+),
+-- 统一匹配客户和供应商SAP编码，关联MDG客商属性与对方公司映射；输出列与直读大表时同名同义。
 customer_supplier_dim AS (
     SELECT m.cust_sap_code
          , m.cust_sap_client
          , m.cust_supp_type
-         , d.cust_code AS cust_mdg_code
-         , d.cust_name AS name1
-         , d.com_1st_code
-         , d.com_1st_name
-         , d.com_2nd_code
-         , d.com_2nd_name
-         , d.com_3rd_code
-         , d.com_3rd_name
-         , d.country_code
-         , d.country_name
-         , d.cp_company_mr_code
-         , d.cp_company_code
+         , m.cust_mdg_code
+         , m.cust_sap_name AS name1
+         , cl.com_1st_code
+         , cl.com_1st_name
+         , cl.com_2nd_code
+         , cl.com_2nd_name
+         , cl.com_3rd_code
+         , cl.com_3rd_name
+         , cl.country_code
+         , cl.country_name
+         , ctp.cp_company_mr_code
+         , ctp.cp_company_code
       FROM cust_sap_map_dim m
-      LEFT JOIN dim.dim_fi_mr_customer_dd d
-        ON NULLIF(LTRIM(TRIM(d.cust_code), '0'), '') = m.cust_mdg_code
+      LEFT JOIN cust_class_dim cl
+        ON cl.cust_code = m.cust_mdg_code
+      LEFT JOIN cust_ctp_rule ctp
+        ON ctp.cust_code = m.cust_sap_code
+       AND ctp.cust_supp_type = m.cust_supp_type
+       AND ctp.cust_sap_client = m.cust_sap_client
 ),
 -- 对方公司映射维度：保留客户和供应商类型，供行项目按客商类型匹配对方公司。
 -- ALTER BY 20261026 15:18 SHIQINGFENG.EX 对方公司映射按客户或供应商行项目匹配对应客商类型。
@@ -1044,6 +1159,7 @@ nf_match_base AS (
                                   ELSE 'S'
                               END
 ),
+/* ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道规则整段停用，代码保留备查。
 -- 读取目标月份有效的周转分析渠道规则；客户编码去前导零并按匹配键聚合，避免重复配置放大事实行。
 tov_channel_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
@@ -1113,6 +1229,8 @@ tov_channel_pick AS (
        AND p.batch_id = c.batch_id
      GROUP BY c.fact_key
 ),
+*/
+
 -- 应收模块渠道规则按1（公司+客商）→2（公司）→3（公司+三级分类）→4（公司+一级分类）顺序匹配。
 ar_nf_candidate AS (
     SELECT b.fact_key
@@ -1211,6 +1329,7 @@ ar_profitcenter_rule AS (
 ),
 -- 按周转渠道、公司、旧利润中心、科目和渠道分组生成利润中心候选。
 profitcenter_candidate AS (
+    /* ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道停用，依赖其ARTA_A_07前缀的利润中心 batch_id=1 规则整支停用。
     SELECT b.fact_key
          , r.batch_id
          , r.profitcenter_code
@@ -1271,6 +1390,7 @@ profitcenter_candidate AS (
        AND b.tov_channel_code LIKE 'ARTA_A_07%'
        AND r.src_profitcenter_code = b.src_profitcenter_code
     UNION ALL
+    */
     SELECT b.fact_key
          , r.batch_id
          , r.profitcenter_code
@@ -1837,8 +1957,11 @@ SELECT @dt_month
      , ch.com_2nd_name AS channel_l2_name
      , ch.com_3rd_code AS channel_l3_code
      , ch.com_3rd_name AS channel_l3_name
-     , tc.tov_channel_code
-     , tc.tov_channel_name
+     , bu.channel_bu_code
+     , bu.channel_bu_name
+--  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道停用
+--   , tc.tov_channel_code
+--   , tc.tov_channel_name
      , cc.crg_cust_group_code AS cc_cust_group_code
      , cc.crg_cust_group_name AS cc_cust_group_name
      -- 客商和供应商均按应收渠道分组规则取值，未命中时使用传统零售默认值。
@@ -1901,6 +2024,7 @@ SELECT @dt_month
              , COALESCE(a.acct_cert_item, '')
            )
        )
+/* ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道结果不再输出。
   LEFT JOIN tov_channel_pick tc
     ON tc.fact_key = MD5(
            CONCAT_WS(
@@ -1913,6 +2037,7 @@ SELECT @dt_month
              , COALESCE(a.acct_cert_item, '')
            )
        )
+*/
   LEFT JOIN profitcenter_pick pc_map
     ON pc_map.fact_key = MD5(
            CONCAT_WS(
@@ -1961,6 +2086,15 @@ SELECT @dt_month
                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
                                   ELSE 'S'
                               END
+      -- ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU：按三级公司分类关联渠道BU关系表，同码多条取MAX避免放大事实行。
+      LEFT JOIN (
+            SELECT TRIM(com_3rd_code) AS com_3rd_code
+                 , MAX(channel_bu_code) AS channel_bu_code
+                 , MAX(channel_bu_name) AS channel_bu_name
+              FROM dim.dim_rule_mrs_mr3_channel_bu_relation
+             GROUP BY TRIM(com_3rd_code)
+      ) bu
+        ON bu.com_3rd_code = ch.com_3rd_code
       LEFT JOIN customer_ccc_group_dim cc
         ON cc.company_code_mdg = NULLIF(LTRIM(TRIM(a.company_code), '0'), '')
        AND cc.cust_sap_code = CASE
@@ -2024,8 +2158,11 @@ INSERT INTO test.dwd_fi_mr_arap_detail_mi
     , channel_l2_name          -- 二级公司分类名称
     , channel_l3_code          -- 三级公司分类编码
     , channel_l3_name          -- 三级公司分类名称
-    , tov_channel_code         -- 周转分析渠道编码
-    , tov_channel_name         -- 周转分析渠道名称
+    , channel_bu_code          -- 渠道BU编码
+    , channel_bu_name          -- 渠道BU名称
+--  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道两字段停用，列保留，待业务确认替代口径后再删列
+--  , tov_channel_code         -- 周转分析渠道编码
+--  , tov_channel_name         -- 周转分析渠道名称
     , cc_cust_group_code       -- 商冷客户群编码
     , cc_cust_group_name       -- 商冷客户群名称
     , onoffline_code           -- 渠道分组编码
@@ -2536,8 +2673,11 @@ SELECT @dt_month
      , NULL AS channel_l2_name
      , NULL AS channel_l3_code
      , NULL AS channel_l3_name
-     , NULL AS tov_channel_code
-     , NULL AS tov_channel_name
+     , NULL AS channel_bu_code
+     , NULL AS channel_bu_name
+--  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道停用
+--   , NULL AS tov_channel_code
+--   , NULL AS tov_channel_name
      , NULL AS cc_cust_group_code
      , NULL AS cc_cust_group_name
      , NULL AS onoffline_code
