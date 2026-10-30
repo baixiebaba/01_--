@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261029 17:39
- * 本次修改：ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
- * 上次修改：ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
+ * 最后更新时间：20261030 20:06
+ * 本次修改：ALTER BY 20261030 20:06 ZHOUHONG.EX 电商零售标识ecls_flag取消付款原因代码400限制，其余取数条件不变。
+ * 上次修改：ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
  *
  * 脚本名称  ：sum使用客户大表.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -16,6 +16,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261030 20:06 ZHOUHONG.EX 电商零售标识ecls_flag取消付款原因代码400限制，其余取数条件不变。
  *   ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
  *   ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
  *   ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE限定问题资金超期款明细并改用batch_id=1利润中心映射。
@@ -230,13 +231,13 @@ apar_range_rule AS (
             , cust_code
 ),
 -- 识别满足金额、基准日期和电商零售范围条件的明细键。
+-- ALTER BY 20261030 20:06 ZHOUHONG.EX 1030取消付款原因代码限制：不再限定 pay_reason_code='400'，其余取数条件不变。
 ecls_match AS (
     SELECT d.acct_map_code
          , d.cust_code
          , d.pays_tran
       FROM test.dwd_fi_mr_arap_detail_mi d
      WHERE d.dt_month = @dt_month
-       AND d.pay_reason_code = '400'
        AND d.acct_map_code LIKE '1122%'
        AND d.ods_src <> 'BSAD_EPAY'
        AND d.tov_channel_code LIKE 'ARTA_A_07%'
