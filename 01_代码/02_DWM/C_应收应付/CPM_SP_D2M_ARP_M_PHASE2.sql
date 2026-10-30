@@ -27,7 +27,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    *   20260924 汇率和税率处理由AG过程负责，D2M仅完成ARPM01来源装载及重分类标识回写
    *   20260923 修正日立公司GRP_SCOPE对方公司节点取数逻辑
    *   20260921 SHIQINGFENG.EX 新增重分类标识及集团归属范围更新
-   *   20260920 SHIQINGFENG.EX 新增
+   *   20260920 SHIQINGFENG.EX 新增   
    ******************************************************************************/
   V_SCENARIO      VARCHAR2(30);
   V_PERIODO       VARCHAR2(30);
