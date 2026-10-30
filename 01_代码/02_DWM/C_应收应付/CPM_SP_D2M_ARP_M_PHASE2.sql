@@ -15,7 +15,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    * 功能描述  ：DWD->DWM往来账龄数据抽取
    * 源表      ：DWD_FI_MR_ARAP_SUM_MI、AW_MR9_REVM01_000001、DIM_RULE_FI_MR_AR_PROFIT_MAPPING
    * 目标表    ：AW_MR9_ARPM01_000001
-   *  
+   * 
    * 修改历史：
    *   ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。
    *   ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射新增BATCH_ID=6（按公司company_code%+物料组material_group_code），优先级BATCH_ID=2>6>收入原利润中心。
