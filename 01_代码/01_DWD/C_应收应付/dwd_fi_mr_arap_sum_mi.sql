@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261028 13:49
- * 本次修改：ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
- * 上次修改：ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE限定问题资金超期款明细并改用batch_id=1利润中心映射。
+ * 最后更新时间：20261029 17:39
+ * 本次修改：ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
+ * 上次修改：ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
  *
  * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -11,6 +11,7 @@
  * 目标表    ：test.dwd_fi_mr_arap_sum_mi
  *
  * 修改历史：
+ *   ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
  *   ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
  *   ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE限定问题资金超期款明细并改用batch_id=1利润中心映射。
  *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
@@ -70,6 +71,8 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sum_mi PARTITION (*)
     , onoffline_name           -- 线上线下名称
     , src_profitcenter_code    -- 原始利润中心编码
     , src_profitcenter_name    -- 原始利润中心名称
+    , material_group_code      -- 物料组编码
+    , material_group_name      -- 物料组描述
     , profitcenter_code        -- 映射后利润中心编码
     , profitcenter_name        -- 映射后利润中心名称
     , bus_range_code           -- 业务范围编码
@@ -333,6 +336,8 @@ detail_fact AS (
          , onoffline_name
          , src_profitcenter_code
          , src_profitcenter_name
+         , NULL AS material_group_code
+         , NULL AS material_group_name
          , profitcenter_code
          , profitcenter_name
          , bus_range_code
@@ -484,6 +489,8 @@ xh_ar_fact AS (
          , NULL AS onoffline_name
          , NULL AS src_profitcenter_code
          , NULL AS src_profitcenter_name
+         , NULL AS material_group_code
+         , NULL AS material_group_name
          , NULL AS profitcenter_code
          , NULL AS profitcenter_name
          , NULL AS bus_range_code
@@ -549,6 +556,8 @@ xh_ap_fact AS (
          , NULL AS onoffline_name
          , NULL AS src_profitcenter_code
          , NULL AS src_profitcenter_name
+         , NULL AS material_group_code
+         , NULL AS material_group_name
          , NULL AS profitcenter_code
          , NULL AS profitcenter_name
          , NULL AS bus_range_code
@@ -642,6 +651,8 @@ overdue_fact AS (
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '') AS src_profitcenter_code
          , s.profitcenter_name AS src_profitcenter_name
+         , NULL AS material_group_code
+         , NULL AS material_group_name
          , COALESCE(r.profitcenter_code, NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '')) AS profitcenter_code
          , COALESCE(r.profitcenter_name, s.profitcenter_name) AS profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
@@ -675,6 +686,8 @@ sample_fact AS (
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
+         , NULL AS material_group_code
+         , NULL AS material_group_name
          , profitcenter_code, profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
@@ -727,6 +740,8 @@ sms_fact AS (
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
+         , NULL AS material_group_code
+         , NULL AS material_group_name
          , NULL AS profitcenter_code, NULL AS profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
@@ -848,6 +863,8 @@ policy_src_base AS (
          , cc.crg_cust_group_name AS cc_cust_group_name
          , NULLIF(LTRIM(TRIM(p.profit_center), '0'), '') AS profitcenter_code
          , NULL AS profitcenter_name
+         , NULLIF(TRIM(p.product_category), '') AS material_group_code
+         , NULLIF(TRIM(p.product_category_name), '') AS material_group_name
          , p.policy_list
          , p.policystatename AS ledger_status
          , p.arrears_amount AS bcy_amt
@@ -889,6 +906,8 @@ policy_src AS (
          , b.profitcenter_code
          , b.profitcenter_name
          , b.policy_list
+         , b.material_group_code
+         , b.material_group_name
          , b.ledger_status
          , b.bcy_amt
          , b.qcy_amt
@@ -930,6 +949,8 @@ policy_src AS (
          , b.profitcenter_code
          , b.profitcenter_name
          , b.policy_list
+         , b.material_group_code
+         , b.material_group_name
          , b.ledger_status
          , b.bcy_amt
          , b.qcy_amt
@@ -959,6 +980,9 @@ policy_sum AS (
          , MAX(s.cc_cust_group_name) AS cc_cust_group_name
          , s.profitcenter_code AS profitcenter_code
          , MAX(s.profitcenter_name) AS profitcenter_name
+         -- ALTER BY 20261029 17:39 SHIQINGFENG.EX 物料组进汇总粒度；编码决定粒度，描述取MAX，避免源端同码异名把行拆碎。
+         , s.material_group_code
+         , MAX(s.material_group_name) AS material_group_name
          , s.ledger_status
          , SUM(COALESCE(s.bcy_amt, 0)) AS bcy_amt
          , SUM(COALESCE(s.qcy_amt, 0)) AS qcy_amt
@@ -966,6 +990,7 @@ policy_sum AS (
      GROUP BY s.company_code
             , s.cust_code
             , s.profitcenter_code
+            , s.material_group_code
             , s.ledger_status
 ),
 -- POLICY：标准化前读取目标月份有效的batch_id=2利润中心映射；匹配前及映射后编码均去前导0。
@@ -978,6 +1003,22 @@ policy_profitcenter_rule AS (
        AND NVL(pm.valid_fr, '202401') <= @dt_month
        AND NVL(pm.valid_to, '999999') >= @dt_month
      GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
+),
+-- POLICY：batch_id=6规则先按公司主数据ods.odsfima_azienda展开为具体公司，事实侧关联改用等号，避免在事实表上做LIKE匹配。
+policy_profitcenter_rule_6 AS (
+    -- ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增batch_id=6利润中心映射，按公司company_code%+物料组material_group_code匹配。
+    SELECT b.cod_azienda AS company_code
+         , NULLIF(TRIM(pm.material_group_code), '') AS material_group_code
+         , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
+         , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
+      FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(pm.company_code)
+     WHERE CAST(pm.batch_id AS INT) = 6
+       AND NVL(pm.valid_fr, '202401') <= @dt_month
+       AND NVL(pm.valid_to, '999999') >= @dt_month
+     GROUP BY b.cod_azienda
+            , NULLIF(TRIM(pm.material_group_code), '')
 ),
 -- POLICY：标准化为窄事实接口；原利润中心编码按DETAIL语义去前导0后保留，命中映射时输出新利润中心。
 -- 映射未命中时回退去前导0的原始利润中心编码和原始利润中心名称。
@@ -998,8 +1039,11 @@ policy_fact AS (
          , NULL AS onoffline_code, NULL AS onoffline_name
          , s.profitcenter_code AS src_profitcenter_code
          , s.profitcenter_name AS src_profitcenter_name
-         , COALESCE(r.profitcenter_code, s.profitcenter_code) AS profitcenter_code
-         , COALESCE(r.profitcenter_name, s.profitcenter_name) AS profitcenter_name
+         , s.material_group_code
+         , s.material_group_name
+         -- ALTER BY 20261029 17:28 SHIQINGFENG.EX 利润中心映射优先级：batch_id=2 > batch_id=6 > 原始利润中心。
+         , COALESCE(r.profitcenter_code, r6.profitcenter_code, s.profitcenter_code) AS profitcenter_code
+         , COALESCE(r.profitcenter_name, r6.profitcenter_name, s.profitcenter_name) AS profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
          , NULL AS pay_reason_code, 'CNY' AS bcy_code, 'CNY' AS qcy_code
@@ -1012,6 +1056,10 @@ policy_fact AS (
       FROM policy_sum s
       LEFT JOIN policy_profitcenter_rule r
         ON r.src_profitcenter_code = NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '')
+      -- ALTER BY 20261029 17:28 SHIQINGFENG.EX 新增batch_id=6关联；规则侧已按公司主数据展开，此处用等号匹配。
+      LEFT JOIN policy_profitcenter_rule_6 r6
+        ON r6.company_code = s.company_code
+       AND r6.material_group_code = s.material_group_code
      WHERE NOT (COALESCE(s.bcy_amt, 0) = 0
             AND COALESCE(s.qcy_amt, 0) = 0)
 ),
@@ -1096,6 +1144,8 @@ writeoff_fact AS (
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , profitcenter_code AS src_profitcenter_code, NULL AS src_profitcenter_name
+         , NULL AS material_group_code
+         , NULL AS material_group_name
          , profitcenter_code, NULL AS profitcenter_name
          , bus_range_code, NULL AS bus_range_name
          , NULL AS marketing_dept_code, NULL AS marketing_dept_name
@@ -1290,6 +1340,8 @@ report_pivot AS (
          , onoffline_name
          , src_profitcenter_code
          , src_profitcenter_name
+         , material_group_code
+         , material_group_name
          , profitcenter_code
          , profitcenter_name
          , bus_range_code
@@ -1384,6 +1436,8 @@ report_pivot AS (
             , onoffline_name
             , src_profitcenter_code
             , src_profitcenter_name
+            , material_group_code
+            , material_group_name
             , profitcenter_code
             , profitcenter_name
             , bus_range_code
@@ -1446,6 +1500,8 @@ SELECT p.dt_month
      , p.onoffline_name
      , p.src_profitcenter_code
      , p.src_profitcenter_name
+     , p.material_group_code
+     , p.material_group_name
      , p.profitcenter_code
      , p.profitcenter_name
      , p.bus_range_code

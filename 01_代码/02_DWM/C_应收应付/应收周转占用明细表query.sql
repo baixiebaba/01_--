@@ -1,3 +1,19 @@
+/*******************************************************************************
+ *                                  查询说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261030 10:20
+ * 本次修改：ALTER BY 20261030 10:20 SHIQINGFENG.EX 增加占用金额全零或NULL分组排除条件。
+ * 上次修改：无既有记录。
+ *
+ * 查询名称  ：应收周转占用明细表 Query
+ * 功能描述  ：按公司、事业部、客商及业务维度汇总本期、上年同期和累计应收占用金额。
+ * 宿主表    ：AW_MR9_ARPM03_000001
+ * 展示逻辑  ：展示本期、上年同期及累计应收占用及因素金额，排除全部金额为0或NULL的分组。
+ *
+ * 修改历史：
+ *   ALTER BY 20261030 10:20 SHIQINGFENG.EX 增加占用金额全零或NULL分组排除条件。
+ *******************************************************************************/
+
 WITH
 /* 单次扫表: 本年 01~当月 + 上年 01~当月 + 上年 12月
  is_prior 标记该行是否来自上年场景, 后续 CASE 用它代替反复写上年场景表达式 */
@@ -151,3 +167,46 @@ GROUP BY
  ,b.D_TOV_CHAN, b.D_CC_CUSTGRP, b.COD_VALUTA
  ,g.COD_ELEGER6, g.DESC_ELEGER6, g.COD_ELEGER7, g.DESC_ELEGER7
  ,DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER4, DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5
+/* 排除本期、上年同期及累计占用与因素金额全部为0或NULL的分组。
+ * ALTER BY 20261030 10:20 SHIQINGFENG.EX 增加占用金额全零或NULL分组排除条件。
+ */
+HAVING NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.AR_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'Y' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.AR_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F1_ODUE_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F2_EPAY_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F3_ECR_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F4_UREB_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F5_UFEE_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F6_INVSM_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F7_GSUB_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO = ${$Period.code}
+              THEN b.F8_ADJ_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.AR_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'Y' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.AR_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F1_ODUE_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F2_EPAY_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F3_ECR_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F4_UREB_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F5_UFEE_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F6_INVSM_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F7_GSUB_AMT END), 0) <> 0
+    OR NVL(SUM(CASE WHEN b.is_prior = 'N' AND b.COD_PERIODO BETWEEN '01' AND ${$Period.code}
+              THEN b.F8_ADJ_AMT END), 0) <> 0
