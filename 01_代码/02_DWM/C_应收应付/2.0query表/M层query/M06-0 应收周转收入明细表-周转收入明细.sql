@@ -91,7 +91,7 @@ SELECT
    DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5)      AS DESC_DEST3_ELEGER4  /* 业务范围4级名称 */
  /* ==================== 金额: 第一组 本期 ==================== */
  ,SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-      THEN B.REV_AMT END)              AS REV_AMT  /* 本期收入金额 */
+      THEN B.REV_AMT END)              AS REV_AMT  /* 收入金额 */
  ,SUM(CASE WHEN B.IS_PRIOR = 'Y' AND B.COD_PERIODO = ${$Period.code}
       THEN B.REV_AMT END)              AS LY_REV_AMT  /* 上年同期收入金额 */
  /* ==================== 金额: 第二组 累计 ==================== */

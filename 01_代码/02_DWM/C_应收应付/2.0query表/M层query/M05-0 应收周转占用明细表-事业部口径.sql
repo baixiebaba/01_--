@@ -96,25 +96,25 @@ SELECT
   顺序与原代码一致: AR -> F1..F8; LY_AR_AMT 紧随 AR
   ================================================================ */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.AR_AMT END), 0)           AS AR_AMT  /* 本期期末应收占用 */
+        THEN B.AR_AMT END), 0)           AS AR_AMT  /* 期末应收账款占用 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'Y' AND B.COD_PERIODO = ${$Period.code}
         THEN B.AR_AMT END), 0)           AS LY_AR_AMT  /* 上年同期期末应收占用 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F1_ODUE_AMT END), 0)        AS F1_ODUE_AMT  /* 本期因素1-超期款 */
+        THEN B.F1_ODUE_AMT END), 0)        AS F1_ODUE_AMT  /* 因素1-超期款金额 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F2_EPAY_AMT END), 0)        AS F2_EPAY_AMT  /* 本期因素2-提前回款 */
+        THEN B.F2_EPAY_AMT END), 0)        AS F2_EPAY_AMT  /* 因素2-提前回款金额 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F3_ECR_AMT END), 0)         AS F3_ECR_AMT  /* 本期因素3-电商零售节奏 */
+        THEN B.F3_ECR_AMT END), 0)         AS F3_ECR_AMT  /* 因素3-电商零售销售节奏 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F4_UREB_AMT END), 0)        AS F4_UREB_AMT  /* 本期因素4-未兑现返利余额 */
+        THEN B.F4_UREB_AMT END), 0)        AS F4_UREB_AMT  /* 因素4-已确认未兑现返利余额 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F5_UFEE_AMT END), 0)        AS F5_UFEE_AMT  /* 本期因素5-欠付费用 */
+        THEN B.F5_UFEE_AMT END), 0)        AS F5_UFEE_AMT  /* 因素5-已账扣未报账的欠付费用 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F6_INVSM_AMT END), 0)        AS F6_INVSM_AMT  /* 本期因素6-开票样机额度 */
+        THEN B.F6_INVSM_AMT END), 0)        AS F6_INVSM_AMT  /* 因素6-开票样机额度 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F7_GSUB_AMT END), 0)        AS F7_GSUB_AMT  /* 本期因素7-国补未回款 */
+        THEN B.F7_GSUB_AMT END), 0)        AS F7_GSUB_AMT  /* 因素7-国补未回款影响金额 */
  ,NVL(SUM(CASE WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-        THEN B.F8_ADJ_AMT END), 0)         AS F8_ADJ_AMT  /* 本期因素8-手工导入 */
+        THEN B.F8_ADJ_AMT END), 0)         AS F8_ADJ_AMT  /* 因素8手工导入因素 */
 
  /* ================================================================
   第二组: 本年累计金额

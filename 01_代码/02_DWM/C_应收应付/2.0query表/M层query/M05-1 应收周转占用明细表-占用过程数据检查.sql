@@ -513,14 +513,14 @@ SELECT F.COD_SCENARIO AS SCENARIO                           /* 场景 */
            ELSE F_TGK_GET_DIMNAME('D_BG', F.BUSINESS_UNIT_CODE)
        END AS BUSINESS_UNIT_NAME  /* 事业部名称 */
      , SUM(F.TURNOVER_AMT) AS TURNOVER_AMT                       /* 周转金额 */
-     , SUM(F.F1_ODUE_AMT) AS F1_ODUE_AMT                         /* 因素1-超期款 */
-     , SUM(F.F2_EPAY_AMT) AS F2_EPAY_AMT                         /* 因素2-提前回款 */
-     , SUM(F.F3_ECR_AMT) AS F3_ECR_AMT                           /* 因素3-电商零售节奏 */
-     , SUM(F.F4_UREB_AMT) AS F4_UREB_AMT                         /* 因素4-未兑现返利余额 */
-     , SUM(F.F5_UFEE_AMT) AS F5_UFEE_AMT                         /* 因素5-欠付费用 */
+     , SUM(F.F1_ODUE_AMT) AS F1_ODUE_AMT                         /* 因素1-超期款金额 */
+     , SUM(F.F2_EPAY_AMT) AS F2_EPAY_AMT                         /* 因素2-提前回款金额 */
+     , SUM(F.F3_ECR_AMT) AS F3_ECR_AMT                           /* 因素3-电商零售销售节奏 */
+     , SUM(F.F4_UREB_AMT) AS F4_UREB_AMT                         /* 因素4-已确认未兑现返利余额 */
+     , SUM(F.F5_UFEE_AMT) AS F5_UFEE_AMT                         /* 因素5-已账扣未报账的欠付费用 */
      , SUM(F.F6_INVSM_AMT) AS F6_INVSM_AMT                       /* 因素6-开票样机额度 */
-     , SUM(F.F7_GSUB_AMT) AS F7_GSUB_AMT                         /* 因素7-国补未回款 */
-     , SUM(F.F8_ADJ_AMT) AS F8_ADJ_AMT                           /* 因素8-手工导入 */
+     , SUM(F.F7_GSUB_AMT) AS F7_GSUB_AMT                         /* 因素7-国补未回款影响金额 */
+     , SUM(F.F8_ADJ_AMT) AS F8_ADJ_AMT                           /* 因素8手工导入因素 */
      , F.ARPTOV_FLAG                                             /* 周转取数来源标记 */
      , F.AR_AMT_FLAG                                            /* 应收占用正负向标记 */
   FROM FINAL_TURNOVER F

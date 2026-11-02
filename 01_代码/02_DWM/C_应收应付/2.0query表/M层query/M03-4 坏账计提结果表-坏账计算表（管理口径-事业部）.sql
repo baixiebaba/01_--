@@ -23,45 +23,45 @@ SELECT COD_SCENARIO                             /* 场景 */
      , CUST_HEAD_NAME                                /* 主户名称 */
      , CUST_BRANCH_CODE                              /* 分户编码 */
      , CUST_BRANCH_NAME                              /* 分户名称 */
-     , GRP_SCOPE                                     /* 集团归属范围 */
-     , D_ONOFFLINE                                   /* 渠道分组编码 */
+     , GRP_SCOPE                                     /* 集团归属范围（ 子公司/集团内/集团外） */
+     , D_ONOFFLINE                                   /* 渠道分组 */
      , F_TGK_GET_DIMNAME('D_ONOFFLINE', D_ONOFFLINE) AS D_ONOFFLINE_DESC /* 渠道分组名称 */
-     , COD_DEST2                                     /* 利润中心编码 */
+     , COD_DEST2                                     /* 利润中心 */
      , F_TGK_GET_DIMNAME('DEST2', COD_DEST2) AS COD_DEST2_DESC /* 利润中心名称 */
-     , COD_DEST3                                     /* 业务范围编码 */
+     , COD_DEST3                                     /* 业务范围 */
      , F_TGK_GET_DIMNAME('DEST3', COD_DEST3) AS COD_DEST3_DESC /* 业务范围名称 */
-     , D_SALE_DEPT                                   /* 业务管理单元编码 */
+     , D_SALE_DEPT                                   /* 业务管理单元 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', D_SALE_DEPT) AS D_SALE_DEPT_DESC /* 业务管理单元名称 */
      , BD_BASE_0_AMT                                 /* 坏账计提基数金额 */
-     , BD_BASE_1_AMT                                 /* 坏账计提基数-账龄区间段1 */
-     , BD_BASE_2_AMT                                 /* 坏账计提基数-账龄区间段2 */
-     , BD_BASE_3_AMT                                 /* 坏账计提基数-账龄区间段3 */
-     , BD_BASE_4_AMT                                 /* 坏账计提基数-账龄区间段4 */
-     , BD_BASE_5_AMT                                 /* 坏账计提基数-账龄区间段5 */
-     , BD_BASE_6_AMT                                 /* 坏账计提基数-账龄区间段6 */
-     , BD_BASE_7_AMT                                 /* 坏账计提基数-账龄区间段7 */
-     , BD_BASE_8_AMT                                 /* 坏账计提基数-账龄区间段8 */
-     , BD_BASE_9_AMT                                 /* 坏账计提基数-账龄区间段9 */
-     , BD_BASE_10_AMT                                /* 坏账计提基数-账龄区间段10 */
-     , BD_BASE_11_AMT                                /* 坏账计提基数-账龄区间段11 */
-     , BD_BASE_12_AMT                                /* 坏账计提基数-账龄区间段12 */
-     , BD_BASE_13_AMT                                /* 坏账计提基数-账龄区间段13 */
-     , BD_BASE_14_AMT                                /* 坏账计提基数-账龄区间段14 */
-     , BD_BASE_15_AMT                                /* 坏账计提基数-账龄区间段15 */
+     , BD_BASE_1_AMT                                 /* 坏账计提基数金额-1个月 */
+     , BD_BASE_2_AMT                                 /* 坏账计提基数金额-2-3个月 */
+     , BD_BASE_3_AMT                                 /* 坏账计提基数金额-4-6个月 */
+     , BD_BASE_4_AMT                                 /* 坏账计提基数金额- 7-12个月 */
+     , BD_BASE_5_AMT                                 /* 坏账计提基数金额- 1-2年 */
+     , BD_BASE_6_AMT                                 /* 坏账计提基数金额-2-3年 */
+     , BD_BASE_7_AMT                                 /* 坏账计提基数金额- 3-4年 */
+     , BD_BASE_8_AMT                                 /* 坏账计提基数金额-4-5年 */
+     , BD_BASE_9_AMT                                 /* 坏账计提基数金额-5年以上 */
+     , BD_BASE_10_AMT                                /* 坏账计提基数金额-账龄区间段10 */
+     , BD_BASE_11_AMT                                /* 坏账计提基数金额-账龄区间段11 */
+     , BD_BASE_12_AMT                                /* 坏账计提基数金额-账龄区间段12 */
+     , BD_BASE_13_AMT                                /* 坏账计提基数金额-账龄区间段13 */
+     , BD_BASE_14_AMT                                /* 坏账计提基数金额-账龄区间段14 */
+     , BD_BASE_15_AMT                                /* 坏账计提基数金额-账龄区间段15 */
      , BD_BASE_0_AMT - BD_BASE_1_AMT - BD_BASE_2_AMT - BD_BASE_3_AMT /* 坏账计提基数金额 */
        - BD_BASE_4_AMT - BD_BASE_5_AMT - BD_BASE_6_AMT - BD_BASE_7_AMT
        - BD_BASE_8_AMT - BD_BASE_9_AMT - BD_BASE_10_AMT - BD_BASE_11_AMT
        - BD_BASE_12_AMT - BD_BASE_13_AMT - BD_BASE_14_AMT - BD_BASE_15_AMT AS CHECK1  /* 校验：坏账基数总额减各分段合计 */
      , BD_0_AMT                                      /* 坏账计提金额 */
-     , BD_1_AMT                                      /* 坏账计提金额-账龄区间段1 */
-     , BD_2_AMT                                      /* 坏账计提金额-账龄区间段2 */
-     , BD_3_AMT                                      /* 坏账计提金额-账龄区间段3 */
-     , BD_4_AMT                                      /* 坏账计提金额-账龄区间段4 */
-     , BD_5_AMT                                      /* 坏账计提金额-账龄区间段5 */
-     , BD_6_AMT                                      /* 坏账计提金额-账龄区间段6 */
-     , BD_7_AMT                                      /* 坏账计提金额-账龄区间段7 */
-     , BD_8_AMT                                      /* 坏账计提金额-账龄区间段8 */
-     , BD_9_AMT                                      /* 坏账计提金额-账龄区间段9 */
+     , BD_1_AMT                                      /* 坏账计提金额-1个月 */
+     , BD_2_AMT                                      /* 坏账计提金额-2-3个月 */
+     , BD_3_AMT                                      /* 坏账计提金额-4-6个月 */
+     , BD_4_AMT                                      /* 坏账计提金额- 7-12个月 */
+     , BD_5_AMT                                      /* 坏账计提金额- 1-2年 */
+     , BD_6_AMT                                      /* 坏账计提金额-2-3年 */
+     , BD_7_AMT                                      /* 坏账计提金额- 3-4年 */
+     , BD_8_AMT                                      /* 坏账计提金额-4-5年 */
+     , BD_9_AMT                                      /* 坏账计提金额-5年以上 */
      , BD_10_AMT                                     /* 坏账计提金额-账龄区间段10 */
      , BD_11_AMT                                     /* 坏账计提金额-账龄区间段11 */
      , BD_12_AMT                                     /* 坏账计提金额-账龄区间段12 */
@@ -74,15 +74,15 @@ SELECT COD_SCENARIO                             /* 场景 */
        - BD_12_AMT - BD_13_AMT - BD_14_AMT - BD_15_AMT AS CHECK2  /* 校验：坏账计提总额减各分段合计 */
      , BD_ALLOC_RATIO                                /* 坏账分摊比例 */
      , AGE_ALLOC_0_AMT                               /* 负账龄分摊金额 */
-     , AGE_ALLOC_1_AMT                               /* 负账龄分摊金额-账龄区间段1 */
-     , AGE_ALLOC_2_AMT                               /* 负账龄分摊金额-账龄区间段2 */
-     , AGE_ALLOC_3_AMT                               /* 负账龄分摊金额-账龄区间段3 */
-     , AGE_ALLOC_4_AMT                               /* 负账龄分摊金额-账龄区间段4 */
-     , AGE_ALLOC_5_AMT                               /* 负账龄分摊金额-账龄区间段5 */
-     , AGE_ALLOC_6_AMT                               /* 负账龄分摊金额-账龄区间段6 */
-     , AGE_ALLOC_7_AMT                               /* 负账龄分摊金额-账龄区间段7 */
-     , AGE_ALLOC_8_AMT                               /* 负账龄分摊金额-账龄区间段8 */
-     , AGE_ALLOC_9_AMT                               /* 负账龄分摊金额-账龄区间段9 */
+     , AGE_ALLOC_1_AMT                               /* 负账龄分摊金额-1个月 */
+     , AGE_ALLOC_2_AMT                               /* 负账龄分摊金额-2-3个月 */
+     , AGE_ALLOC_3_AMT                               /* 负账龄分摊金额-4-6个月 */
+     , AGE_ALLOC_4_AMT                               /* 负账龄分摊金额- 7-12个月 */
+     , AGE_ALLOC_5_AMT                               /* 负账龄分摊金额- 1-2年 */
+     , AGE_ALLOC_6_AMT                               /* 负账龄分摊金额-2-3年 */
+     , AGE_ALLOC_7_AMT                               /* 负账龄分摊金额- 3-4年 */
+     , AGE_ALLOC_8_AMT                               /* 负账龄分摊金额-4-5年 */
+     , AGE_ALLOC_9_AMT                               /* 负账龄分摊金额-5年以上 */
      , AGE_ALLOC_10_AMT                              /* 负账龄分摊金额-账龄区间段10 */
      , AGE_ALLOC_11_AMT                              /* 负账龄分摊金额-账龄区间段11 */
      , AGE_ALLOC_12_AMT                              /* 负账龄分摊金额-账龄区间段12 */
@@ -94,15 +94,15 @@ SELECT COD_SCENARIO                             /* 场景 */
        - AGE_ALLOC_8_AMT - AGE_ALLOC_9_AMT - AGE_ALLOC_10_AMT - AGE_ALLOC_11_AMT
        - AGE_ALLOC_12_AMT - AGE_ALLOC_13_AMT - AGE_ALLOC_14_AMT - AGE_ALLOC_15_AMT AS CHECK3  /* 校验：负账龄分摊总额减各分段合计 */
      , BD_AFAL_0_AMT                                 /* 分摊后坏账金额 */
-     , BD_AFAL_1_AMT                                 /* 分摊后坏账金额-账龄区间段1 */
-     , BD_AFAL_2_AMT                                 /* 分摊后坏账金额-账龄区间段2 */
-     , BD_AFAL_3_AMT                                 /* 分摊后坏账金额-账龄区间段3 */
-     , BD_AFAL_4_AMT                                 /* 分摊后坏账金额-账龄区间段4 */
-     , BD_AFAL_5_AMT                                 /* 分摊后坏账金额-账龄区间段5 */
-     , BD_AFAL_6_AMT                                 /* 分摊后坏账金额-账龄区间段6 */
-     , BD_AFAL_7_AMT                                 /* 分摊后坏账金额-账龄区间段7 */
-     , BD_AFAL_8_AMT                                 /* 分摊后坏账金额-账龄区间段8 */
-     , BD_AFAL_9_AMT                                 /* 分摊后坏账金额-账龄区间段9 */
+     , BD_AFAL_1_AMT                                 /* 分摊后坏账金额-1个月 */
+     , BD_AFAL_2_AMT                                 /* 分摊后坏账金额-2-3个月 */
+     , BD_AFAL_3_AMT                                 /* 分摊后坏账金额-4-6个月 */
+     , BD_AFAL_4_AMT                                 /* 分摊后坏账金额- 7-12个月 */
+     , BD_AFAL_5_AMT                                 /* 分摊后坏账金额- 1-2年 */
+     , BD_AFAL_6_AMT                                 /* 分摊后坏账金额-2-3年 */
+     , BD_AFAL_7_AMT                                 /* 分摊后坏账金额- 3-4年 */
+     , BD_AFAL_8_AMT                                 /* 分摊后坏账金额-4-5年 */
+     , BD_AFAL_9_AMT                                 /* 分摊后坏账金额-5年以上 */
      , BD_AFAL_10_AMT                                /* 分摊后坏账金额-账龄区间段10 */
      , BD_AFAL_11_AMT                                /* 分摊后坏账金额-账龄区间段11 */
      , BD_AFAL_12_AMT                                /* 分摊后坏账金额-账龄区间段12 */
