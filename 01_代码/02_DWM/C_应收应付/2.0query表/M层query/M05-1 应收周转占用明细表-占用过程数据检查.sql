@@ -1,14 +1,16 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 17:36
- * 本次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
- * 上次修改：原文件无修改记录。
+ * 最后更新时间：20261102 20:30
+ * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
+ * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_FIMA_DEV.DWD_FI_MR_AR_IMOCC_MI、AW_RUL_ARPTOV_000001 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
+ *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
  *   20261021 按TOV实际规则修正周转利润中心仅标准化一次，参数版仅在最终层限制事业部，修复事业部映射为空问题（原版本记录）。
  *   20261021 删除公司进数和锁定限制，改为全量事业部计算负净额并在最终层执行事业部展示筛选；完成SQL完整性静态检查（原版本记录）。
@@ -85,8 +87,10 @@ TURNOVER_SOURCE AS (
          , A.COD_AZIENDA
          , 'ARPM02' AS DATA_SOURCE
          , CASE
-               WHEN A.ME_AGE_FLAG IN ('AR', 'CA', 'A10') THEN 'ZAMOUNT'
-               WHEN A.MB_AGE_FLAG IN ('AR', 'CA', 'A10') THEN 'ZAMOUNT_L2'
+             WHEN A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
+               THEN 'ZAMOUNT'
+             WHEN A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
+               THEN 'ZAMOUNT_L2'
            END AS COD_CATEGORIA
          , TRIM(A.CUST_CODE) AS CUST_CODE
          , A.CUST_NAME
@@ -99,55 +103,55 @@ TURNOVER_SOURCE AS (
          , A.COD_DEST2 AS SRC_PROFITCENTER_CODE
          , CASE
 /* TOV实际优先级：1至4命中即不取数，优先于后续取数规则。 */
-               WHEN EXISTS (
+             WHEN EXISTS (
                       SELECT 1
                         FROM ARPTOV_RULE R1
                        WHERE R1.BATCH_ID = '1'
-                         AND R1.CUST_CODE IS NOT NULL
-                         AND TRIM(A.CUST_CODE) LIKE '%' || R1.CUST_CODE || '%'
+              AND R1.CUST_CODE IS NOT NULL
+              AND TRIM(A.CUST_CODE) LIKE '%' || R1.CUST_CODE || '%'
                     )
-                 OR EXISTS (
+             OR EXISTS (
                       SELECT 1
                         FROM ARPTOV_RULE R2
                        WHERE R2.BATCH_ID = '2'
-                         AND R2.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-                         AND R2.CUST_CODE IS NOT NULL
-                         AND R2.CUST_CODE = TRIM(A.CUST_CODE)
+              AND R2.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+              AND R2.CUST_CODE IS NOT NULL
+              AND R2.CUST_CODE = TRIM(A.CUST_CODE)
                     )
-                 OR EXISTS (
+             OR EXISTS (
                       SELECT 1
                         FROM ARPTOV_RULE R3
                        WHERE R3.BATCH_ID = '3'
-                         AND R3.NATURE_L2_NAME IS NOT NULL
-                         AND R3.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
+              AND R3.NATURE_L2_NAME IS NOT NULL
+              AND R3.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
                     )
-                 OR EXISTS (
+             OR EXISTS (
                       SELECT 1
                         FROM ARPTOV_RULE R4
                        WHERE R4.BATCH_ID = '4'
-                         AND R4.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-                         AND R4.D_SALE_DEPT IS NOT NULL
-                         AND R4.D_SALE_DEPT = TRIM(A.D_SALE_DEPT)
+              AND R4.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+              AND R4.D_SALE_DEPT IS NOT NULL
+              AND R4.D_SALE_DEPT = TRIM(A.D_SALE_DEPT)
                     )
                THEN 'N'
                /* 批次6沿用TOV：公司未维护二级性质时默认取数，维护时仅取配置性质。 */
-               WHEN NOT EXISTS (
+             WHEN NOT EXISTS (
                       SELECT 1
                         FROM ARPTOV_RULE R6
                        WHERE R6.BATCH_ID = '6'
-                         AND R6.COD_AZIENDA IS NOT NULL
-                         AND R6.NATURE_L2_NAME IS NOT NULL
-                         AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+              AND R6.COD_AZIENDA IS NOT NULL
+              AND R6.NATURE_L2_NAME IS NOT NULL
+              AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
                     )
-                 OR EXISTS (
+             OR EXISTS (
                       SELECT 1
                         FROM ARPTOV_RULE R6
                        WHERE R6.BATCH_ID = '6'
-                         AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-                         AND R6.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
+              AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+              AND R6.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
                     )
                THEN 'Y'
-               ELSE 'N'
+             ELSE 'N'
            END AS ARPTOV_FLAG
          , NVL(A.BCY_ADJ_INCL_0_AMT, 0) AS TURNOVER_AMT
          , NVL(A.OVERDUE_0_AMT, 0) AS F1_ODUE_AMT
@@ -176,7 +180,7 @@ TURNOVER_SOURCE AS (
           OR A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
        )
 
-    UNION ALL
+     UNION ALL
 
     /* IMOCC未提供独立主户字段，按TOV现行口径以当前客户字段兼作主户，并同步作为分户展示，保持原有主户匹配口径不变。 */
     SELECT ${$Scenario.code} AS COD_SCENARIO
@@ -217,8 +221,9 @@ TURNOVER_NORMALIZED AS (
          , T.COD_PERIODO
          , T.COD_AZIENDA
          , CASE
-               WHEN COUNT(DISTINCT T.DATA_SOURCE) > 1 THEN 'ARPM02+IMOCC'
-               ELSE MAX(T.DATA_SOURCE)
+             WHEN COUNT(DISTINCT T.DATA_SOURCE) > 1
+               THEN 'ARPM02+IMOCC'
+             ELSE MAX(T.DATA_SOURCE)
            END AS DATA_SOURCE
          , T.COD_CATEGORIA
          , T.CUST_CODE
@@ -299,20 +304,25 @@ MAPPED_TURNOVER AS (
          , T.CP_COMPANY_CODE
          , T.TURNOVER_PROFITCENTER_CODE
          , CASE
-               WHEN MATCHED.MATCHED_BG_COUNT = 1
+             WHEN MATCHED.MATCHED_BG_COUNT = 1
                THEN MATCHED.MATCHED_BG_CODE
            END AS BUSINESS_UNIT_CODE
          , T.ARPTOV_FLAG
          , CASE
-               WHEN MATCHED.MATCHED_BG_COUNT > 1 THEN '事业部映射冲突'
-               WHEN PCR.PCR_BG_COUNT IS NULL THEN '利润中心未映射事业部'
-               WHEN ATS.ATS_BG_COUNT IS NULL THEN '账套未映射事业部'
-               WHEN MATCHED.MATCHED_BG_COUNT IS NULL THEN '公司与利润中心事业部不一致'
-               ELSE '已映射同一事业部'
+             WHEN MATCHED.MATCHED_BG_COUNT > 1
+               THEN '事业部映射冲突'
+             WHEN PCR.PCR_BG_COUNT IS NULL
+               THEN '利润中心未映射事业部'
+             WHEN ATS.ATS_BG_COUNT IS NULL
+               THEN '账套未映射事业部'
+             WHEN MATCHED.MATCHED_BG_COUNT IS NULL
+               THEN '公司与利润中心事业部不一致'
+             ELSE '已映射同一事业部'
            END AS BUSINESS_UNIT_MAP_STATUS
          , CASE
-               WHEN TRIM(T.CUST_HEAD_CODE) IS NULL THEN NULL
-               ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
+             WHEN TRIM(T.CUST_HEAD_CODE) IS NULL
+               THEN NULL
+             ELSE NVL(LTRIM(TRIM(T.CUST_HEAD_CODE), '0'), '0')
            END AS CUST_MATCH_CODE
          , T.TURNOVER_AMT
          , T.F1_ODUE_AMT
@@ -394,20 +404,20 @@ FILTERED_TURNOVER AS (
          , M.ARPTOV_FLAG
          , CASE
                /* 正向金额取数标记：通过ARPTOV且未被负净额事业部规则过滤，才进入ARPM03。 */
-               WHEN M.ARPTOV_FLAG = 'Y'
-                AND M.BUSINESS_UNIT_MAP_STATUS = '已映射同一事业部'
-                AND NOT EXISTS (
+             WHEN M.ARPTOV_FLAG = 'Y'
+              AND M.BUSINESS_UNIT_MAP_STATUS = '已映射同一事业部'
+              AND NOT EXISTS (
                     SELECT 1
                       FROM NEGATIVE_BG_TURNOVER N
                      WHERE N.COD_SCENARIO = M.COD_SCENARIO
-                       AND N.COD_PERIODO = M.COD_PERIODO
-                       AND N.COD_AZIENDA = M.COD_AZIENDA
-                       AND N.COD_CATEGORIA = M.COD_CATEGORIA
-                       AND N.BUSINESS_UNIT_CODE = M.BUSINESS_UNIT_CODE
-                       AND N.CUST_MATCH_CODE = M.CUST_MATCH_CODE
+              AND N.COD_PERIODO = M.COD_PERIODO
+              AND N.COD_AZIENDA = M.COD_AZIENDA
+              AND N.COD_CATEGORIA = M.COD_CATEGORIA
+              AND N.BUSINESS_UNIT_CODE = M.BUSINESS_UNIT_CODE
+              AND N.CUST_MATCH_CODE = M.CUST_MATCH_CODE
                 )
                THEN 'Y'
-               ELSE 'N'
+             ELSE 'N'
            END AS AR_AMT_FLAG
          , M.BUSINESS_UNIT_MAP_STATUS
          , M.TURNOVER_AMT
@@ -438,17 +448,17 @@ DISPLAY_TURNOVER AS (
          , F.CP_COMPANY_CODE
          , F.TURNOVER_PROFITCENTER_CODE
          , CASE
-               WHEN F.BUSINESS_UNIT_CODE IS NULL
-                 OR F.BUSINESS_UNIT_CODE IN (${$ANL_D_BG.code})
+             WHEN F.BUSINESS_UNIT_CODE IS NULL
+             OR F.BUSINESS_UNIT_CODE IN (${$ANL_D_BG.code})
                THEN F.BUSINESS_UNIT_CODE
            END AS BUSINESS_UNIT_CODE
          , F.ARPTOV_FLAG
          , F.AR_AMT_FLAG
          , CASE
-               WHEN F.BUSINESS_UNIT_CODE IS NOT NULL
-                AND F.BUSINESS_UNIT_CODE NOT IN (${$ANL_D_BG.code})
+             WHEN F.BUSINESS_UNIT_CODE IS NOT NULL
+              AND F.BUSINESS_UNIT_CODE NOT IN (${$ANL_D_BG.code})
                THEN '被事业部参数排除'
-               ELSE F.BUSINESS_UNIT_MAP_STATUS
+             ELSE F.BUSINESS_UNIT_MAP_STATUS
            END AS BUSINESS_UNIT_MAP_STATUS
          , F.TURNOVER_AMT
          , F.F1_ODUE_AMT
@@ -494,35 +504,36 @@ FINAL_TURNOVER AS (
      WHERE D.BUSINESS_UNIT_CODE IS NULL
         OR D.BUSINESS_UNIT_CODE IN (${$ANL_D_BG.code})
 )
-SELECT F.COD_SCENARIO AS SCENARIO                           /* 场景 */
-     , F.COD_PERIODO AS PERIODO                                  /* 期间 */
-     , F.COD_AZIENDA AS COMPANY_CODE                             /* 公司 */
-     , F.COD_CATEGORIA                                           /* 类别 */
-     , F.CUST_CODE                                               /* 客商编码 */
-     , MAX(F.CUST_NAME) AS CUST_NAME                             /* 客商名称 */
-     , F.CUST_HEAD_CODE AS CUST_HEAD_CODE                        /* 主户编码 */
-     , MAX(F.CUST_HEAD_NAME) AS CUST_HEAD_NAME                   /* 主户名称 */
-     , F.SUB_CUST_CODE AS SUB_CUST_CODE                          /* 分户编码 */
-     , MAX(F.SUB_CUST_NAME) AS SUB_CUST_NAME                     /* 分户名称 */
-     , F.CP_COMPANY_CODE AS CP_COMPANY_CODE                      /* 对方公司 */
-     , F.TURNOVER_PROFITCENTER_CODE                              /* 周转利润中心编码 */
-     , F_TGK_GET_DIMNAME('DEST2', F.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME /* 周转利润中心名称 */
-     , F.BUSINESS_UNIT_CODE                                      /* 事业部编码 */
+SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
+     , F.COD_PERIODO AS PERIODO                 /* 期间 */
+     , F.COD_AZIENDA AS COMPANY_CODE            /* 公司 */
+     , F.COD_CATEGORIA                          /* 类别 */
+     , F.CUST_CODE                              /* 客商编码 */
+     , MAX(F.CUST_NAME) AS CUST_NAME            /* 客商名称 */
+     , F.CUST_HEAD_CODE AS CUST_HEAD_CODE       /* 主户编码 */
+     , MAX(F.CUST_HEAD_NAME) AS CUST_HEAD_NAME  /* 主户名称 */
+     , F.SUB_CUST_CODE AS SUB_CUST_CODE         /* 分户编码 */
+     , MAX(F.SUB_CUST_NAME) AS SUB_CUST_NAME    /* 分户名称 */
+     , F.CP_COMPANY_CODE AS CP_COMPANY_CODE     /* 对方公司 */
+     , F.TURNOVER_PROFITCENTER_CODE             /* 周转利润中心编码 */
+     , F_TGK_GET_DIMNAME('DEST2', F.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME  /* 周转利润中心名称 */
+     , F.BUSINESS_UNIT_CODE                     /* 事业部编码 */
      , CASE
-           WHEN F.BUSINESS_UNIT_CODE IS NULL THEN NULL
-           ELSE F_TGK_GET_DIMNAME('D_BG', F.BUSINESS_UNIT_CODE)
-       END AS BUSINESS_UNIT_NAME  /* 事业部名称 */
-     , SUM(F.TURNOVER_AMT) AS TURNOVER_AMT                       /* 周转金额 */
-     , SUM(F.F1_ODUE_AMT) AS F1_ODUE_AMT                         /* 因素1-超期款金额 */
-     , SUM(F.F2_EPAY_AMT) AS F2_EPAY_AMT                         /* 因素2-提前回款金额 */
-     , SUM(F.F3_ECR_AMT) AS F3_ECR_AMT                           /* 因素3-电商零售销售节奏 */
-     , SUM(F.F4_UREB_AMT) AS F4_UREB_AMT                         /* 因素4-已确认未兑现返利余额 */
-     , SUM(F.F5_UFEE_AMT) AS F5_UFEE_AMT                         /* 因素5-已账扣未报账的欠付费用 */
-     , SUM(F.F6_INVSM_AMT) AS F6_INVSM_AMT                       /* 因素6-开票样机额度 */
-     , SUM(F.F7_GSUB_AMT) AS F7_GSUB_AMT                         /* 因素7-国补未回款影响金额 */
-     , SUM(F.F8_ADJ_AMT) AS F8_ADJ_AMT                           /* 因素8手工导入因素 */
-     , F.ARPTOV_FLAG                                             /* 周转取数来源标记 */
-     , F.AR_AMT_FLAG                                            /* 应收占用正负向标记 */
+         WHEN F.BUSINESS_UNIT_CODE IS NULL
+           THEN NULL
+         ELSE F_TGK_GET_DIMNAME('D_BG', F.BUSINESS_UNIT_CODE)
+       END AS BUSINESS_UNIT_NAME            /* 事业部名称 */
+     , SUM(F.TURNOVER_AMT) AS TURNOVER_AMT  /* 周转金额 */
+     , SUM(F.F1_ODUE_AMT) AS F1_ODUE_AMT    /* 因素1-超期款金额 */
+     , SUM(F.F2_EPAY_AMT) AS F2_EPAY_AMT    /* 因素2-提前回款金额 */
+     , SUM(F.F3_ECR_AMT) AS F3_ECR_AMT      /* 因素3-电商零售销售节奏 */
+     , SUM(F.F4_UREB_AMT) AS F4_UREB_AMT    /* 因素4-已确认未兑现返利余额 */
+     , SUM(F.F5_UFEE_AMT) AS F5_UFEE_AMT    /* 因素5-已账扣未报账的欠付费用 */
+     , SUM(F.F6_INVSM_AMT) AS F6_INVSM_AMT  /* 因素6-开票样机额度 */
+     , SUM(F.F7_GSUB_AMT) AS F7_GSUB_AMT    /* 因素7-国补未回款影响金额 */
+     , SUM(F.F8_ADJ_AMT) AS F8_ADJ_AMT      /* 因素8手工导入因素 */
+     , F.ARPTOV_FLAG                        /* 周转取数来源标记 */
+     , F.AR_AMT_FLAG                        /* 应收占用正负向标记 */
   FROM FINAL_TURNOVER F
  GROUP BY F.COD_SCENARIO
         , F.COD_PERIODO
