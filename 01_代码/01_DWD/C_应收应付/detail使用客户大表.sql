@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261030 17:50
- * 本次修改：ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段按1030变更停用（注释保留）。
- * 上次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
+ * 最后更新时间：20261102 16:10
+ * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+ * 上次修改：ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段按1030变更停用（注释保留）。
  *
  * 脚本名称  ：detail使用客户大表.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -16,6 +16,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *   ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段停用（注释保留）。
  *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
  *   ALTER BY 20261026 18:46 SHIQINGFENG.EX 客商类型恢复按行项目客户供应商来源匹配
@@ -883,33 +884,33 @@ normalized_items AS (
                  OR NULLIF(TRIM(CAST(a.bldat AS STRING)), '') = '00000000'
                    THEN NULL
                WHEN TRIM(CAST(a.bldat AS STRING)) REGEXP '^[0-9]{8}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y%m%d') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y%m%d')
                WHEN TRIM(CAST(a.bldat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y-%m-%d %H:%i:%s')
                WHEN TRIM(CAST(a.bldat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y-%m-%d') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.bldat AS STRING)), '%Y-%m-%d')
            END AS voucher_dt
          , CASE
                WHEN NULLIF(TRIM(CAST(a.budat AS STRING)), '') IS NULL
                  OR NULLIF(TRIM(CAST(a.budat AS STRING)), '') = '00000000'
                    THEN NULL
                WHEN TRIM(CAST(a.budat AS STRING)) REGEXP '^[0-9]{8}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y%m%d') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y%m%d')
                WHEN TRIM(CAST(a.budat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y-%m-%d %H:%i:%s')
                WHEN TRIM(CAST(a.budat AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y-%m-%d') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.budat AS STRING)), '%Y-%m-%d')
            END AS posting_dt
          , CASE
                WHEN NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') IS NULL
                  OR NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') = '00000000'
                    THEN NULL
                WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d')
                WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s')
                WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                   THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+                   THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d')
            END AS baseline_dt
          , CASE
                WHEN NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') IS NULL
@@ -918,21 +919,21 @@ normalized_items AS (
                WHEN a.shkzg = 'H'
                    THEN CASE
                             WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
-                                THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+                                THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d')
                             WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
-                                THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                                THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s')
                             WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                                THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+                                THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d')
                         END
                WHEN NULLIF(TRIM(a.zbd1t), '') IS NOT NULL
                    THEN DATE_ADD(
                             CASE
                                 WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
-                                    THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+                                    THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d')
                                 WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
-                                    THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                                    THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s')
                                 WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                                    THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+                                    THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d')
                             END
                           , INTERVAL CAST(NULLIF(TRIM(a.zbd1t), '') AS INT) DAY
                         )
@@ -966,11 +967,11 @@ normalized_items AS (
                             OR NULLIF(TRIM(CAST(a.aging_date_sap AS STRING)), '') = '00000000'
                               THEN NULL
                           WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{8}$'
-                              THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d') AS DATE)
+                              THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y%m%d')
                           WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
-                              THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s') AS DATE)
+                              THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d %H:%i:%s')
                           WHEN TRIM(CAST(a.aging_date_sap AS STRING)) REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                              THEN CAST(STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d') AS DATE)
+                              THEN STR_TO_DATE(TRIM(CAST(a.aging_date_sap AS STRING)), '%Y-%m-%d')
                       END
                ) + 1 AS DECIMALV3(27, 9)
            ) AS aging_days

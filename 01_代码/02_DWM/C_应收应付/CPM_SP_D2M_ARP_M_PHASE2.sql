@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261102 15:49
-   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
-   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU：来源及装载列清单同步增加，出库与退货分支按D_CHANNEL同样从来源继承，MERGE列与值一一对齐。
+   * 最后更新时间：20261102 16:10
+   * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2 
    * 功能描述  ：DWD->DWM往来账龄数据抽取
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM01_000001
    * 
    * 修改历史：
+   *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU：来源及装载列清单同步增加，出库与退货分支按D_CHANNEL同样从来源继承，MERGE列与值一一对齐。
    *   ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。
@@ -286,10 +287,10 @@ BEGIN
                ELSE ACCT_SRC_CODE
            END AS ACCT_REC_CODE
          , ACCT_MAP_CODE
-         , CAST(NULL AS VARCHAR2(30)) AS LE_AGE_FLAG
-         , CAST(NULL AS VARCHAR2(30)) AS ME_AGE_FLAG
-         , CAST(NULL AS VARCHAR2(30)) AS MB_AGE_FLAG
-         , CAST(NULL AS VARCHAR2(30)) AS GRP_SCOPE
+         , NULL AS LE_AGE_FLAG
+         , NULL AS ME_AGE_FLAG
+         , NULL AS MB_AGE_FLAG
+         , NULL AS GRP_SCOPE
          , CHANNEL_L3_CODE AS D_CHANNEL
          , CHANNEL_BU_CODE AS D_CHANNEL_BU
          , CC_CUST_GROUP_CODE AS D_CC_CUSTGRP
@@ -364,38 +365,38 @@ BEGIN
            END AS SRC_DETAIL
          , T.CUST_CODE
          , T.CUST_NAME
-         , CAST(NULL AS VARCHAR2(30)) AS CUST_HEAD_CODE
-         , CAST(NULL AS VARCHAR2(200)) AS CUST_HEAD_NAME
-         , CAST(NULL AS VARCHAR2(30)) AS CUST_BRANCH_CODE
-         , CAST(NULL AS VARCHAR2(200)) AS CUST_BRANCH_NAME
+         , NULL AS CUST_HEAD_CODE
+         , NULL AS CUST_HEAD_NAME
+         , NULL AS CUST_BRANCH_CODE
+         , NULL AS CUST_BRANCH_NAME
          , T.COD_AZI_CTP
-         , CAST(NULL AS VARCHAR2(30)) AS COUNTRY_CODE
-         , CAST(NULL AS VARCHAR2(200)) AS COUNTRY_NAME
+         , NULL AS COUNTRY_CODE
+         , NULL AS COUNTRY_NAME
          , '1122000000' AS ACCT_SRC_CODE
          , '1122000000' AS ACCT_REC_CODE
          , '1122000000' AS ACCT_MAP_CODE
-         , CAST(NULL AS VARCHAR2(30)) AS LE_AGE_FLAG
-         , CAST(NULL AS VARCHAR2(30)) AS ME_AGE_FLAG
-         , CAST(NULL AS VARCHAR2(30)) AS MB_AGE_FLAG
-         , CAST(NULL AS VARCHAR2(30)) AS GRP_SCOPE
+         , NULL AS LE_AGE_FLAG
+         , NULL AS ME_AGE_FLAG
+         , NULL AS MB_AGE_FLAG
+         , NULL AS GRP_SCOPE
          , T.D_CHANNEL
          -- ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU跟D_CHANNEL一样从来源继承（M01是出库/退货，无周转渠道但有三类渠道）。
          , T.D_CHANNEL_BU
-         , CAST(NULL AS VARCHAR2(30)) AS D_CC_CUSTGRP
+         , NULL AS D_CC_CUSTGRP
          , T.D_ONOFFLINE
          -- ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射优先级：BATCH_ID=2 > BATCH_ID=6 > 收入原利润中心。
          , NVL(PM.PROFITCENTER_CODE, NVL(PM6.PROFITCENTER_CODE, T.COD_DEST2)) AS COD_DEST2
          , T.COD_DEST3
          , T.D_SALE_DEPT
-         , CAST(NULL AS VARCHAR2(2000)) AS NATURE_L1_NAME
-         , CAST(NULL AS VARCHAR2(2000)) AS NATURE_L2_NAME
-         , CAST(NULL AS VARCHAR2(2000)) AS NATURE_L3_NAME
-         , CAST(NULL AS VARCHAR2(30)) AS UFEE_UREB_FLAG
-         , CAST(NULL AS VARCHAR2(30)) AS ECLS_FLAG
-         , CAST(NULL AS VARCHAR2(300)) AS PAY_TERM_CODE
-         , CAST(NULL AS VARCHAR2(2000)) AS PAY_TERM_DESC
-         , CAST(NULL AS VARCHAR2(200)) AS EXCHANGE_RATE_EVAL_FLAG
-         , CAST(NULL AS NUMBER(27, 9)) AS TAX_RATE
+         , NULL AS NATURE_L1_NAME
+         , NULL AS NATURE_L2_NAME
+         , NULL AS NATURE_L3_NAME
+         , NULL AS UFEE_UREB_FLAG
+         , NULL AS ECLS_FLAG
+         , NULL AS PAY_TERM_CODE
+         , NULL AS PAY_TERM_DESC
+         , NULL AS EXCHANGE_RATE_EVAL_FLAG
+         , NULL AS TAX_RATE
          , T.COD_VALUTA
          , T.COD_VALUTA_ORIGINARIA
          , T.BCY_REV AS BCY_0_AMT

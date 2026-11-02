@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 15:27
- * 本次修改：ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
- * 上次修改：ALTER BY 20261102 15:18 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支客户范围改为排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支改为命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单，其余条件不变。
+ * 最后更新时间：20261102 16:10
+ * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+ * 上次修改：ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
  *
  * 脚本名称  ：sum使用客户大表.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -16,6 +16,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *   ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
  *   ALTER BY 20261102 15:18 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支客户范围改为排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支改为命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单，其余条件不变。
  *   ALTER BY 20261102 15:09 SHIQINGFENG.EX 电商零售标识ecls_flag严格按逻辑文档改造：客户范围改为规则库dim_rule_fi_mr_ar_cust_type中cust_type='电商零售类客户'按渠道BU配置的清单（18个电商BU），明细按channel_bu_code关联判断，替代原A前缀模糊匹配；金额与基准日期条件不变。
@@ -422,7 +423,7 @@ xh_parsed AS (
          , hold_customer_name
          , bill_amount
          , bill_status
-         , CAST(SIGN_DATE AS DATE) AS sign_date
+         , SIGN_DATE AS sign_date
       FROM ods.odsmt_fin_bill_view_data
      WHERE data_date = DATE_FORMAT(
                            LAST_DAY(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'))
@@ -507,12 +508,12 @@ xh_ar_fact AS (
          , NULL AS channel_l2_name
          , NULL AS channel_l3_code
          , NULL AS channel_l3_name
-         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
-         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
-         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
-         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
-         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
-         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
+         , NULL AS tov_channel_code
+         , NULL AS tov_channel_name
+         , NULL AS channel_bu_code
+         , NULL AS channel_bu_name
+         , NULL AS cc_cust_group_code
+         , NULL AS cc_cust_group_name
          , NULL AS onoffline_code
          , NULL AS onoffline_name
          , NULL AS src_profitcenter_code
@@ -576,12 +577,12 @@ xh_ap_fact AS (
          , NULL AS channel_l2_name
          , NULL AS channel_l3_code
          , NULL AS channel_l3_name
-         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
-         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
-         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
-         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
-         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
-         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
+         , NULL AS tov_channel_code
+         , NULL AS tov_channel_name
+         , NULL AS channel_bu_code
+         , NULL AS channel_bu_name
+         , NULL AS cc_cust_group_code
+         , NULL AS cc_cust_group_name
          , NULL AS onoffline_code
          , NULL AS onoffline_name
          , NULL AS src_profitcenter_code
@@ -674,12 +675,12 @@ overdue_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
-         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
-         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
-         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
-         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
-         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
-         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
+         , NULL AS tov_channel_code
+         , NULL AS tov_channel_name
+         , NULL AS channel_bu_code
+         , NULL AS channel_bu_name
+         , NULL AS cc_cust_group_code
+         , NULL AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '') AS src_profitcenter_code
          , s.profitcenter_name AS src_profitcenter_name
@@ -712,12 +713,12 @@ sample_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
-         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
-         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
-         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
-         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
-         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
-         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
+         , NULL AS tov_channel_code
+         , NULL AS tov_channel_name
+         , NULL AS channel_bu_code
+         , NULL AS channel_bu_name
+         , NULL AS cc_cust_group_code
+         , NULL AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
          , NULL AS material_group_code
@@ -768,12 +769,12 @@ sms_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
-         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
-         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
-         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
-         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
-         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
-         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
+         , NULL AS tov_channel_code
+         , NULL AS tov_channel_name
+         , NULL AS channel_bu_code
+         , NULL AS channel_bu_name
+         , NULL AS cc_cust_group_code
+         , NULL AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , NULL AS src_profitcenter_code, NULL AS src_profitcenter_name
          , NULL AS material_group_code
@@ -1213,12 +1214,12 @@ writeoff_fact AS (
          , NULL AS channel_l1_code, NULL AS channel_l1_name
          , NULL AS channel_l2_code, NULL AS channel_l2_name
          , NULL AS channel_l3_code, NULL AS channel_l3_name
-         , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
-         , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
-         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
-         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
-         , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
-         , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
+         , NULL AS tov_channel_code
+         , NULL AS tov_channel_name
+         , NULL AS channel_bu_code
+         , NULL AS channel_bu_name
+         , NULL AS cc_cust_group_code
+         , NULL AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
          , profitcenter_code AS src_profitcenter_code, NULL AS src_profitcenter_name
          , NULL AS material_group_code

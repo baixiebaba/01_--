@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261102 15:49
-   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度：ARPM01透传、CURRENT_DIM/BY_HISTORY/LM_HISTORY列清单、MERGE更新列与目标列同步删除该维度。
-   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX ARPM01至ARPM02装载增加D_CHANNEL_BU透传：CURRENT_DIM、BY_HISTORY及目标列清单同步增加，MERGE列与值一一对齐。
+   * 最后更新时间：20261102 16:10
+   * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度：ARPM01透传、CURRENT_DIM/BY_HISTORY/LM_HISTORY列清单、MERGE更新列与目标列同步删除该维度。
    *
    * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
    * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM02_000001
    *
    * 修改历史：
+   *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度：ARPM01透传、CURRENT_DIM/BY_HISTORY/LM_HISTORY列清单、MERGE更新列与目标列同步删除该维度。
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX ARPM01至ARPM02装载增加D_CHANNEL_BU透传：CURRENT_DIM、BY_HISTORY及目标列清单同步增加，MERGE列与值一一对齐。
    *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
@@ -1198,14 +1199,14 @@ BEGIN
             END AS BCY_ADJ_EXCL_0_AMT
          , R.OVERDUE_AMT AS OVERDUE_0_AMT
          , R.OVERDUE_AMT AS OVERDUE_1_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_2_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_3_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_4_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_5_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_6_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_7_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_8_AMT
-         , CAST(NULL AS NUMBER(27, 9)) AS OVERDUE_9_AMT
+         , NULL AS OVERDUE_2_AMT
+         , NULL AS OVERDUE_3_AMT
+         , NULL AS OVERDUE_4_AMT
+         , NULL AS OVERDUE_5_AMT
+         , NULL AS OVERDUE_6_AMT
+         , NULL AS OVERDUE_7_AMT
+         , NULL AS OVERDUE_8_AMT
+         , NULL AS OVERDUE_9_AMT
          , R.INV_SAMPLE_AMT
          , R.EPAY_AMT
          , R.ECLS_AMT
