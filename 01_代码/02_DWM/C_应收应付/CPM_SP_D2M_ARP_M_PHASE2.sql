@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261030 18:24
-   * 本次修改：ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。
-   * 上次修改：ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射新增BATCH_ID=6（按公司company_code%+物料组material_group_code），优先级BATCH_ID=2>6>收入原利润中心。
+   * 最后更新时间：20261102 15:49
+   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
+   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU：来源及装载列清单同步增加，出库与退货分支按D_CHANNEL同样从来源继承，MERGE列与值一一对齐。
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2 
    * 功能描述  ：DWD->DWM往来账龄数据抽取
@@ -17,6 +17,8 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM01_000001
    * 
    * 修改历史：
+   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
+   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU：来源及装载列清单同步增加，出库与退货分支按D_CHANNEL同样从来源继承，MERGE列与值一一对齐。
    *   ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。
    *   ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射新增BATCH_ID=6（按公司company_code%+物料组material_group_code），优先级BATCH_ID=2>6>收入原利润中心。
    *   ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。
@@ -146,7 +148,7 @@ BEGIN
     , MB_AGE_FLAG
     , GRP_SCOPE
     , D_CHANNEL
-    , D_TOV_CHAN
+    , D_CHANNEL_BU
     , D_CC_CUSTGRP
     , D_ONOFFLINE
     , COD_DEST2
@@ -289,7 +291,7 @@ BEGIN
          , CAST(NULL AS VARCHAR2(30)) AS MB_AGE_FLAG
          , CAST(NULL AS VARCHAR2(30)) AS GRP_SCOPE
          , CHANNEL_L3_CODE AS D_CHANNEL
-         , TOV_CHANNEL_CODE AS D_TOV_CHAN
+         , CHANNEL_BU_CODE AS D_CHANNEL_BU
          , CC_CUST_GROUP_CODE AS D_CC_CUSTGRP
          , ONOFFLINE_CODE AS D_ONOFFLINE
          , PROFITCENTER_CODE AS COD_DEST2
@@ -377,7 +379,8 @@ BEGIN
          , CAST(NULL AS VARCHAR2(30)) AS MB_AGE_FLAG
          , CAST(NULL AS VARCHAR2(30)) AS GRP_SCOPE
          , T.D_CHANNEL
-         , CAST(NULL AS VARCHAR2(30)) AS D_TOV_CHAN
+         -- ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU跟D_CHANNEL一样从来源继承（M01是出库/退货，无周转渠道但有三类渠道）。
+         , T.D_CHANNEL_BU
          , CAST(NULL AS VARCHAR2(30)) AS D_CC_CUSTGRP
          , T.D_ONOFFLINE
          -- ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射优先级：BATCH_ID=2 > BATCH_ID=6 > 收入原利润中心。
@@ -455,7 +458,7 @@ BEGIN
          , MB_AGE_FLAG
          , GRP_SCOPE
          , D_CHANNEL
-         , D_TOV_CHAN
+         , D_CHANNEL_BU
          , D_CC_CUSTGRP
          , D_ONOFFLINE
          , COD_DEST2
@@ -516,7 +519,7 @@ BEGIN
             , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
             , ACCT_SRC_CODE, ACCT_REC_CODE, ACCT_MAP_CODE
             , LE_AGE_FLAG, ME_AGE_FLAG, MB_AGE_FLAG, GRP_SCOPE
-            , D_CHANNEL, D_TOV_CHAN, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+            , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
             , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
             , UFEE_UREB_FLAG, ECLS_FLAG, PAY_TERM_CODE, PAY_TERM_DESC
             , EXCHANGE_RATE_EVAL_FLAG, TAX_RATE
@@ -545,7 +548,7 @@ BEGIN
        , MB_AGE_FLAG
        , GRP_SCOPE
        , D_CHANNEL
-       , D_TOV_CHAN
+       , D_CHANNEL_BU
        , D_CC_CUSTGRP
        , D_ONOFFLINE
        , COD_DEST2

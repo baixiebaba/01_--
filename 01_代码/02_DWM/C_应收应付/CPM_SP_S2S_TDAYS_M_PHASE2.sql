@@ -9,9 +9,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261027 18:36
-   * 本次修改：ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
-   * 上次修改：ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   * 最后更新时间：20261102 15:49
+   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度：配置表取列、目标列清单、PARAMS绑定与最终SELECT同步删除该维度。
+   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU维度改为配置驱动：AW_RUL_TOVCAL_000001新增D_CHANNEL_BU列后按配置取数并写入目标表。
    *
    * 过程名称  ：CPM_SP_S2S_TDAYS_M_PHASE2
    * 功能描述  ：周转计算配置驱动的S2S装载过程。
@@ -19,6 +19,8 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
    * 目标表    ：AW_RUL_TOVCAL_000001配置的TARGET_TABLE，当前业务目标为AW_MR7_ARPA01_000001。
    *
    * 修改历史：
+   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度：配置表取列、目标列清单、PARAMS绑定与最终SELECT同步删除该维度。
+   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU维度改为配置驱动：AW_RUL_TOVCAL_000001新增D_CHANNEL_BU列后按配置取数并写入目标表。
    *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
    *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
    *   待确认：原头“本次修改”内容为“新增模块参数P_EXP，仅读取AW_RUL_TOVCAL_000001中EXP_TYPE=P_EXP的有效配置。目标表新增IS_MTR_FLAG字段，直接写入配置表当前IS_MTR_FLAG。日志COD_AZIENDA统一按参考TOV过程记录为P_BG || '|' || V_AZIENDA。”
@@ -360,7 +362,8 @@ BEGIN
          , D_ONOFFLINE
          , D_SALE_DEPT
          , D_CHANNEL
-         , D_TOV_CHAN
+         -- ALTER BY 20261102 15:00 SHIQINGFENG.EX 1030新增渠道BU维度（配置表 AW_RUL_TOVCAL 新增列后按配置取数）。
+         , D_CHANNEL_BU
          , D_CC_CUSTGRP
          , COD_DEST3
          , EXP_TYPE
@@ -476,7 +479,7 @@ BEGIN
     -- AGG先按来源类别、币种聚合18个金额；外层SELECT再计算6个周转天数。
     V_SQL := 'INSERT INTO ' || V_TARGET_OBJECT || '('
       || 'OID, COD_SCENARIO, COD_PERIODO, D_BG, COD_CONTO, COD_AZIENDA, D_GRAN_CAL, COD_CATEGORIA'
-      || ', D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_TOV_CHAN, D_CC_CUSTGRP, COD_VALUTA'
+      || ', D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU, D_CC_CUSTGRP, COD_VALUTA'
       || ', PLN_BEG_OCP_AMT, PLN_LM_OCP_AMT, PLN_END_OCP_AMT, PLN_YTD_OCP_AMT, PLN_MTD_CSM_AMT, PLN_YTD_CSM_AMT'
       || ', ACT_BEG_OCP_AMT, ACT_LM_OCP_AMT, ACT_END_OCP_AMT, ACT_YTD_OCP_AMT, ACT_MTD_CSM_AMT, ACT_YTD_CSM_AMT'
       || ', LY_BEG_OCP_AMT, LY_LM_OCP_AMT, LY_END_OCP_AMT, LY_YTD_OCP_AMT, LY_MTD_CSM_AMT, LY_YTD_CSM_AMT'
@@ -495,7 +498,7 @@ BEGIN
       || ', :B_COD_DEST2 AS TARGET_COD_DEST2'
       || ', :B_COD_DEST3 AS TARGET_COD_DEST3'
       || ', :B_D_SALE_DEPT AS TARGET_D_SALE_DEPT'
-      || ', :B_D_TOV_CHAN AS TARGET_D_TOV_CHAN'
+      || ', :B_D_CHANNEL_BU AS TARGET_D_CHANNEL_BU'
       || ', :B_D_CC_CUSTGRP AS TARGET_D_CC_CUSTGRP'
       || ', :B_IS_MTR_FLAG AS IS_MTR_FLAG'
       || ', :B_USER AS USERUPD'
@@ -569,7 +572,7 @@ BEGIN
       || ', P.TARGET_COD_DEST2'
       || ', P.TARGET_COD_DEST3'
       || ', P.TARGET_D_SALE_DEPT'
-      || ', P.TARGET_D_TOV_CHAN'
+      || ', P.TARGET_D_CHANNEL_BU'
       || ', P.TARGET_D_CC_CUSTGRP'
       || ', A.COD_VALUTA'
       || ', A.PLN_BEG_OCP_AMT, A.PLN_LM_OCP_AMT, A.PLN_END_OCP_AMT, A.PLN_YTD_OCP_AMT, A.PLN_MTD_CSM_AMT, A.PLN_YTD_CSM_AMT'
@@ -602,7 +605,7 @@ BEGIN
       , DIM_VALUE(R.COD_DEST2)
       , DIM_VALUE(R.COD_DEST3)
       , DIM_VALUE(R.D_SALE_DEPT)
-      , DIM_VALUE(R.D_TOV_CHAN)
+      , DIM_VALUE(R.D_CHANNEL_BU)
       , DIM_VALUE(R.D_CC_CUSTGRP)
       , R.IS_MTR_FLAG
       , SESSION_USER

@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261030 10:20
- * 本次修改：ALTER BY 20261030 10:20 SHIQINGFENG.EX 增加收入金额全零或NULL分组排除条件。
- * 上次修改：无既有记录。
+ * 最后更新时间：20261102 15:49
+ * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除TOV渠道维度D_TOV_CHAN取数，与M层不再保留该维度的口径保持一致。
+ * 上次修改：ALTER BY 20261030 10:20 SHIQINGFENG.EX 增加收入金额全零或NULL分组排除条件。
  *
  * 查询名称  ：应收周转收入明细表 Query
  * 功能描述  ：按公司、事业部、客商及业务维度汇总本期、上年同期和累计收入金额。
@@ -11,6 +11,7 @@
  * 展示逻辑  ：展示本期、上年同期及累计收入金额，排除全部收入金额为0或NULL的分组。
  *
  * 修改历史：
+ *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除TOV渠道维度D_TOV_CHAN取数，与M层不再保留该维度的口径保持一致。
  *   ALTER BY 20261030 10:20 SHIQINGFENG.EX 增加收入金额全零或NULL分组排除条件。
  *******************************************************************************/
 
@@ -23,7 +24,7 @@ base AS (
     t.CUST_BRANCH_CODE, t.CUST_BRANCH_NAME, t.GRP_SCOPE, t.COD_AZI_CTP,
     t.COUNTRY_NAME, t.NATURE_L2_NAME,
     t.D_CHANNEL, t.D_ONOFFLINE, t.COD_DEST2, t.COD_DEST3, t.D_SALE_DEPT,
-    t.D_TOV_CHAN, t.D_CC_CUSTGRP, t.COD_VALUTA,
+    t.D_CC_CUSTGRP, t.COD_VALUTA,
     t.REV_AMT,
     t.DATEUPD, t.USERUPD,
     CASE WHEN t.COD_SCENARIO = TO_CHAR(TO_NUMBER(SUBSTR(${$Scenario.code},1,4))-1)
@@ -81,9 +82,6 @@ SELECT
  /* 销售部门 */
  ,b.D_SALE_DEPT
  ,f_tgk_get_dimname('D_SALE_DEPT', b.D_SALE_DEPT)    AS D_SALE_DEPT_DESC
- /* TOV 渠道 */
- ,b.D_TOV_CHAN
- ,f_tgk_get_dimname('D_TOV_CHAN', b.D_TOV_CHAN)     AS D_TOV_CHAN_DESC
  /* CC 客户组 */
  ,b.D_CC_CUSTGRP
  ,f_tgk_get_dimname('D_CC_CUSTGRP', b.D_CC_CUSTGRP)   AS D_CC_CUSTGRP_DESC
@@ -121,7 +119,7 @@ GROUP BY
   b.COD_AZIENDA, b.D_BG, b.CUST_CODE, b.CUST_HEAD_CODE, b.CUST_BRANCH_CODE
  ,b.GRP_SCOPE, b.COD_AZI_CTP
  ,b.D_CHANNEL, b.D_ONOFFLINE, b.COD_DEST2, b.COD_DEST3, b.D_SALE_DEPT
- ,b.D_TOV_CHAN, b.D_CC_CUSTGRP, b.COD_VALUTA
+ ,b.D_CC_CUSTGRP, b.COD_VALUTA
  ,g.COD_ELEGER6, g.DESC_ELEGER6, g.COD_ELEGER7, g.DESC_ELEGER7
  ,DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER4, DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5
 /* 排除本期、上年同期及累计收入金额全部为0或NULL的分组。

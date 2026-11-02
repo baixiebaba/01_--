@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261030 20:06
- * 本次修改：ALTER BY 20261030 20:06 ZHOUHONG.EX 电商零售标识ecls_flag取消付款原因代码400限制，其余取数条件不变。
- * 上次修改：ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
+ * 最后更新时间：20261102 15:27
+ * 本次修改：ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
+ * 上次修改：ALTER BY 20261102 15:18 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支客户范围改为排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支改为命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单，其余条件不变。
  *
  * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -17,6 +17,11 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
+ *   ALTER BY 20261102 15:18 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支客户范围改为排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支改为命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单，其余条件不变。
+ *   ALTER BY 20261102 15:09 SHIQINGFENG.EX 电商零售标识ecls_flag严格按逻辑文档改造：客户范围改为规则库dim_rule_fi_mr_ar_cust_type中cust_type='电商零售类客户'按渠道BU配置的清单（18个电商BU），明细按channel_bu_code关联判断，替代原A前缀模糊匹配；金额与基准日期条件不变。
+ *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 电商零售判据由周转渠道ARTA_A_07前缀改为渠道BU编码（channel_bu_code LIKE 'A%'）。
+ *   ALTER BY 20261102 14:35 SHIQINGFENG.EX 新增渠道BU编码/名称：DETAIL直接对应，POLICY按三级公司分类匹配渠道BU关系表，其余来源置空。
  *   ALTER BY 20261030 20:06 ZHOUHONG.EX 电商零售标识ecls_flag取消付款原因代码400限制，其余取数条件不变。
  *   ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
  *   ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
@@ -72,6 +77,8 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sum_mi PARTITION (*)
     , channel_l3_name          -- 三级公司分类名称
     , tov_channel_code         -- 周转分析渠道编码
     , tov_channel_name         -- 周转分析渠道名称
+    , channel_bu_code         -- 渠道BU编码（三级公司分类匹配渠道BU关系表）
+    , channel_bu_name         -- 渠道BU名称
     , cc_cust_group_code       -- 商冷客户群编码
     , cc_cust_group_name       -- 商冷客户群名称
     , onoffline_code           -- 线上线下编码
@@ -231,6 +238,16 @@ apar_range_rule AS (
             , acct_src_code
             , cust_code
 ),
+-- 电商零售类客户渠道BU范围：规则库按渠道BU配置，取目标月份有效记录。
+-- ALTER BY 20261102 15:09 SHIQINGFENG.EX 电商零售渠道BU清单改由规则库提供，替代原A前缀模糊匹配。
+ecls_channel_bu AS (
+    SELECT DISTINCT NULLIF(TRIM(r.channel_bu_code), '') AS channel_bu_code
+      FROM dim.dim_rule_fi_mr_ar_cust_type r
+     WHERE TRIM(r.cust_type) = '电商零售类客户'
+       AND NULLIF(TRIM(r.channel_bu_code), '') IS NOT NULL
+       AND NVL(r.valid_fr, '202401') <= @dt_month
+       AND NVL(r.valid_to, '999999') >= @dt_month
+),
 -- 识别满足金额、基准日期和电商零售范围条件的明细键。
 -- ALTER BY 20261030 20:06 ZHOUHONG.EX 1030取消付款原因代码限制：不再限定 pay_reason_code='400'，其余取数条件不变。
 ecls_match AS (
@@ -238,10 +255,11 @@ ecls_match AS (
          , d.cust_code
          , d.pays_tran
       FROM test.dwd_fi_mr_arap_detail_mi d
+      JOIN ecls_channel_bu cb
+        ON cb.channel_bu_code = d.channel_bu_code
      WHERE d.dt_month = @dt_month
        AND d.acct_map_code LIKE '1122%'
        AND d.ods_src <> 'BSAD_EPAY'
-       AND d.tov_channel_code LIKE 'ARTA_A_07%'
      GROUP BY d.acct_map_code
             , d.cust_code
             , d.pays_tran
@@ -337,6 +355,8 @@ detail_fact AS (
          , channel_l3_name
          , tov_channel_code
          , tov_channel_name
+         , channel_bu_code
+         , channel_bu_name
          , cc_cust_group_code
          , cc_cust_group_name
          , onoffline_code
@@ -490,6 +510,8 @@ xh_ar_fact AS (
          , NULL AS channel_l3_name
          , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
          , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
+         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
          , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code
@@ -557,6 +579,8 @@ xh_ap_fact AS (
          , NULL AS channel_l3_name
          , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
          , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
+         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
          , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code
@@ -653,6 +677,8 @@ overdue_fact AS (
          , NULL AS channel_l3_code, NULL AS channel_l3_name
          , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
          , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
+         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
          , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
@@ -689,6 +715,8 @@ sample_fact AS (
          , NULL AS channel_l3_code, NULL AS channel_l3_name
          , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
          , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
+         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
          , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
@@ -743,6 +771,8 @@ sms_fact AS (
          , NULL AS channel_l3_code, NULL AS channel_l3_name
          , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
          , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
+         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
          , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
@@ -762,21 +792,35 @@ sms_fact AS (
       FROM sms_sum s
      WHERE amount <> 0
 ),
--- POLICY：读取目标月份有效的结算类客户规则；batch_id=2按公司+周转分析渠道匹配。
-policy_customer_scope AS (
+-- POLICY：结算类客户规则；batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配。
+-- ALTER BY 20261102 15:18 SHIQINGFENG.EX batch_id=2匹配键由周转分析渠道tov_channel_code改为渠道BU编码channel_bu_code，与逻辑文档口径一致。
+policy_settle_cust AS (
     SELECT company_code
          , LTRIM(NULLIF(TRIM(cust_code), ''), '0') AS cust_code
-         , NULLIF(TRIM(tov_channel_code), '') AS tov_channel_code
-         , CAST(batch_id AS INT) AS batch_id
       FROM dim.dim_rule_fi_mr_ar_cust_type
      WHERE TRIM(cust_type) = '结算类客户'
-       AND CAST(batch_id AS INT) IN (1, 2)
+       AND CAST(batch_id AS INT) = 1
        AND NVL(valid_fr, '202401') <= @dt_month
        AND NVL(valid_to, '999999') >= @dt_month
      GROUP BY company_code
             , LTRIM(NULLIF(TRIM(cust_code), ''), '0')
-            , NULLIF(TRIM(tov_channel_code), '')
-            , CAST(batch_id AS INT)
+),
+-- POLICY：结算类客户第二匹配方式，按公司+渠道BU编码去重。
+-- ALTER BY 20261102 15:27 SHIQINGFENG.EX 规则库batch_id=2的company_code存在23%/26%/67%通配写法，
+-- 先按公司主数据展开为具体公司再等号关联，避免事实侧做LIKE匹配（与batch_id=6利润中心映射同一做法）。
+policy_settle_bu AS (
+    SELECT b.cod_azienda AS company_code
+         , NULLIF(TRIM(r.channel_bu_code), '') AS channel_bu_code
+      FROM dim.dim_rule_fi_mr_ar_cust_type r
+      JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(r.company_code)
+     WHERE TRIM(r.cust_type) = '结算类客户'
+       AND CAST(r.batch_id AS INT) = 2
+       AND NULLIF(TRIM(r.channel_bu_code), '') IS NOT NULL
+       AND NVL(r.valid_fr, '202401') <= @dt_month
+       AND NVL(r.valid_to, '999999') >= @dt_month
+     GROUP BY b.cod_azienda
+            , NULLIF(TRIM(r.channel_bu_code), '')
 ),
 -- POLICY：读取商冷客户群维度，按标准化公司+客商聚合，避免关联重复放大政策金额。
 policy_customer_ccc_dim AS (
@@ -896,6 +940,9 @@ policy_src_base AS (
          , p.arrears_amount AS qcy_amt
          , COALESCE(t1.tov_channel_code, t2.tov_channel_code) AS policy_tov_channel
          , COALESCE(t1.tov_channel_name, t2.tov_channel_name) AS policy_tov_channel_name
+         -- ALTER BY 20261102 14:35 SHIQINGFENG.EX 渠道BU：政策来源无渠道BU，按三级公司分类匹配关系表（一对一，先去重）。
+         , bu.channel_bu_code
+         , bu.channel_bu_name
       FROM dwd.dwd_mrs_mc_report_reward_account_detail_new_hi p
       LEFT JOIN policy_customer_dim c
         ON c.cust_sap_code = LTRIM(NULLIF(TRIM(p.customer_code), ''), '0')
@@ -908,10 +955,18 @@ policy_src_base AS (
       LEFT JOIN policy_tov_rule_2 t2
         ON t2.company_code = p.sales_group
        AND t2.channel_l3_code = c.channel_l3_code
+      LEFT JOIN (
+            SELECT com_3rd_code
+                 , MAX(channel_bu_code) AS channel_bu_code
+                 , MAX(channel_bu_name) AS channel_bu_name
+              FROM dim.dim_rule_mrs_mr3_channel_bu_relation
+             GROUP BY com_3rd_code
+      ) bu
+        ON bu.com_3rd_code = c.channel_l3_code
      WHERE REPLACE(LEFT(p.period, 7), '-', '') = @dt_month
 ),
--- POLICY：非ARTA分支严格取不属于结算类客户范围的数据；空渠道按非ARTA口径处理。
--- 使用两个NOT EXISTS拆开batch_id匹配条件，避免在政策过滤中使用OR。
+-- POLICY：非电商分支取不属于电商零售类客户渠道BU清单、也不属于结算类客户范围的客户，仅取兑现过程中/确认完毕。
+-- 结算类客户规则按两个batch分别匹配：batch_id=1按公司+客商，batch_id=2按公司+渠道BU编码。
 -- 两个分支显式保持同一字段顺序，避免新增字段导致UNION ALL列漂移。
 policy_src AS (
     SELECT b.company_code
@@ -938,25 +993,29 @@ policy_src AS (
          , b.qcy_amt
          , b.policy_tov_channel
          , b.policy_tov_channel_name
+         , b.channel_bu_code
+         , b.channel_bu_name
       FROM policy_src_base b
-     WHERE COALESCE(b.policy_tov_channel, '') NOT LIKE 'ARTA_A_07%'
+     WHERE NOT EXISTS (
+               SELECT 1
+                 FROM ecls_channel_bu e
+                WHERE e.channel_bu_code = b.channel_bu_code
+           )
        AND b.ledger_status IN ('兑现过程中', '确认完毕')
        AND NOT EXISTS (
                SELECT 1
-                 FROM policy_customer_scope r
+                 FROM policy_settle_cust r
                 WHERE r.company_code = b.company_code
-                  AND r.batch_id = 1
                   AND r.cust_code = LTRIM(NULLIF(TRIM(b.cust_code), ''), '0')
            )
        AND NOT EXISTS (
                SELECT 1
-                 FROM policy_customer_scope r
+                 FROM policy_settle_bu r
                 WHERE r.company_code = b.company_code
-                  AND r.batch_id = 2
-                  AND r.tov_channel_code = NULLIF(TRIM(b.policy_tov_channel), '')
+                  AND r.channel_bu_code = b.channel_bu_code
            )
     UNION ALL
-    -- POLICY：ARTA分支严格限定周转分析渠道，并仅取政策清单退差未冲红。
+    -- POLICY：电商分支限定规则库中「电商零售类客户」配置的渠道BU清单，并仅取政策清单退差未冲红。
     SELECT b.company_code
          , b.cust_code
          , b.cust_name
@@ -981,8 +1040,14 @@ policy_src AS (
          , b.qcy_amt
          , b.policy_tov_channel
          , b.policy_tov_channel_name
+         , b.channel_bu_code
+         , b.channel_bu_name
       FROM policy_src_base b
-     WHERE b.policy_tov_channel LIKE 'ARTA_A_07%'
+     WHERE EXISTS (
+               SELECT 1
+                 FROM ecls_channel_bu e
+                WHERE e.channel_bu_code = b.channel_bu_code
+           )
        AND b.policy_list = '退差未冲红'
 ),
 -- POLICY：分别汇总本位币和交易币；政策源两者均实际对应arrears_amount。
@@ -1001,6 +1066,8 @@ policy_sum AS (
          , MAX(s.channel_l3_name) AS channel_l3_name
          , MAX(s.policy_tov_channel) AS tov_channel_code
          , MAX(s.policy_tov_channel_name) AS tov_channel_name
+         , MAX(s.channel_bu_code) AS channel_bu_code
+         , MAX(s.channel_bu_name) AS channel_bu_name
          , MAX(s.cc_cust_group_code) AS cc_cust_group_code
          , MAX(s.cc_cust_group_name) AS cc_cust_group_name
          , s.profitcenter_code AS profitcenter_code
@@ -1059,6 +1126,8 @@ policy_fact AS (
          , s.channel_l3_code, s.channel_l3_name
          , s.tov_channel_code
          , s.tov_channel_name
+         , s.channel_bu_code
+         , s.channel_bu_name
          , s.cc_cust_group_code
          , s.cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
@@ -1165,6 +1234,8 @@ writeoff_fact AS (
          , NULL AS channel_l3_code, NULL AS channel_l3_name
          , CAST(NULL AS VARCHAR(30)) AS tov_channel_code
          , CAST(NULL AS VARCHAR(200)) AS tov_channel_name
+         , CAST(NULL AS VARCHAR(50)) AS channel_bu_code
+         , CAST(NULL AS VARCHAR(200)) AS channel_bu_name
          , CAST(NULL AS VARCHAR(30)) AS cc_cust_group_code
          , CAST(NULL AS VARCHAR(200)) AS cc_cust_group_name
          , NULL AS onoffline_code, NULL AS onoffline_name
@@ -1359,6 +1430,8 @@ report_pivot AS (
          , channel_l3_name
          , tov_channel_code
          , tov_channel_name
+         , channel_bu_code
+         , channel_bu_name
          , cc_cust_group_code
          , cc_cust_group_name
          , onoffline_code
@@ -1455,6 +1528,8 @@ report_pivot AS (
             , channel_l3_name
             , tov_channel_code
             , tov_channel_name
+            , channel_bu_code
+            , channel_bu_name
             , cc_cust_group_code
             , cc_cust_group_name
             , onoffline_code
@@ -1519,6 +1594,8 @@ SELECT p.dt_month
      , p.channel_l3_name
      , p.tov_channel_code
      , p.tov_channel_name
+     , p.channel_bu_code
+     , p.channel_bu_name
      , p.cc_cust_group_code
      , p.cc_cust_group_name
      , p.onoffline_code
@@ -1620,6 +1697,8 @@ INSERT INTO test.dwd_fi_mr_arap_sum_mi
     , acct_map_code            -- 映射后科目编码
     , tov_channel_code         -- 周转分析渠道编码
     , tov_channel_name         -- 周转分析渠道名称
+    , channel_bu_code         -- 渠道BU编码（三级公司分类匹配渠道BU关系表）
+    , channel_bu_name         -- 渠道BU名称
     , cc_cust_group_code       -- 商冷客户群编码
     , cc_cust_group_name       -- 商冷客户群名称
     , src_profitcenter_code    -- 原始利润中心编码
@@ -1683,6 +1762,16 @@ INSERT INTO test.dwd_fi_mr_arap_sum_mi
     , load_dt                  -- 更新时间
 )
 WITH
+-- EPAY：电商零售类客户渠道BU范围，与主查询口径一致，取规则库中目标月份有效的配置。
+-- ALTER BY 20261102 15:18 SHIQINGFENG.EX 提前回款电商排除范围由A前缀改为规则库渠道BU清单。
+epay_ecls_channel_bu AS (
+    SELECT DISTINCT NULLIF(TRIM(r.channel_bu_code), '') AS channel_bu_code
+      FROM dim.dim_rule_fi_mr_ar_cust_type r
+     WHERE TRIM(r.cust_type) = '电商零售类客户'
+       AND NULLIF(TRIM(r.channel_bu_code), '') IS NOT NULL
+       AND NVL(r.valid_fr, '202401') <= @dt_month
+       AND NVL(r.valid_to, '999999') >= @dt_month
+),
 -- EPAY：从Detail读取BSID/BSAD数据，按指定提前回款条件筛选并保留本位币、交易币金额。
 epay_detail AS (
     SELECT d.dt_month
@@ -1695,6 +1784,8 @@ epay_detail AS (
          , d.acct_map_code
          , d.tov_channel_code
          , d.tov_channel_name
+         , d.channel_bu_code
+         , d.channel_bu_name
          , d.cc_cust_group_code
          , d.cc_cust_group_name
          , d.src_profitcenter_code
@@ -1711,7 +1802,11 @@ epay_detail AS (
        AND (d.ods_src = 'BSID' OR d.ods_src LIKE 'BSAD%')
        AND d.acct_map_code LIKE '1122%'
        AND d.baseline_dt <= @last_day
-       AND d.tov_channel_code NOT LIKE 'ARTA_A_07%'
+       AND NOT EXISTS (
+               SELECT 1
+                 FROM epay_ecls_channel_bu e
+                WHERE e.channel_bu_code = d.channel_bu_code
+           )
        AND NOT (d.posting_dt >= STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d')
             AND d.posting_dt < DATE_ADD(STR_TO_DATE(CONCAT(@dt_month, '01'), '%Y%m%d'), INTERVAL 1 MONTH)
             AND d.acct_cert_type = 'AB')
@@ -1728,6 +1823,8 @@ epay_sum AS (
          , MAX(acct_map_code) AS acct_map_code
          , MAX(tov_channel_code) AS tov_channel_code
          , MAX(tov_channel_name) AS tov_channel_name
+         , MAX(channel_bu_code) AS channel_bu_code
+         , MAX(channel_bu_name) AS channel_bu_name
          , MAX(cc_cust_group_code) AS cc_cust_group_code
          , MAX(cc_cust_group_name) AS cc_cust_group_name
          , MAX(src_profitcenter_code) AS src_profitcenter_code
@@ -1756,6 +1853,8 @@ SELECT dt_month
      , acct_map_code
      , tov_channel_code
      , tov_channel_name
+     , channel_bu_code
+     , channel_bu_name
      , cc_cust_group_code
      , cc_cust_group_name
      , src_profitcenter_code

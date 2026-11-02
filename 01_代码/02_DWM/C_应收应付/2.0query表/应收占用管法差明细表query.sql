@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261029 15:15
- * 本次修改：ALTER BY 20261029 15:15 SHIQINGFENG.EX 排除法人口径、管理口径及调整金额全部为0的明细记录。
- * 上次修改：ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
+ * 最后更新时间：20261102 15:49
+ * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除TOV渠道维度D_TOV_CHAN取数，与M层不再保留该维度的口径保持一致。
+ * 上次修改：ALTER BY 20261029 15:15 SHIQINGFENG.EX 排除法人口径、管理口径及调整金额全部为0的明细记录。
  *
  * 脚本名称  ：应收占用管法差明细表query.sql
  * 功能描述  ：按事业部范围读取M02账龄数据，匹配M03管理口径应收占用，计算其他调整项、调整后管理口径应收占用及管法差金额。
@@ -11,6 +11,7 @@
  * 目标表    ：无，报表Query直接输出。
  *
  * 修改历史：
+ *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除TOV渠道维度D_TOV_CHAN取数，与M层不再保留该维度的口径保持一致。
  *   ALTER BY 20261029 15:15 SHIQINGFENG.EX 排除法人口径、管理口径及调整金额全部为0的明细记录。
  *   ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
  *   ALTER BY 20261029 11:16 SHIQINGFENG.EX 按DEST3层级平铺表补充大区名称，优先取4级节点描述并回退5级节点描述。
@@ -139,7 +140,6 @@ M02_BASE AS (
          , NVL(LTRIM(TRIM(A.COD_DEST2), '0'), '0') AS PROFITCENTER_MATCH_CODE
          , A.COD_DEST3 AS BUSINESS_RANGE_CODE
          , A.D_SALE_DEPT AS SALE_DEPT_CODE
-         , A.D_TOV_CHAN AS TOV_CHANNEL_CODE
          , A.D_CC_CUSTGRP AS CC_CUST_GROUP_CODE
          , A.COD_VALUTA AS LOCAL_CURRENCY_CODE
          , CASE
@@ -226,8 +226,6 @@ SELECT A.COD_SCENARIO AS SCENARIO
      , F_TGK_GET_DIMNAME('DEST3', A.BUSINESS_RANGE_CODE) AS BUSINESS_RANGE_NAME
      , A.SALE_DEPT_CODE
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', A.SALE_DEPT_CODE) AS SALE_DEPT_NAME
-     , A.TOV_CHANNEL_CODE
-     , F_TGK_GET_DIMNAME('D_TOV_CHAN', A.TOV_CHANNEL_CODE) AS TOV_CHANNEL_NAME
      , A.CC_CUST_GROUP_CODE
      , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', A.CC_CUST_GROUP_CODE) AS CC_CUST_GROUP_NAME
      , A.LOCAL_CURRENCY_CODE
