@@ -15,13 +15,6 @@ ARPM02与IMOCC周转校验查询
 ============================================================================
 */
 WITH
-/* 公司层级和实际公司参数范围：仅保留HIE=10公司，不依赖公司进数或锁定表。 */
-AZI_SCOPE AS (
-    SELECT DISTINCT R.ELEM AS COD_AZIENDA
-      FROM TGK_FIMA_HISENSE.V_REF_AZIENDA R
-     WHERE R.HIE = '10'
-       AND R.ELEM IN (${$Entity.code})
-),
 /* 当前期间有效的全部周转事业部范围：排除CXC事业部，供映射存在性判断使用。 */
 TOV_BG_SCOPE_ALL AS (
     SELECT DISTINCT C.COD_BG
@@ -174,7 +167,6 @@ TURNOVER_SOURCE AS (
      WHERE A.COD_SCENARIO = ${$Scenario.code}
        AND A.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
        AND A.GRP_SCOPE = 'GEX-集团外'
-       AND A.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
        AND A.COD_DEST2 IS NOT NULL
        AND A.COD_DEST2 <> 'ZZZZ'
        /* 保留TOV要求的两类账龄标识范围，单条ARPM02记录只生成一个类别。 */
@@ -217,7 +209,6 @@ TURNOVER_SOURCE AS (
        AND I.PROFITCENTER_CODE IS NOT NULL
        AND I.PROFITCENTER_CODE <> 'ZZZZ'
        AND NVL(I.IMOCC_CNY_AMT, 0) <> 0
-       AND I.COMPANY_CODE IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
 ),
 /* 周转利润中心仅按TOV实际逻辑标准化：ARPM02取COD_DEST2，IMOCC取PROFITCENTER_CODE，均在此处去除前导零一次。 */
 TURNOVER_NORMALIZED AS (
@@ -548,4 +539,3 @@ SELECT F.COD_SCENARIO AS SCENARIO
         , F.CUST_CODE
         , F.TURNOVER_PROFITCENTER_CODE
         , F.BUSINESS_UNIT_CODE
-;

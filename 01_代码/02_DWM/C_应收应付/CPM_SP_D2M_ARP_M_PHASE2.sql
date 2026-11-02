@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
+CREATE OR REPLACE PROCEDURE TGK_FIMA_HISENSE.CPM_SP_D2M_ARP_M_PHASE2(
     P_SCENARIO  IN VARCHAR2
   , P_PERIODO   IN VARCHAR2
   , P_AZIENDA   IN VARCHAR2
@@ -8,7 +8,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    *                              存储过程说明
    *-----------------------------------------------------------------------------
    * 最后更新时间：20261102 16:10
-   * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+   * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换；签名行恢复TGK_FIMA_HISENSE前缀与线上一致。
    * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2 
@@ -17,7 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM01_000001
    * 
    * 修改历史：
-   *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+   *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换；签名行恢复TGK_FIMA_HISENSE前缀与线上一致。
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU：来源及装载列清单同步增加，出库与退货分支按D_CHANNEL同样从来源继承，MERGE列与值一一对齐。
    *   ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。

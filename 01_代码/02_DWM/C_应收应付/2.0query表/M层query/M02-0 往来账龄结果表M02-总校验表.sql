@@ -1,23 +1,3 @@
-/* ============================================================================
- * 查询说明
- *   查询名称：账龄校验（整体口径，2.0 vs 1.0 vs 单体法人）
- *   功能描述：按公司 + 往来项目校验 2.0 账龄表与 1.0 账龄表的年初/上月/本月余额，
- *             并输出「总计」与「所属子公司 / 集团内 / 集团外」三段范围。
- *             第三列输出单体法人表（DATI_SALDI_LORDI）仅作参考，其范围段固定为 0。
- *   宿主表  ：TGK_FIMA_HISENSE.AW_MR9_ARPM02_000001（2.0 账龄）
- *             TGK_GB_HISENSE.FORM_DATI（1.0 账龄）
- *             TGK_GB_HISENSE.DATI_SALDI_LORDI（1.0 单体法人）
- *   展示逻辑：按 公司 -> 往来项目（应收账款…长期应收款）-> 范围（总计/所属子公司/集团内/集团外）排序
- *
- *   参数    ：场景 ${$Scenario.code}｜期间 ${$Period.code}｜公司 ${$Entity.code}
- *   口径要点：
- *     1. 2.0 侧取 COD_CATEGORIA='ZAMOUNT'，按 GRP_SCOPE 区分三段（SUB-/GIN-/GEX-）。
- *     2. 1.0 侧取 FORM_DATI 两个往来报表，按 COD_CATEGORIA 区分三段
- *        （$AMOUNT=所属子公司 / 1ADJ=集团内 / 1REC=集团外）。
- *     3. 合同资产在单体法人侧对应两个节点（146200A01 / 1910000A30），
- *        2.0 与 1.0 汇总时按项目科目去重，单体法人不过滤。
- *     4. 差异 = 2.0 - 1.0，>0 表示 2.0 多算。
- * ==========================================================================*/
 WITH
 /* 往来项目、2.0/1.0账龄表科目映射，以及单体法人科目节点映射。 */
 ITM AS (
@@ -45,7 +25,7 @@ ITM_DEDUP AS (
             , CONTO20
             , CONTO10
 ),
-/* 原合计口径：2.0账龄表按公司和往来项目汇总。 */
+/* 原合计口径：2.0账龄表按公司和往来项目汇总，保留原有全部集团所属范围数据。 */
 T20_TOTAL AS (
     SELECT A.COD_AZIENDA COMPANY_CODE
          , I.SEQ
@@ -53,12 +33,13 @@ T20_TOTAL AS (
          , SUM(A.BY_BCY_0_AMT) BY_AMT
          , SUM(A.LM_BCY_0_AMT) LM_AMT
          , SUM(A.BCY_0_AMT)    CUR_AMT
-    FROM   TGK_FIMA_HISENSE.AW_MR9_ARPM02_000001 A
+    FROM   AW_MR9_ARPM02_000001 A
     JOIN   ITM_DEDUP I
       ON   A.COD_CONTO = I.CONTO20
     WHERE  A.COD_PERIODO   = ${$Period.code}
       AND  A.COD_CATEGORIA = 'ZAMOUNT'
       AND  A.COD_SCENARIO  = ${$Scenario.code}
+      /* 公司限制已下沉至本数据包内部。 */
       AND  A.COD_AZIENDA   IN (${$Entity.code})
     GROUP  BY A.COD_AZIENDA
             , I.SEQ
@@ -72,13 +53,14 @@ T10_TOTAL AS (
          , SUM(F.IMPORTO_1) BY_AMT
          , SUM(F.IMPORTO_2) LM_AMT
          , SUM(F.IMPORTO_3) CUR_AMT
-    FROM   TGK_GB_HISENSE.FORM_DATI F
+    FROM   TGK_GB_HISENSEFORM_DATI F
     JOIN   ITM_DEDUP I
       ON   F.COD_CONTO = I.CONTO10
     WHERE  F.COD_PROSPETTO IN ('ZS_AP0001_IPT01', 'ZS_AR0001_IPT01')
       AND  F.COD_CATEGORIA IN ('$AMOUNT', '1ADJ', '1REC')
       AND  F.COD_PERIODO   = ${$Period.code}
       AND  F.COD_SCENARIO  = ${$Scenario.code}
+      /* 公司限制已下沉至本数据包内部。 */
       AND  F.COD_AZIENDA   IN (${$Entity.code})
     GROUP  BY F.COD_AZIENDA
             , I.SEQ
@@ -108,9 +90,9 @@ TSD AS (
                                              ELSE ${$Scenario.code}
                                          END
                     AND S.COD_PERIODO = CASE
-                                            WHEN ${$Period.code} = '01' THEN '12'
-                                            ELSE LPAD(TO_NUMBER(${$Period.code}) - 1, 2, '0')
-                                        END
+                                             WHEN ${$Period.code} = '01' THEN '12'
+                                             ELSE LPAD(TO_NUMBER(${$Period.code}) - 1, 2, '0')
+                                         END
                    THEN S.IMPORTO
                END) LM_AMT
          , SUM(CASE
@@ -118,7 +100,7 @@ TSD AS (
                     AND S.COD_PERIODO = ${$Period.code}
                    THEN S.IMPORTO
                END) CUR_AMT
-    FROM   TGK_GB_HISENSE.DATI_SALDI_LORDI S
+    FROM   TGK_GB_HISENSEDATI_SALDI_LORDI S
     JOIN   NODE_ELEM NE
       ON   NE.ELEM = S.COD_CONTO
     JOIN   ITM I
@@ -126,10 +108,10 @@ TSD AS (
     WHERE  ((S.COD_SCENARIO = TO_CHAR(TO_NUMBER(SUBSTR(${$Scenario.code}, 1, 4)) - 1) || SUBSTR(${$Scenario.code}, 5)
              AND S.COD_PERIODO = '12')
             OR (S.COD_SCENARIO = CASE
-                                     WHEN ${$Period.code} = '01'
-                                     THEN TO_CHAR(TO_NUMBER(SUBSTR(${$Scenario.code}, 1, 4)) - 1) || SUBSTR(${$Scenario.code}, 5)
-                                     ELSE ${$Scenario.code}
-                                 END
+                                      WHEN ${$Period.code} = '01'
+                                      THEN TO_CHAR(TO_NUMBER(SUBSTR(${$Scenario.code}, 1, 4)) - 1) || SUBSTR(${$Scenario.code}, 5)
+                                      ELSE ${$Scenario.code}
+                                  END
                 AND S.COD_PERIODO = CASE
                                         WHEN ${$Period.code} = '01' THEN '12'
                                         ELSE LPAD(TO_NUMBER(${$Period.code}) - 1, 2, '0')
@@ -137,6 +119,7 @@ TSD AS (
             OR (S.COD_SCENARIO = ${$Scenario.code}
                 AND S.COD_PERIODO = ${$Period.code}))
       AND  S.COD_CATEGORIA IN ('$AMOUNT', '1ADJ', '1SPA', '1REC', '2ADJ_CF', '2ADJ_OB')
+      /* 公司限制已下沉至本数据包内部。 */
       AND  S.COD_AZIENDA   IN (${$Entity.code})
     GROUP  BY S.COD_AZIENDA
             , I.SEQ
@@ -150,6 +133,7 @@ COMPANY_DIM_TOTAL AS (
     UNION
     SELECT COMPANY_CODE FROM TSD
 ),
+/* ALTER BY SHIQINGFENG.EX 20261023 18:30 在原合计后新增集团所属范围三段校验；新增段Lordi固定为0且不参与校验。 */
 /* 新增三段校验配置：控制2.0集团所属范围、1.0类别和展示顺序。 */
 SCOPE_CONFIG AS (
     SELECT 1 SCOPE_SEQ, '所属子公司' GROUP_SCOPE, 'SUB-子公司' T20_GRP_SCOPE, '$AMOUNT' T10_CATEGORY FROM DUAL UNION ALL
@@ -166,7 +150,7 @@ T20_SCOPE AS (
          , SUM(A.BY_BCY_0_AMT) BY_AMT
          , SUM(A.LM_BCY_0_AMT) LM_AMT
          , SUM(A.BCY_0_AMT)    CUR_AMT
-    FROM   TGK_FIMA_HISENSE.AW_MR9_ARPM02_000001 A
+    FROM   AW_MR9_ARPM02_000001 A
     JOIN   ITM_DEDUP I
       ON   A.COD_CONTO = I.CONTO20
     JOIN   SCOPE_CONFIG SC
@@ -174,6 +158,7 @@ T20_SCOPE AS (
     WHERE  A.COD_PERIODO   = ${$Period.code}
       AND  A.COD_CATEGORIA = 'ZAMOUNT'
       AND  A.COD_SCENARIO  = ${$Scenario.code}
+      /* 公司限制已下沉至本数据包内部。 */
       AND  A.COD_AZIENDA   IN (${$Entity.code})
     GROUP  BY A.COD_AZIENDA
             , I.SEQ
@@ -191,7 +176,7 @@ T10_SCOPE AS (
          , SUM(F.IMPORTO_1) BY_AMT
          , SUM(F.IMPORTO_2) LM_AMT
          , SUM(F.IMPORTO_3) CUR_AMT
-    FROM   TGK_GB_HISENSE.FORM_DATI F
+    FROM   TGK_GB_HISENSEFORM_DATI F
     JOIN   ITM_DEDUP I
       ON   F.COD_CONTO = I.CONTO10
     JOIN   SCOPE_CONFIG SC
@@ -199,6 +184,7 @@ T10_SCOPE AS (
     WHERE  F.COD_PROSPETTO IN ('ZS_AP0001_IPT01', 'ZS_AR0001_IPT01')
       AND  F.COD_PERIODO   = ${$Period.code}
       AND  F.COD_SCENARIO  = ${$Scenario.code}
+      /* 公司限制已下沉至本数据包内部。 */
       AND  F.COD_AZIENDA   IN (${$Entity.code})
     GROUP  BY F.COD_AZIENDA
             , I.SEQ
@@ -212,7 +198,7 @@ COMPANY_DIM_SCOPE AS (
     UNION
     SELECT COMPANY_CODE FROM T10_SCOPE
 ),
-/* 原合计结果：金额和单体法人校验逻辑保持原样，仅补充“总计”范围标识。 */
+/* 原合计结果：金额和单体法人校验逻辑保持原样，仅补充总计范围标识。 */
 TOTAL_RESULT AS (
     SELECT C.COMPANY_CODE
          , I.ITEM_NAME
@@ -235,13 +221,13 @@ TOTAL_RESULT AS (
     CROSS  JOIN ITM_DEDUP I
     LEFT   JOIN T20_TOTAL T20
       ON   T20.COMPANY_CODE = C.COMPANY_CODE
-     AND   T20.SEQ = I.SEQ
+     AND   T20.SEQ          = I.SEQ
     LEFT   JOIN T10_TOTAL T10
       ON   T10.COMPANY_CODE = C.COMPANY_CODE
-     AND   T10.SEQ = I.SEQ
+     AND   T10.SEQ          = I.SEQ
     LEFT   JOIN TSD
       ON   TSD.COMPANY_CODE = C.COMPANY_CODE
-     AND   TSD.SEQ = I.SEQ
+     AND   TSD.SEQ          = I.SEQ
 ),
 /* 新增范围结果：不读取单体法人表，Lordi金额固定为0，只校验2.0与1.0账龄。 */
 SCOPE_RESULT AS (
@@ -267,29 +253,51 @@ SCOPE_RESULT AS (
     CROSS  JOIN SCOPE_CONFIG SC
     LEFT   JOIN T20_SCOPE T20
       ON   T20.COMPANY_CODE = C.COMPANY_CODE
-     AND   T20.SEQ = I.SEQ
-     AND   T20.SCOPE_SEQ = SC.SCOPE_SEQ
+     AND   T20.SEQ          = I.SEQ
+     AND   T20.SCOPE_SEQ    = SC.SCOPE_SEQ
     LEFT   JOIN T10_SCOPE T10
       ON   T10.COMPANY_CODE = C.COMPANY_CODE
-     AND   T10.SEQ = I.SEQ
-     AND   T10.SCOPE_SEQ = SC.SCOPE_SEQ
+     AND   T10.SEQ          = I.SEQ
+     AND   T10.SCOPE_SEQ    = SC.SCOPE_SEQ
 ),
 /* 合计结果与新增三段范围结果并集展示。 */
 ALL_RESULT AS (
-    SELECT COMPANY_CODE, ITEM_NAME, GROUP_SCOPE
-         , BY_AMT_20, LM_AMT_20, CUR_AMT_20
-         , BY_AMT_10, LM_AMT_10, CUR_AMT_10
-         , BY_AMT_LORDI, LM_AMT_LORDI, CUR_AMT_LORDI
-         , BY_AMT_DIFF, LM_AMT_DIFF, CUR_AMT_DIFF
-         , ITEM_SEQ, SCOPE_SEQ
+    SELECT COMPANY_CODE
+         , ITEM_NAME
+         , GROUP_SCOPE
+         , BY_AMT_20
+         , LM_AMT_20
+         , CUR_AMT_20
+         , BY_AMT_10
+         , LM_AMT_10
+         , CUR_AMT_10
+         , BY_AMT_LORDI
+         , LM_AMT_LORDI
+         , CUR_AMT_LORDI
+         , BY_AMT_DIFF
+         , LM_AMT_DIFF
+         , CUR_AMT_DIFF
+         , ITEM_SEQ
+         , SCOPE_SEQ
     FROM   TOTAL_RESULT
     UNION ALL
-    SELECT COMPANY_CODE, ITEM_NAME, GROUP_SCOPE
-         , BY_AMT_20, LM_AMT_20, CUR_AMT_20
-         , BY_AMT_10, LM_AMT_10, CUR_AMT_10
-         , BY_AMT_LORDI, LM_AMT_LORDI, CUR_AMT_LORDI
-         , BY_AMT_DIFF, LM_AMT_DIFF, CUR_AMT_DIFF
-         , ITEM_SEQ, SCOPE_SEQ
+    SELECT COMPANY_CODE
+         , ITEM_NAME
+         , GROUP_SCOPE
+         , BY_AMT_20
+         , LM_AMT_20
+         , CUR_AMT_20
+         , BY_AMT_10
+         , LM_AMT_10
+         , CUR_AMT_10
+         , BY_AMT_LORDI
+         , LM_AMT_LORDI
+         , CUR_AMT_LORDI
+         , BY_AMT_DIFF
+         , LM_AMT_DIFF
+         , CUR_AMT_DIFF
+         , ITEM_SEQ
+         , SCOPE_SEQ
     FROM   SCOPE_RESULT
 )
 SELECT COMPANY_CODE

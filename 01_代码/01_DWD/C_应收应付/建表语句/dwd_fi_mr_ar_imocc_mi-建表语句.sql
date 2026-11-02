@@ -1,12 +1,20 @@
 -- 国际营销应收占用明细表（Apache Doris）
--- 目标表：dwd.dwd_fi_mr_ar_imocc_mi
+-- 目标表：test.dwd_fi_mr_ar_imocc_mi
 -- 表类型：事实表；数据分层：DWD
+-- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+--
+-- 变更记录：
+--   20261102  与实际库对齐：删除重复且实际不存在的 src_profitcenter_code / src_profitcenter_name，
+--             profitcenter_code / profitcenter_name 只保留实际位置；load_dt 由 DATE 改为 DATETIME；
+--             目标库由 dwd 改为 test（当前实际只存在于 test）。
+--
+-- 说明：DUPLICATE KEY 与实际库一致，仅 dt_month 单列。
 
-CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_ar_imocc_mi (
+CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_ar_imocc_mi (
       dt_month VARCHAR(6) COMMENT '年月YYYYMM'
     , `year` VARCHAR(4) COMMENT '年份'
     , `month` VARCHAR(2) COMMENT '月份'
-    , company_src_code	varchar(30) COMMENT '原始组织'
+    , company_src_code VARCHAR(30) COMMENT '原始组织'
     , company_code VARCHAR(30) COMMENT '组织'
     , region_code VARCHAR(30) COMMENT '大区编码'
     , region_name VARCHAR(200) COMMENT '大区名称'
@@ -19,8 +27,6 @@ CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_ar_imocc_mi (
     , product_big_class_name VARCHAR(200) COMMENT '产品大类名称'
     , product_line_code VARCHAR(30) COMMENT '产品线编码'
     , product_line_name VARCHAR(200) COMMENT '产品线名称'
-    , profitcenter_code	varchar(30) COMMENT '利润中心编码'
-    , profitcenter_name	varchar(200) COMMENT '利润中心编名称'
     , cust_pay_term VARCHAR(200) COMMENT '客户账期编码/描述'
     , data_scope_code VARCHAR(30) COMMENT '范围'
     , cust_code VARCHAR(30) COMMENT '客商编码'
@@ -38,8 +44,6 @@ CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_ar_imocc_mi (
     , channel_l3_name VARCHAR(200) COMMENT '三级公司分类名称'
     , bus_range_code VARCHAR(30) COMMENT '业务范围编码'
     , bus_range_name VARCHAR(200) COMMENT '业务范围名称'
-    , src_profitcenter_code VARCHAR(30) COMMENT '原始利润中心编码'
-    , src_profitcenter_name VARCHAR(200) COMMENT '原始利润中心名称'
     , profitcenter_code VARCHAR(30) COMMENT '利润中心编码'
     , profitcenter_name VARCHAR(200) COMMENT '利润中心名称'
     , bcy_code VARCHAR(5) COMMENT '本位币币种'
@@ -48,21 +52,15 @@ CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_ar_imocc_mi (
     , imocc_con_amt DECIMALV3(27, 9) COMMENT '国际营销应收占用金额-美元'
     , imocc_usd_amt DECIMALV3(27, 9) COMMENT '国际营销应收占用金额-本位币'
     , ods_src VARCHAR(200) COMMENT '数据来源'
-    , load_dt DATE COMMENT '更新时间'
+    , load_dt DATETIME COMMENT '更新时间'
 )
 ENGINE = OLAP
 DUPLICATE KEY(
       dt_month
-    , `year`
-    , `month`
-    , company_code
-    , cust_code
-    , cust_branch_code
-    , product_line_code
 )
 COMMENT '国际营销应收占用明细表'
 AUTO PARTITION BY LIST (dt_month) ()
-DISTRIBUTED BY HASH(`company_code`) BUCKETS 5
+DISTRIBUTED BY HASH(`dt_month`) BUCKETS 5
 PROPERTIES (
     "replication_allocation" = "tag.location.default: 1",
     "min_load_replica_num" = "-1",

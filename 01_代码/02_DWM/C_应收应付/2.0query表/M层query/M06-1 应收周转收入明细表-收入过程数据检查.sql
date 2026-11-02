@@ -8,13 +8,6 @@ REVM01收入校验查询
 ============================================================================
 */
 WITH
-/* 当前查询实际纳入的账套：只受公司参数限制。 */
-AZI_SCOPE AS (
-    SELECT DISTINCT R.ELEM AS COD_AZIENDA
-      FROM TGK_FIMA_HISENSE.V_REF_AZIENDA R
-     WHERE R.HIE = '10'
-       AND R.ELEM IN (${$Entity.code})
-),
 /* 收入利润中心映射规则：按源收入利润中心和有效期匹配。 */
 PROFIT_CENTER_RULE AS (
     SELECT LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
@@ -102,7 +95,6 @@ REVM01_BASE AS (
       FROM AW_MR9_REVM01_000001 R
      WHERE R.COD_SCENARIO = ${$Scenario.code}
        AND R.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
-       AND R.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI_SCOPE)
        AND R.SRC_DETAIL <> 'BSEG_FLJC'
        AND R.COD_CATEGORIA NOT IN ('GA00_PA_IN', 'GA00_PA_OUT')
        AND R.D_ADJ_TYPE NOT IN ('REV_01_210', 'REV_01_212')
@@ -278,4 +270,3 @@ SELECT R.COD_SCENARIO AS SCENARIO
         , R.CUST_CODE
         , R.INCOME_PROFITCENTER_CODE
         , R.MAPPED_PROFITCENTER_CODE
-;

@@ -1,6 +1,15 @@
 -- 往来账龄明细表（Apache Doris）
 -- 目标表：test.dwd_fi_mr_arap_detail_mi
 -- 表类型：事实表；数据分层：DWD
+-- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+--
+-- 变更记录：
+--   20261102  与实际库对齐：load_dt 由 DATE 改为 DATETIME（实际为 datetime）。
+--   20261030  新增 channel_bu_code / channel_bu_name；tov_channel_code / tov_channel_name 停用，
+--             脚本已不再写入（重跑后恒为 NULL），列暂保留。
+--
+-- 说明：DUPLICATE KEY 与实际库一致，仅 dt_month 单列；如需多列前缀索引，
+--       把 KEY 补成 dt_month, year, month, company_code, acct_cert_type, acct_cert_status, acct_cert_id, acct_cert_item。
 
 CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_detail_mi (
       dt_month VARCHAR(6) COMMENT '年月YYYYMM'
@@ -34,10 +43,10 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_detail_mi (
     , channel_l2_name VARCHAR(200) COMMENT '二级公司分类名称'
     , channel_l3_code VARCHAR(30) COMMENT '三级公司分类编码'
     , channel_l3_name VARCHAR(200) COMMENT '三级公司分类名称'
-    , channel_bu_code VARCHAR(50) COMMENT '渠道BU编码：按三级公司分类匹配渠道BU关系表'      -- ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030新增
-    , channel_bu_name VARCHAR(200) COMMENT '渠道BU名称：按三级公司分类匹配渠道BU关系表'      -- ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030新增
-    , tov_channel_code VARCHAR(30) COMMENT '周转分析渠道编码：1030废弃，不再取数，列暂保留'
-    , tov_channel_name VARCHAR(200) COMMENT '周转分析渠道名称：1030废弃，不再取数，列暂保留'
+    , channel_bu_code VARCHAR(50) COMMENT '渠道BU编码：按三级公司分类匹配渠道BU关系表'
+    , channel_bu_name VARCHAR(200) COMMENT '渠道BU名称：按三级公司分类匹配渠道BU关系表'
+    , tov_channel_code VARCHAR(30) COMMENT '周转分析渠道编码'
+    , tov_channel_name VARCHAR(200) COMMENT '周转分析渠道名称'
     , cc_cust_group_code VARCHAR(30) COMMENT '商冷客户群编码'
     , cc_cust_group_name VARCHAR(200) COMMENT '商冷客户群名称'
     , onoffline_code VARCHAR(30) COMMENT '线上线下编码'
@@ -66,18 +75,11 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_detail_mi (
     , note VARCHAR(2000) COMMENT '备注'
     , system_src VARCHAR(150) COMMENT '源系统'
     , ods_src VARCHAR(200) COMMENT '源表'
-    , load_dt DATE COMMENT '更新时间'
+    , load_dt DATETIME COMMENT '更新时间'
 )
 ENGINE = OLAP
 DUPLICATE KEY(
       dt_month
-    , `year`
-    , `month`
-    , company_code
-    , acct_cert_type
-    , acct_cert_status
-    , acct_cert_id
-    , acct_cert_item
 )
 COMMENT '往来账龄明细表'
 AUTO PARTITION BY LIST (dt_month) ()

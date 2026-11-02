@@ -1,6 +1,12 @@
 -- sms返利余额表-月报（Apache Doris）
 -- 目标表：test.dwd_fi_mr_arap_sms_balance_mi
 -- 表类型：事实表；数据分层：DWD
+-- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+--
+-- 变更记录：
+--   20261102  与实际库对齐：补 update_dt DATETIME（实际存在、原文件缺）；分布列由 company_code 改为 dt_month。
+--
+-- 说明：DUPLICATE KEY 与实际库一致，仅 dt_month 单列。
 
 CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sms_balance_mi (
       dt_month VARCHAR(6) COMMENT '年月YYYYMM'
@@ -16,15 +22,15 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sms_balance_mi (
     , yishiyong DECIMALV3(27, 9) COMMENT '已经使用'
     , yue DECIMALV3(27, 9) COMMENT '余额'
     , load_dt DATE COMMENT '更新时间'
+    , update_dt DATETIME COMMENT '更新时间'
 )
 ENGINE = OLAP
 DUPLICATE KEY(
       dt_month
-    , company_code
 )
 COMMENT 'sms返利余额表-月报'
 AUTO PARTITION BY LIST (dt_month) ()
-DISTRIBUTED BY HASH(`company_code`) BUCKETS 5
+DISTRIBUTED BY HASH(`dt_month`) BUCKETS 5
 PROPERTIES (
     "replication_allocation" = "tag.location.default: 1",
     "min_load_replica_num" = "-1",

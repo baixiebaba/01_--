@@ -1,6 +1,18 @@
 -- 往来账龄汇总表（Apache Doris）
 -- 目标表：test.dwd_fi_mr_arap_sum_mi
 -- 表类型：汇总事实表；数据分层：DWD
+-- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+--
+-- 变更记录：
+--   20261102  与实际库对齐：
+--             ① 补 6 列：tov_channel_name、channel_bu_code、channel_bu_name、
+--                cc_cust_group_name、material_group_code、material_group_name；
+--             ② pays_tran 由 VARCHAR(100) 改为 VARCHAR(35)（实际为 35）；
+--             ③ load_dt 由 DATE 改为 DATETIME（实际为 datetime）。
+--   20261030  新增 channel_bu_code / channel_bu_name（渠道BU维度）。
+--
+-- 说明：DUPLICATE KEY 与实际库一致，仅 dt_month 单列；如需多列前缀索引，
+--       把 KEY 补成 dt_month, year, month, company_code, cust_code。
 
 CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sum_mi (
       dt_month VARCHAR(6) COMMENT '年月YYYYMM'
@@ -25,12 +37,18 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sum_mi (
     , channel_l2_name VARCHAR(200) COMMENT '二级公司分类名称'
     , channel_l3_code VARCHAR(30) COMMENT '三级公司分类编码'
     , channel_l3_name VARCHAR(200) COMMENT '三级公司分类名称'
-    , tov_channel_code VARCHAR(30) COMMENT '周转分析渠道'
-    , cc_cust_group_code VARCHAR(30) COMMENT '商冷客户群'
+    , tov_channel_code VARCHAR(30) COMMENT '周转分析渠道编码'
+    , tov_channel_name VARCHAR(200) COMMENT '周转分析渠道名称'
+    , channel_bu_code VARCHAR(50) COMMENT '渠道BU编码'
+    , channel_bu_name VARCHAR(200) COMMENT '渠道BU名称'
+    , cc_cust_group_code VARCHAR(30) COMMENT '商冷客户群编码'
+    , cc_cust_group_name VARCHAR(200) COMMENT '商冷客户群名称'
     , onoffline_code VARCHAR(30) COMMENT '渠道分组编码'
     , onoffline_name VARCHAR(200) COMMENT '渠道分组名称'
     , src_profitcenter_code VARCHAR(30) COMMENT '原始利润中心编码'
     , src_profitcenter_name VARCHAR(200) COMMENT '原始利润中心名称'
+    , material_group_code VARCHAR(50) COMMENT '物料组编码'
+    , material_group_name VARCHAR(200) COMMENT '物料组描述'
     , profitcenter_code VARCHAR(30) COMMENT '映射后利润中心编码'
     , profitcenter_name VARCHAR(200) COMMENT '映射后利润中心名称'
     , bus_range_code VARCHAR(30) COMMENT '业务范围编码'
@@ -72,7 +90,7 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sum_mi (
     , qcy_13_amt DECIMALV3(27, 9) COMMENT '交易币金额-账龄区间段13'
     , qcy_14_amt DECIMALV3(27, 9) COMMENT '交易币金额-账龄区间段14'
     , qcy_15_amt DECIMALV3(27, 9) COMMENT '交易币金额-账龄区间段15'
-    , pays_tran VARCHAR(100) COMMENT '付款服务商的付款编号'
+    , pays_tran VARCHAR(35) COMMENT '付款服务商的付款编号'
     , system_src VARCHAR(150) COMMENT '来源系统'
     , ods_src VARCHAR(200) COMMENT '数据来源'
     , reb_type VARCHAR(50) COMMENT '返利性质'
@@ -88,19 +106,15 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sum_mi (
     , is_apar_flag VARCHAR(30) COMMENT '账龄是否进数'
     , pay_term_code VARCHAR(24) COMMENT '付款条件代码'
     , pay_term_desc VARCHAR(300) COMMENT '付款条件描述'
-    , load_dt DATE COMMENT '更新时间'
+    , load_dt DATETIME COMMENT '更新时间'
 )
 ENGINE = OLAP
 DUPLICATE KEY(
       dt_month
-    , `year`
-    , `month`
-    , company_code
-    , cust_code
 )
 COMMENT '往来账龄汇总表'
 AUTO PARTITION BY LIST (dt_month) ()
-DISTRIBUTED BY HASH(`company_code`) BUCKETS 5
+DISTRIBUTED BY HASH(`dt_month`) BUCKETS 5
 PROPERTIES (
     "replication_allocation" = "tag.location.default: 1",
     "min_load_replica_num" = "-1",

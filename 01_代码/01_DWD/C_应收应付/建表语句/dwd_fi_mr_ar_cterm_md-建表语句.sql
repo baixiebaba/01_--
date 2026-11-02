@@ -1,13 +1,24 @@
+-- 客户账期明细表（Apache Doris）
+-- 目标表：test.dwd_fi_mr_ar_cterm_md
+-- 表类型：明细表；数据分层：DWD
+-- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+--
+-- 变更记录：
+--   20261102  与实际库对齐：load_dt 由 DATE 改为 DATETIME（实际为 datetime）。
+
 CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_ar_cterm_md (
-      company_code       VARCHAR(8) COMMENT '组织'
-    , cust_code          VARCHAR(30) COMMENT '客户编码'
-    , pay_term_code      VARCHAR(500) COMMENT '付款条件代码，多个值按代码升序以英文逗号分隔'
-    , pay_term_desc      VARCHAR(1000) COMMENT '付款条件描述，顺序与付款条件代码一一对应'
-    , system_src         VARCHAR(150) COMMENT '来源系统，S拼接KNB1.MANDT，如S600'
-    , load_dt            DATE COMMENT '更新时间'
+      company_code VARCHAR(8) COMMENT '组织'
+    , cust_code VARCHAR(30) COMMENT '客户编码'
+    , pay_term_code VARCHAR(500) COMMENT '付款条件代码，多个值按代码升序以英文逗号分隔'
+    , pay_term_desc VARCHAR(1000) COMMENT '付款条件描述，顺序与付款条件代码一一对应'
+    , system_src VARCHAR(150) COMMENT '来源系统，S拼接KNB1.MANDT，如S600'
+    , load_dt DATETIME COMMENT '更新时间'
 )
 ENGINE = OLAP
-DUPLICATE KEY(company_code, cust_code)
+DUPLICATE KEY(
+      company_code
+    , cust_code
+)
 COMMENT '客户账期明细表'
 DISTRIBUTED BY HASH(`company_code`) BUCKETS 5
 PROPERTIES (
