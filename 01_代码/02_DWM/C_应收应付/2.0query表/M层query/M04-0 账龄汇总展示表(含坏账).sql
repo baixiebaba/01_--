@@ -1,172 +1,171 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 17:26
- * 本次修改：ALTER BY 20261102 17:26 SHIQINGFENG.EX 将公司参数筛选由等值判断统一为 IN 写法，并统一 Query 排版，未修改其他逻辑。
- * 上次修改：原文件无修改记录。
+ * 最后更新时间：20261102 17:35
+ * 本次修改：ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
+ * 上次修改：ALTER BY 20261102 17:26 SHIQINGFENG.EX 将公司参数筛选由等值判断统一为 IN 写法，并统一 Query 排版，未修改其他逻辑。
  *
  * 查询名称  ：账龄汇总展示表（含坏账）
- * 功能描述  ：按场景、期间和公司查询账龄汇总、坏账及相关调整数据。
- * 宿主表    ：AW_MR9_ARPM02_000001
- * 展示逻辑  ：按原有字段顺序展示账龄、调整、坏账、回款和更新信息。
+ * 源表      ：AW_MR9_ARPM02_000001
  *
  * 修改历史：
+ *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
  *   ALTER BY 20261102 17:26 SHIQINGFENG.EX 将公司参数筛选由等值判断统一为 IN 写法，并统一 Query 排版，未修改其他逻辑。
  *******************************************************************************/
-SELECT COD_SCENARIO
-     , COD_PERIODO
-     , COD_AZIENDA
-     , A.COD_CONTO
-     , F_TGK_GET_DIMNAME('CONTO', COD_CONTO) AS DESC_CONTO1
-     , LE_AGE_FLAG
-     , IS_REC_LG
-     , ME_AGE_FLAG
-     , IS_REC_ME
-     , MB_AGE_FLAG
-     , IS_REC_MB
-     , CUST_CODE
-     , CUST_NAME
-     , CUST_HEAD_CODE
-     , CUST_HEAD_NAME
-     , CUST_BRANCH_CODE
-     , CUST_BRANCH_NAME
-     , COD_AZI_CTP
-     , COUNTRY_CODE
-     , COUNTRY_NAME
-     , GRP_SCOPE
-     , NATURE_L1_NAME
-     , NATURE_L2_NAME
-     , NATURE_L3_NAME
-     , D_CHANNEL
-     , F_TGK_GET_DIMNAME('D_CHANNEL', D_CHANNEL) AS D_CHANNEL_DESC
-     , D_ONOFFLINE
-     , F_TGK_GET_DIMNAME('D_ONOFFLINE', D_ONOFFLINE) AS D_ONOFFLINE_DESC
-     , COD_DEST2
-     , F_TGK_GET_DIMNAME('DEST2', COD_DEST2) AS COD_DEST2_DESC
-     , COD_DEST3
-     , F_TGK_GET_DIMNAME('DEST3', COD_DEST3) AS COD_DEST3_DESC
-     , D_SALE_DEPT
-     , F_TGK_GET_DIMNAME('D_SALE_DEPT', D_SALE_DEPT) AS D_SALE_DEPT_DESC
-     , D_TOV_CHAN
-     , F_TGK_GET_DIMNAME('D_TOV_CHAN', D_TOV_CHAN) AS D_TOV_CHAN_DESC
-     , D_CC_CUSTGRP
-     , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', D_CC_CUSTGRP) AS D_CC_CUSTGRP_DESC
-     , TAX_RATE
-     , COD_VALUTA
-     , COD_VALUTA_ORIGINARIA
-     , BY_BCY_0_AMT
-     , LM_BCY_0_AMT
-     , BCY_0_AMT
-     , BCY_1_AMT
-     , BCY_2_AMT
-     , BCY_3_AMT
-     , BCY_4_AMT
-     , BCY_5_AMT
-     , BCY_6_AMT
-     , BCY_7_AMT
-     , BCY_8_AMT
-     , BCY_9_AMT
-     , BCY_10_AMT
-     , BCY_11_AMT
-     , BCY_12_AMT
-     , BCY_13_AMT
-     , BCY_14_AMT
-     , BCY_15_AMT
-     , QCY_0_AMT
-     , QCY_1_AMT
-     , QCY_2_AMT
-     , QCY_3_AMT
-     , QCY_4_AMT
-     , QCY_5_AMT
-     , QCY_6_AMT
-     , QCY_7_AMT
-     , QCY_8_AMT
-     , QCY_9_AMT
-     , QCY_10_AMT
-     , QCY_11_AMT
-     , QCY_12_AMT
-     , QCY_13_AMT
-     , QCY_14_AMT
-     , QCY_15_AMT
-     , SHP_NINV_AMT
-     , RET_NTRF_AMT
-     , BCY_ADJ_INCL_0_AMT
-     , BCY_ADJ_INCL_1_AMT
-     , BCY_ADJ_INCL_2_AMT
-     , BCY_ADJ_INCL_3_AMT
-     , BCY_ADJ_INCL_4_AMT
-     , BCY_ADJ_INCL_5_AMT
-     , BCY_ADJ_INCL_6_AMT
-     , BCY_ADJ_INCL_7_AMT
-     , BCY_ADJ_INCL_8_AMT
-     , BCY_ADJ_INCL_9_AMT
-     , BCY_ADJ_INCL_10_AMT
-     , BCY_ADJ_INCL_11_AMT
-     , BCY_ADJ_INCL_12_AMT
-     , BCY_ADJ_INCL_13_AMT
-     , BCY_ADJ_INCL_14_AMT
-     , BCY_ADJ_INCL_15_AMT
-     , BCY_ADJ_EXCL_0_AMT
-     , OVERDUE_0_AMT
-     , OVERDUE_1_AMT
-     , OVERDUE_2_AMT
-     , OVERDUE_3_AMT
-     , OVERDUE_4_AMT
-     , OVERDUE_5_AMT
-     , OVERDUE_6_AMT
-     , OVERDUE_7_AMT
-     , OVERDUE_8_AMT
-     , OVERDUE_9_AMT
-     , INV_SAMPLE_AMT
-     , EPAY_AMT
-     , ECLS_AMT
-     , UREB_AMT
-     , UFEE_AMT
-     , PAY_TERM_CODE
-     , PAY_TERM_DESC
-     , CLOSING_RATE_BCY_AMT
-     , POSTING_RATE_BCY_AMT
-     , EXCHANGE_RATE_EVAL_FLAG
-     , TH_FX_EVAL_AMT
-     , CURRENCY_ACCT_DETAIL
-     , ADJ_REB_AMT
-     , ADJ_RET_AMT
-     , DEAD_AMT
-     , RISK_AMT
-     , PAY_METHOD
-     , IS_LN_AGE
-     , LN_AGE_RSN
-     , IS_ABN
-     , IS_EXS
-     , SUSP_RSN
-     , CLR_MEA
-     , EST_CLR_DT
-     , CLR_PROG
-     , RSP_PSN
-     , IS_ADJ
-     , ADJ_RSN
-     , BD_AFAL_0_AMT
-     , BD_AFAL_1_AMT
-     , BD_AFAL_2_AMT
-     , BD_AFAL_3_AMT
-     , BD_AFAL_4_AMT
-     , BD_AFAL_5_AMT
-     , BD_AFAL_6_AMT
-     , BD_AFAL_7_AMT
-     , BD_AFAL_8_AMT
-     , BD_AFAL_9_AMT
-     , BD_AFAL_10_AMT
-     , BD_AFAL_11_AMT
-     , BD_AFAL_12_AMT
-     , BD_AFAL_13_AMT
-     , BD_AFAL_14_AMT
-     , BD_AFAL_15_AMT
-     , LM_BD_AFAL_0_AMT
-     , WRITEOFF_AMT
-     , MTD_BD_PROV_OCUR_AMT
-     , BD_PROV_METHOD
-     , A.USERUPD
-     , A.DATEUPD
+SELECT COD_SCENARIO                             /* 场景 */
+     , COD_PERIODO                                   /* 期间 */
+     , COD_AZIENDA                                   /* 公司 */
+     , A.COD_CONTO                                   /* 科目 */
+     , F_TGK_GET_DIMNAME('CONTO', COD_CONTO) AS DESC_CONTO1 /* 科目名称 */
+     , LE_AGE_FLAG                                   /* 法人单体账龄标识 */
+     , IS_REC_LG                                     /* 是否重分类_法人 */
+     , ME_AGE_FLAG                                   /* 管理单体账龄标识 */
+     , IS_REC_ME                                     /* 是否重分类_管理 */
+     , MB_AGE_FLAG                                   /* 管理分公司账龄标识 */
+     , IS_REC_MB                                     /* 是否重分类_管理分公司 */
+     , CUST_CODE                                     /* 客商编码 */
+     , CUST_NAME                                     /* 客商名称 */
+     , CUST_HEAD_CODE                                /* 主户编码 */
+     , CUST_HEAD_NAME                                /* 主户名称 */
+     , CUST_BRANCH_CODE                              /* 分户编码 */
+     , CUST_BRANCH_NAME                              /* 分户名称 */
+     , COD_AZI_CTP                                   /* 对方公司 */
+     , COUNTRY_CODE                                  /* 国家编码 */
+     , COUNTRY_NAME                                  /* 国家名称 */
+     , GRP_SCOPE                                     /* 集团归属范围（ profitcenter_code,varchar(30),利润中心编码 cod_dest2,varchar(30),利润中心编码 onoffline_code,varchar(30),渠道分组编码 d_onoffline,varchar(30),渠道分组编码 channel_l3_code,varchar(30),三级公司分类编码 d_channel,varchar(30),三级公司分类编码 bus_range_code,varchar(30),业务范围编码 bcy_0_amt,number(27 */
+     , NATURE_L1_NAME                                /* 一级性质 */
+     , NATURE_L2_NAME                                /* 二级性质 */
+     , NATURE_L3_NAME                                /* 三级性质 */
+     , D_CHANNEL                                     /* 三级公司分类编码 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL', D_CHANNEL) AS D_CHANNEL_DESC /* 三级公司分类名称 */
+     , D_ONOFFLINE                                   /* 渠道分组编码 */
+     , F_TGK_GET_DIMNAME('D_ONOFFLINE', D_ONOFFLINE) AS D_ONOFFLINE_DESC /* 渠道分组名称 */
+     , COD_DEST2                                     /* 利润中心编码 */
+     , F_TGK_GET_DIMNAME('DEST2', COD_DEST2) AS COD_DEST2_DESC /* 利润中心名称 */
+     , COD_DEST3                                     /* 业务范围编码 */
+     , F_TGK_GET_DIMNAME('DEST3', COD_DEST3) AS COD_DEST3_DESC /* 业务范围名称 */
+     , D_SALE_DEPT                                   /* 业务管理单元编码 */
+     , F_TGK_GET_DIMNAME('D_SALE_DEPT', D_SALE_DEPT) AS D_SALE_DEPT_DESC /* 业务管理单元名称 */
+     , D_TOV_CHAN                                    /* 周转分析渠道 */
+     , F_TGK_GET_DIMNAME('D_TOV_CHAN', D_TOV_CHAN) AS D_TOV_CHAN_DESC /* 周转分析渠道名称 */
+     , D_CC_CUSTGRP                                  /* 商冷客户群 */
+     , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', D_CC_CUSTGRP) AS D_CC_CUSTGRP_DESC /* 商冷客户群名称 */
+     , TAX_RATE                                      /* 税率 */
+     , COD_VALUTA                                    /* 本位币币种 */
+     , COD_VALUTA_ORIGINARIA                         /* 交易币币种 */
+     , BY_BCY_0_AMT                                  /* 年初-本位币余额 */
+     , LM_BCY_0_AMT                                  /* 上月-本位币余额 */
+     , BCY_0_AMT                                     /* 本位币金额-本月账龄 */
+     , BCY_1_AMT                                     /* 本位币金额-账龄区间段1 */
+     , BCY_2_AMT                                     /* 本位币金额-账龄区间段2 */
+     , BCY_3_AMT                                     /* 本位币金额-账龄区间段3 */
+     , BCY_4_AMT                                     /* 本位币金额-账龄区间段4 */
+     , BCY_5_AMT                                     /* 本位币金额-账龄区间段5 */
+     , BCY_6_AMT                                     /* 本位币金额-账龄区间段6 */
+     , BCY_7_AMT                                     /* 本位币金额-账龄区间段7 */
+     , BCY_8_AMT                                     /* 本位币金额-账龄区间段8 */
+     , BCY_9_AMT                                     /* 本位币金额-账龄区间段9 */
+     , BCY_10_AMT                                    /* 本位币金额-账龄区间段10 */
+     , BCY_11_AMT                                    /* 本位币金额-账龄区间段11 */
+     , BCY_12_AMT                                    /* 本位币金额-账龄区间段12 */
+     , BCY_13_AMT                                    /* 本位币金额-账龄区间段13 */
+     , BCY_14_AMT                                    /* 本位币金额-账龄区间段14 */
+     , BCY_15_AMT                                    /* 本位币金额-账龄区间段15 */
+     , QCY_0_AMT                                     /* 交易币金额-本月账龄 */
+     , QCY_1_AMT                                     /* 交易币金额-账龄区间段1 */
+     , QCY_2_AMT                                     /* 交易币金额-账龄区间段2 */
+     , QCY_3_AMT                                     /* 交易币金额-账龄区间段3 */
+     , QCY_4_AMT                                     /* 交易币金额-账龄区间段4 */
+     , QCY_5_AMT                                     /* 交易币金额-账龄区间段5 */
+     , QCY_6_AMT                                     /* 交易币金额-账龄区间段6 */
+     , QCY_7_AMT                                     /* 交易币金额-账龄区间段7 */
+     , QCY_8_AMT                                     /* 交易币金额-账龄区间段8 */
+     , QCY_9_AMT                                     /* 交易币金额-账龄区间段9 */
+     , QCY_10_AMT                                    /* 交易币金额-账龄区间段10 */
+     , QCY_11_AMT                                    /* 交易币金额-账龄区间段11 */
+     , QCY_12_AMT                                    /* 交易币金额-账龄区间段12 */
+     , QCY_13_AMT                                    /* 交易币金额-账龄区间段13 */
+     , QCY_14_AMT                                    /* 交易币金额-账龄区间段14 */
+     , QCY_15_AMT                                    /* 交易币金额-账龄区间段15 */
+     , SHP_NINV_AMT                                  /* 出库未开金额 */
+     , RET_NTRF_AMT                                  /* 退货未办退税金额 */
+     , BCY_ADJ_INCL_0_AMT                            /* 本位币金额-调整后含税-本月账龄 */
+     , BCY_ADJ_INCL_1_AMT                            /* 本位币金额-调整后含税-账龄区间段1 */
+     , BCY_ADJ_INCL_2_AMT                            /* 本位币金额-调整后含税-账龄区间段2 */
+     , BCY_ADJ_INCL_3_AMT                            /* 本位币金额-调整后含税-账龄区间段3 */
+     , BCY_ADJ_INCL_4_AMT                            /* 本位币金额-调整后含税-账龄区间段4 */
+     , BCY_ADJ_INCL_5_AMT                            /* 本位币金额-调整后含税-账龄区间段5 */
+     , BCY_ADJ_INCL_6_AMT                            /* 本位币金额-调整后含税-账龄区间段6 */
+     , BCY_ADJ_INCL_7_AMT                            /* 本位币金额-调整后含税-账龄区间段7 */
+     , BCY_ADJ_INCL_8_AMT                            /* 本位币金额-调整后含税-账龄区间段8 */
+     , BCY_ADJ_INCL_9_AMT                            /* 本位币金额-调整后含税-账龄区间段9 */
+     , BCY_ADJ_INCL_10_AMT                           /* 本位币金额-调整后含税-账龄区间段10 */
+     , BCY_ADJ_INCL_11_AMT                           /* 本位币金额-调整后含税-账龄区间段11 */
+     , BCY_ADJ_INCL_12_AMT                           /* 本位币金额-调整后含税-账龄区间段12 */
+     , BCY_ADJ_INCL_13_AMT                           /* 本位币金额-调整后含税-账龄区间段13 */
+     , BCY_ADJ_INCL_14_AMT                           /* 本位币金额-调整后含税-账龄区间段14 */
+     , BCY_ADJ_INCL_15_AMT                           /* 本位币金额-调整后含税-账龄区间段15 */
+     , BCY_ADJ_EXCL_0_AMT                            /* 本位币金额-调整后不含税-本月账龄 */
+     , OVERDUE_0_AMT                                 /* 超期款金额 */
+     , OVERDUE_1_AMT                                 /* 超期款金额-账龄区间段1 */
+     , OVERDUE_2_AMT                                 /* 超期款金额-账龄区间段2 */
+     , OVERDUE_3_AMT                                 /* 超期款金额-账龄区间段3 */
+     , OVERDUE_4_AMT                                 /* 超期款金额-账龄区间段4 */
+     , OVERDUE_5_AMT                                 /* 超期款金额-账龄区间段5 */
+     , OVERDUE_6_AMT                                 /* 超期款金额-账龄区间段6 */
+     , OVERDUE_7_AMT                                 /* 超期款金额-账龄区间段7 */
+     , OVERDUE_8_AMT                                 /* 超期款金额-账龄区间段8 */
+     , OVERDUE_9_AMT                                 /* 超期款金额-账龄区间段9 */
+     , INV_SAMPLE_AMT                                /* 开票样机金额 */
+     , EPAY_AMT                                      /* 提前回款金额 */
+     , ECLS_AMT                                      /* 电商零售金额 */
+     , UREB_AMT                                      /* 欠付返利余额 */
+     , UFEE_AMT                                      /* 欠付费用金额 */
+     , PAY_TERM_CODE                                 /* 付款条件代码 */
+     , PAY_TERM_DESC                                 /* 付款条件描述 */
+     , CLOSING_RATE_BCY_AMT                          /* 期末汇率余额 */
+     , POSTING_RATE_BCY_AMT                          /* 记账汇率余额 */
+     , EXCHANGE_RATE_EVAL_FLAG                       /* 汇率评估标识 */
+     , TH_FX_EVAL_AMT                                /* 理论汇兑评估金额 */
+     , CURRENCY_ACCT_DETAIL                          /* 币种科目构成明细 */
+     , ADJ_REB_AMT                                   /* 调整后返利金额 */
+     , ADJ_RET_AMT                                   /* 调整后退货金额 */
+     , DEAD_AMT                                      /* 呆死金额 */
+     , RISK_AMT                                      /* 风险金额 */
+     , PAY_METHOD                                    /* 付款方式 */
+     , IS_LN_AGE                                     /* 是否长账龄 */
+     , LN_AGE_RSN                                    /* 长账龄原因-大类 */
+     , IS_ABN                                        /* 是否异常 */
+     , IS_EXS                                        /* 是否存续 */
+     , SUSP_RSN                                      /* 挂账原因 */
+     , CLR_MEA                                       /* 清理措施 */
+     , EST_CLR_DT                                    /* 预计清理时间 */
+     , CLR_PROG                                      /* 清理进度 */
+     , RSP_PSN                                       /* 责任人 */
+     , IS_ADJ                                        /* 是否调整 */
+     , ADJ_RSN                                       /* 调整原因 */
+     , BD_AFAL_0_AMT                                 /* 分摊后坏账金额 */
+     , BD_AFAL_1_AMT                                 /* 分摊后坏账金额-账龄区间段1 */
+     , BD_AFAL_2_AMT                                 /* 分摊后坏账金额-账龄区间段2 */
+     , BD_AFAL_3_AMT                                 /* 分摊后坏账金额-账龄区间段3 */
+     , BD_AFAL_4_AMT                                 /* 分摊后坏账金额-账龄区间段4 */
+     , BD_AFAL_5_AMT                                 /* 分摊后坏账金额-账龄区间段5 */
+     , BD_AFAL_6_AMT                                 /* 分摊后坏账金额-账龄区间段6 */
+     , BD_AFAL_7_AMT                                 /* 分摊后坏账金额-账龄区间段7 */
+     , BD_AFAL_8_AMT                                 /* 分摊后坏账金额-账龄区间段8 */
+     , BD_AFAL_9_AMT                                 /* 分摊后坏账金额-账龄区间段9 */
+     , BD_AFAL_10_AMT                                /* 分摊后坏账金额-账龄区间段10 */
+     , BD_AFAL_11_AMT                                /* 分摊后坏账金额-账龄区间段11 */
+     , BD_AFAL_12_AMT                                /* 分摊后坏账金额-账龄区间段12 */
+     , BD_AFAL_13_AMT                                /* 分摊后坏账金额-账龄区间段13 */
+     , BD_AFAL_14_AMT                                /* 分摊后坏账金额-账龄区间段14 */
+     , BD_AFAL_15_AMT                                /* 分摊后坏账金额-账龄区间段15 */
+     , LM_BD_AFAL_0_AMT                              /* 上月-分摊后坏账金额 */
+     , WRITEOFF_AMT                                  /* 核销金额 */
+     , MTD_BD_PROV_OCUR_AMT                          /* 本月应计提坏账发生额 */
+     , BD_PROV_METHOD                                /* 坏账计提方法 */
+     , A.USERUPD                                     /* 更新用户 */
+     , A.DATEUPD                                     /* 更新时间 */
   FROM AW_MR9_ARPM02_000001 A
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}

@@ -1,35 +1,36 @@
-/* ============================================================================
- * 坏账结果表差异校验  2.0 ARPM02 vs 1.0 ZTAB_AG_TF_OC
- *   数据源A(2.0) : TGK_FIMA_DEV.AW_MR9_ARPM02_000001  (管报系统2.0)
- *   数据源B(1.0) : TGK_GB_HISENSE.ZTAB_AG_TF_OC        (管报系统1.0)
+/*******************************************************************************
+ *                                  查询说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261102 17:36
+ * 本次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ * 上次修改：原文件无修改记录。
  *
- * 输出: 公司、科目大类、2.0金额、1.0金额、差异
- *   2.0金额 = BD_0_AMT（按最新字段定义取坏账计提基数总金额）
- *   1.0金额 = HZYE
- *   粒度: 公司 + 科目大类
+ * 查询名称  ：坏账计提结果表-总校验表
+ * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.ZTAB_AG_TF_OC。
  *
- * 版本记录:
- *   2026-03-12  在T20/T10内部以ITM三科目FULL JOIN补齐缺失科目
- *   2026-03-11  简化为T20/T10 FULL JOIN后按ITM补齐三科目
- *   2026-03-10  修复ITM/合同资产关联，补齐缺失侧科目行并按0展示
- *   2026-03-09  新增坏账结果差异校验
- * ============================================================================*/
+ * 修改历史：
+ *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ *   2026-03-12  在T20/T10内部以ITM三科目FULL JOIN补齐缺失科目（原版本记录）。
+ *   2026-03-11  简化为T20/T10 FULL JOIN后按ITM补齐三科目（原版本记录）。
+ *   2026-03-10  修复ITM/合同资产关联，补齐缺失侧科目行并按0展示（原版本记录）。
+ *   2026-03-09  新增坏账结果差异校验（原版本记录）。
+ *******************************************************************************/
 WITH
 /* 坏账校验科目大类及两套系统对应科目 */
 ITM AS (
-    SELECT '应收账款'    AS ITEM_NAME
+    SELECT '应收账款'    AS ITEM_NAME     /* 往来项目 */
            , 1            AS SEQ
            , '1122000000' AS CONTO20
            , '1122000000' AS CONTO10
     FROM   DUAL
     UNION ALL
-    SELECT '其他应收款'  AS ITEM_NAME
+    SELECT '其他应收款'  AS ITEM_NAME     /* 往来项目 */
            , 2            AS SEQ
            , '122101F'    AS CONTO20
            , '122101F'    AS CONTO10
     FROM   DUAL
     UNION ALL
-    SELECT '合同资产'    AS ITEM_NAME
+    SELECT '合同资产'    AS ITEM_NAME     /* 往来项目 */
            , 3            AS SEQ
            , '1460000000' AS CONTO20
            , '1460000000' AS CONTO10
@@ -37,7 +38,7 @@ ITM AS (
 ),
 /* 2.0原始业务范围内的公司键，作为ITM三科目补齐的最小键集合 */
 T20_BASE AS (
-    SELECT A.COD_AZIENDA AS COMPANY_CODE
+    SELECT A.COD_AZIENDA AS COMPANY_CODE  /* 公司 */
            , A.COD_CONTO
            , A.BD_0_AMT
     FROM   AW_MR9_ARPM02_000001 A
@@ -49,7 +50,7 @@ T20_BASE AS (
 ),
 /* 1.0原始业务范围内的公司键，作为ITM三科目补齐的最小键集合 */
 T10_BASE AS (
-    SELECT T.BUKRS AS COMPANY_CODE
+    SELECT T.BUKRS AS COMPANY_CODE  /* 公司 */
            , T.HKONT
            , T.HZYE
     FROM   TGK_GB_HISENSE.ZTAB_AG_TF_OC T
@@ -94,8 +95,8 @@ COMPANY_ITM AS (
 T20_DATA AS (
     SELECT A.COMPANY_CODE
            , I.SEQ       AS ITEM_SEQ
-           , I.ITEM_NAME AS ITEM_NAME
-           , SUM(A.BD_0_AMT) AS AMT_20
+           , I.ITEM_NAME AS ITEM_NAME     /* 往来项目 */
+           , SUM(A.BD_0_AMT) AS AMT_20        /* 2.0坏账计提金额 */
     FROM   T20_BASE A
            INNER JOIN ITM I
                    ON I.CONTO20 = A.COD_CONTO
@@ -105,10 +106,10 @@ T20_DATA AS (
 ),
 /* 2.0内部以ITM三科目为补齐侧；缺失科目金额固定为0 */
 T20 AS (
-    SELECT COALESCE(K.COMPANY_CODE, D.COMPANY_CODE) AS COMPANY_CODE
+    SELECT COALESCE(K.COMPANY_CODE, D.COMPANY_CODE) AS COMPANY_CODE  /* 公司 */
            , COALESCE(K.SEQ, D.ITEM_SEQ)            AS ITEM_SEQ
-           , COALESCE(K.ITEM_NAME, D.ITEM_NAME)     AS ITEM_NAME
-           , NVL(D.AMT_20, 0)                        AS AMT_20
+           , COALESCE(K.ITEM_NAME, D.ITEM_NAME)     AS ITEM_NAME     /* 往来项目 */
+           , NVL(D.AMT_20, 0)                        AS AMT_20        /* 2.0坏账计提金额 */
     FROM   COMPANY_ITM K
            FULL JOIN T20_DATA D
                       ON  D.COMPANY_CODE = K.COMPANY_CODE
@@ -118,8 +119,8 @@ T20 AS (
 T10_DATA AS (
     SELECT A.COMPANY_CODE
            , I.SEQ       AS ITEM_SEQ
-           , I.ITEM_NAME AS ITEM_NAME
-           , SUM(A.HZYE) AS AMT_10
+           , I.ITEM_NAME AS ITEM_NAME     /* 往来项目 */
+           , SUM(A.HZYE) AS AMT_10        /* 1.0坏账余额 */
     FROM   T10_BASE A
            INNER JOIN ITM I
                    ON I.CONTO10 = A.HKONT
@@ -129,10 +130,10 @@ T10_DATA AS (
 ),
 /* 1.0内部以ITM三科目为补齐侧；缺失科目金额固定为0 */
 T10 AS (
-    SELECT COALESCE(K.COMPANY_CODE, D.COMPANY_CODE) AS COMPANY_CODE
+    SELECT COALESCE(K.COMPANY_CODE, D.COMPANY_CODE) AS COMPANY_CODE  /* 公司 */
            , COALESCE(K.SEQ, D.ITEM_SEQ)            AS ITEM_SEQ
-           , COALESCE(K.ITEM_NAME, D.ITEM_NAME)     AS ITEM_NAME
-           , NVL(D.AMT_10, 0)                        AS AMT_10
+           , COALESCE(K.ITEM_NAME, D.ITEM_NAME)     AS ITEM_NAME     /* 往来项目 */
+           , NVL(D.AMT_10, 0)                        AS AMT_10        /* 1.0坏账余额 */
     FROM   COMPANY_ITM K
            FULL JOIN T10_DATA D
                       ON  D.COMPANY_CODE = K.COMPANY_CODE
@@ -140,21 +141,21 @@ T10 AS (
 ),
 /* 两套系统按公司+科目大类合并；补齐职责已由各自内部FULL JOIN完成 */
 T20_T10 AS (
-    SELECT COALESCE(T20.COMPANY_CODE, T10.COMPANY_CODE) AS COMPANY_CODE
+    SELECT COALESCE(T20.COMPANY_CODE, T10.COMPANY_CODE) AS COMPANY_CODE  /* 公司 */
            , COALESCE(T20.ITEM_SEQ, T10.ITEM_SEQ)       AS ITEM_SEQ
-           , COALESCE(T20.ITEM_NAME, T10.ITEM_NAME)     AS ITEM_NAME
-           , NVL(T20.AMT_20, 0)                         AS AMT_20
-           , NVL(T10.AMT_10, 0)                         AS AMT_10
+           , COALESCE(T20.ITEM_NAME, T10.ITEM_NAME)     AS ITEM_NAME     /* 往来项目 */
+           , NVL(T20.AMT_20, 0)                         AS AMT_20        /* 2.0坏账计提金额 */
+           , NVL(T10.AMT_10, 0)                         AS AMT_10        /* 1.0坏账余额 */
     FROM   T20
            FULL JOIN T10
                       ON  T10.COMPANY_CODE = T20.COMPANY_CODE
                       AND T10.ITEM_SEQ     = T20.ITEM_SEQ
 )
-SELECT COMPANY_CODE                         AS COMPANY_CODE
-       , ITEM_NAME                          AS ITEM_NAME
-       , AMT_20                             AS AMT_20
-       , AMT_10                             AS AMT_10
-       , AMT_20 - AMT_10                     AS AMT_DIFF
+SELECT COMPANY_CODE                         AS COMPANY_CODE  /* 公司 */
+       , ITEM_NAME                          AS ITEM_NAME     /* 往来项目 */
+       , AMT_20                             AS AMT_20        /* 2.0坏账计提金额 */
+       , AMT_10                             AS AMT_10        /* 1.0坏账余额 */
+       , AMT_20 - AMT_10                     AS AMT_DIFF      /* 差异（2.0减1.0） */
 FROM   T20_T10
 ORDER  BY COMPANY_CODE
           , ITEM_SEQ

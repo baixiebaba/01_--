@@ -1,3 +1,16 @@
+/*******************************************************************************
+ *                                  查询说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261102 17:36
+ * 本次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ * 上次修改：原文件无修改记录。
+ *
+ * 查询名称  ：往来账龄结果表M02-明细校验表
+ * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.FORM_DATI 等，详见正文。
+ *
+ * 修改历史：
+ *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ *******************************************************************************/
 WITH PARAMS AS (
     SELECT ${$Scenario.code} AS P_SCENARIO,  /* 场景 (年份+场景码) */
            ${$Period.code}     AS P_PERIODO    /* 期间, 两位月份码 */
@@ -71,28 +84,28 @@ T10C AS (
               NVL(LTRIM(CASE WHEN SUBSTR(F.COD_CONTO, 1, 1) = '1'
                              THEN F.TESTO_14 ELSE F.TESTO_5 END, '0'), '(NO_CUST)')
 )
-SELECT NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE)                 AS COMPANY_CODE,
-       NVL(T20C.ITEM_NAME, T10C.ITEM_NAME)                       AS ITEM_NAME,
-       NVL(T20C.CUST_CODE, T10C.CUST_CODE)                       AS CUST_CODE,
-       NVL(T20C.CUST_NAME, T10C.CUST_NAME)                       AS CUST_NAME,
+SELECT NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE)                 AS COMPANY_CODE   /* 公司 */,
+       NVL(T20C.ITEM_NAME, T10C.ITEM_NAME)                       AS ITEM_NAME      /* 往来项目 */,
+       NVL(T20C.CUST_CODE, T10C.CUST_CODE)                       AS CUST_CODE      /* 客商编码 */,
+       NVL(T20C.CUST_NAME, T10C.CUST_NAME)                       AS CUST_NAME      /* 客商名称 */,
        /* ===== 2.0账龄 (年初 / 上月 / 本月) ===== */
-       NVL(T20C.BY_AMT, 0)                                       AS BY_AMT_20,
-       NVL(T20C.LM_AMT, 0)                                       AS LM_AMT_20,
-       NVL(T20C.CUR_AMT, 0)                                      AS CUR_AMT_20,
+       NVL(T20C.BY_AMT, 0)                                       AS BY_AMT_20      /* 2.0账龄-年初余额 */,
+       NVL(T20C.LM_AMT, 0)                                       AS LM_AMT_20      /* 2.0账龄-上月余额 */,
+       NVL(T20C.CUR_AMT, 0)                                      AS CUR_AMT_20     /* 2.0账龄-本月余额 */,
        /* ===== 1.0账龄 (年初 / 上月 / 本月) ===== */
-       NVL(T10C.BY_AMT, 0)                                       AS BY_AMT_10,
-       NVL(T10C.LM_AMT, 0)                                       AS LM_AMT_10,
-       NVL(T10C.CUR_AMT, 0)                                      AS CUR_AMT_10,
+       NVL(T10C.BY_AMT, 0)                                       AS BY_AMT_10      /* 1.0账龄-年初余额 */,
+       NVL(T10C.LM_AMT, 0)                                       AS LM_AMT_10      /* 1.0账龄-上月余额 */,
+       NVL(T10C.CUR_AMT, 0)                                      AS CUR_AMT_10     /* 1.0账龄-本月余额 */,
        /* ===== 差异 (2.0 - 1.0) ===== */
-       NVL(T20C.BY_AMT, 0)  - NVL(T10C.BY_AMT, 0)                AS BY_AMT_DIFF,
-       NVL(T20C.LM_AMT, 0)  - NVL(T10C.LM_AMT, 0)                AS LM_AMT_DIFF,
-       NVL(T20C.CUR_AMT, 0) - NVL(T10C.CUR_AMT, 0)               AS CUR_AMT_DIFF,
+       NVL(T20C.BY_AMT, 0)  - NVL(T10C.BY_AMT, 0)                AS BY_AMT_DIFF    /* 差异-年初（2.0减1.0） */,
+       NVL(T20C.LM_AMT, 0)  - NVL(T10C.LM_AMT, 0)                AS LM_AMT_DIFF    /* 差异-上月（2.0减1.0） */,
+       NVL(T20C.CUR_AMT, 0) - NVL(T10C.CUR_AMT, 0)               AS CUR_AMT_DIFF   /* 差异-本期（2.0减1.0） */,
        /* ===== 来源标记(用行数标记判断, 避免客商编码为空导致的误判) ===== */
        CASE WHEN NVL(T20C.ROW_CNT, 0) = 0 THEN '仅1.0有'
             WHEN NVL(T10C.ROW_CNT, 0) = 0 THEN '仅2.0有'
-            ELSE '两边都有' END                                  AS MATCH_FLAG,
+            ELSE '两边都有' END                                  AS MATCH_FLAG     /* 来源标记：仅1.0有/仅2.0有/两边都有 */,
        /* ===== 是否调整 (取自 1.0 FORM_DATI.IMPORTO_36) ===== */
-       NVL(T10C.ADJ_FLAG, 0)                                     AS ADJ_FLAG
+       NVL(T10C.ADJ_FLAG, 0)                                     AS ADJ_FLAG       /* 是否调整（1.0手工调整标识） */
 FROM   T20C
 FULL   OUTER JOIN T10C
        ON  T20C.COMPANY_CODE = T10C.COMPANY_CODE

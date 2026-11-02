@@ -1,3 +1,16 @@
+/*******************************************************************************
+ *                                  查询说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261102 17:36
+ * 本次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ * 上次修改：原文件无修改记录。
+ *
+ * 查询名称  ：往来账龄结果表M02-总校验表
+ * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.FORM_DATI 等，详见正文。
+ *
+ * 修改历史：
+ *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ *******************************************************************************/
 WITH
 /* 往来项目、2.0/1.0账龄表科目映射，以及单体法人科目节点映射。 */
 ITM AS (
@@ -300,21 +313,21 @@ ALL_RESULT AS (
          , SCOPE_SEQ
     FROM   SCOPE_RESULT
 )
-SELECT COMPANY_CODE
-     , ITEM_NAME
-     , GROUP_SCOPE
-     , BY_AMT_20
-     , LM_AMT_20
-     , CUR_AMT_20
-     , BY_AMT_10
-     , LM_AMT_10
-     , CUR_AMT_10
-     , BY_AMT_LORDI
-     , LM_AMT_LORDI
-     , CUR_AMT_LORDI
-     , BY_AMT_DIFF
-     , LM_AMT_DIFF
-     , CUR_AMT_DIFF
+SELECT COMPANY_CODE                     /* 公司 */
+     , ITEM_NAME                             /* 往来项目 */
+     , GROUP_SCOPE                           /* 集团归属范围 */
+     , BY_AMT_20                             /* 2.0账龄-年初余额 */
+     , LM_AMT_20                             /* 2.0账龄-上月余额 */
+     , CUR_AMT_20                            /* 2.0账龄-本月余额 */
+     , BY_AMT_10                             /* 1.0账龄-年初余额 */
+     , LM_AMT_10                             /* 1.0账龄-上月余额 */
+     , CUR_AMT_10                            /* 1.0账龄-本月余额 */
+     , BY_AMT_LORDI                          /* 1.0总余额-年初 */
+     , LM_AMT_LORDI                          /* 1.0总余额-上月 */
+     , CUR_AMT_LORDI                         /* 1.0总余额-本期 */
+     , BY_AMT_DIFF                           /* 差异-年初（2.0减1.0） */
+     , LM_AMT_DIFF                           /* 差异-上月（2.0减1.0） */
+     , CUR_AMT_DIFF                          /* 差异-本期（2.0减1.0） */
 FROM   ALL_RESULT
 /* 按公司、往来项目、总计及用户指定的三段集团所属范围顺序展示。 */
 ORDER  BY COMPANY_CODE

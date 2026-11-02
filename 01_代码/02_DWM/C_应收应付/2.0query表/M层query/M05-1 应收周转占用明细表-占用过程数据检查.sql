@@ -1,19 +1,20 @@
-/*
-============================================================================
-ARPM02与IMOCC周转校验查询
-用途：按 CPM_SP_M2M_ARP_TOV_M_PHASE2 口径查询周转和国际营销应收占用数据。
-参数：场景使用 ${$Scenario.code}，期间使用 ${$Period.code}，公司使用 ${$Entity.code}，事业部使用 ${$ANL_D_BG.code}。
-      参数直接写入各源表和规则表 SELECT 的 WHERE 限制，不依赖存储过程或参数包。
-口径：按TOV实际ARPTOV_RULE规则保留ARPM02来源并生成正向取数标记，保留事业部映射剔除和负净额事业部剔除记录。
-输出：场景、期间、账套、数据来源、类别、客商、集团所属范围、对方公司、
-      周转利润中心编码及描述、事业部编码及描述、ARPTOV_FLAG、AR_AMT_FLAG、事业部映射状态、周转金额。
-版本信息：
-  20261021 按TOV实际规则修正周转利润中心仅标准化一次，参数版仅在最终层限制事业部，修复事业部映射为空问题。
-  20261021 删除公司进数和锁定限制，改为全量事业部计算负净额并在最终层执行事业部展示筛选；完成SQL完整性静态检查。
-  20261021 按TOV实际规则改为ARPM02与IMOCC全量留痕，新增ARPTOV_FLAG、AR_AMT_FLAG和事业部映射状态，取消最终非零金额过滤。
-  20261020 新增 ARPM02 与 IMOCC 周转校验查询。
-============================================================================
-*/
+/*******************************************************************************
+ *                                  查询说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261102 17:36
+ * 本次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ * 上次修改：原文件无修改记录。
+ *
+ * 查询名称  ：应收周转占用明细表-占用过程数据检查
+ * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_FIMA_DEV.DWD_FI_MR_AR_IMOCC_MI、AW_RUL_ARPTOV_000001 等，详见正文。
+ *
+ * 修改历史：
+ *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ *   20261021 按TOV实际规则修正周转利润中心仅标准化一次，参数版仅在最终层限制事业部，修复事业部映射为空问题（原版本记录）。
+ *   20261021 删除公司进数和锁定限制，改为全量事业部计算负净额并在最终层执行事业部展示筛选；完成SQL完整性静态检查（原版本记录）。
+ *   20261021 按TOV实际规则改为ARPM02与IMOCC全量留痕，新增ARPTOV_FLAG、AR_AMT_FLAG和事业部映射状态，取消最终非零金额过滤（原版本记录）。
+ *   20261020 新增 ARPM02 与 IMOCC 周转校验查询（原版本记录）。
+ *******************************************************************************/
 WITH
 /* 当前期间有效的全部周转事业部范围：排除CXC事业部，供映射存在性判断使用。 */
 TOV_BG_SCOPE_ALL AS (
@@ -493,35 +494,35 @@ FINAL_TURNOVER AS (
      WHERE D.BUSINESS_UNIT_CODE IS NULL
         OR D.BUSINESS_UNIT_CODE IN (${$ANL_D_BG.code})
 )
-SELECT F.COD_SCENARIO AS SCENARIO
-     , F.COD_PERIODO AS PERIODO
-     , F.COD_AZIENDA AS COMPANY_CODE
-     , F.COD_CATEGORIA
-     , F.CUST_CODE
-     , MAX(F.CUST_NAME) AS CUST_NAME
-     , F.CUST_HEAD_CODE AS CUST_HEAD_CODE
-     , MAX(F.CUST_HEAD_NAME) AS CUST_HEAD_NAME
-     , F.SUB_CUST_CODE AS SUB_CUST_CODE
-     , MAX(F.SUB_CUST_NAME) AS SUB_CUST_NAME
-     , F.CP_COMPANY_CODE AS CP_COMPANY_CODE
-     , F.TURNOVER_PROFITCENTER_CODE
-     , F_TGK_GET_DIMNAME('DEST2', F.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME
-     , F.BUSINESS_UNIT_CODE
+SELECT F.COD_SCENARIO AS SCENARIO                           /* 场景 */
+     , F.COD_PERIODO AS PERIODO                                  /* 期间 */
+     , F.COD_AZIENDA AS COMPANY_CODE                             /* 公司 */
+     , F.COD_CATEGORIA                                           /* 类别 */
+     , F.CUST_CODE                                               /* 客商编码 */
+     , MAX(F.CUST_NAME) AS CUST_NAME                             /* 客商名称 */
+     , F.CUST_HEAD_CODE AS CUST_HEAD_CODE                        /* 主户编码 */
+     , MAX(F.CUST_HEAD_NAME) AS CUST_HEAD_NAME                   /* 主户名称 */
+     , F.SUB_CUST_CODE AS SUB_CUST_CODE                          /* 分户编码 */
+     , MAX(F.SUB_CUST_NAME) AS SUB_CUST_NAME                     /* 分户名称 */
+     , F.CP_COMPANY_CODE AS CP_COMPANY_CODE                      /* 对方公司 */
+     , F.TURNOVER_PROFITCENTER_CODE                              /* 周转利润中心编码 */
+     , F_TGK_GET_DIMNAME('DEST2', F.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME /* 周转利润中心名称 */
+     , F.BUSINESS_UNIT_CODE                                      /* 事业部编码 */
      , CASE
            WHEN F.BUSINESS_UNIT_CODE IS NULL THEN NULL
            ELSE F_TGK_GET_DIMNAME('D_BG', F.BUSINESS_UNIT_CODE)
-       END AS BUSINESS_UNIT_NAME
-     , SUM(F.TURNOVER_AMT) AS TURNOVER_AMT
-     , SUM(F.F1_ODUE_AMT) AS F1_ODUE_AMT
-     , SUM(F.F2_EPAY_AMT) AS F2_EPAY_AMT
-     , SUM(F.F3_ECR_AMT) AS F3_ECR_AMT
-     , SUM(F.F4_UREB_AMT) AS F4_UREB_AMT
-     , SUM(F.F5_UFEE_AMT) AS F5_UFEE_AMT
-     , SUM(F.F6_INVSM_AMT) AS F6_INVSM_AMT
-     , SUM(F.F7_GSUB_AMT) AS F7_GSUB_AMT
-     , SUM(F.F8_ADJ_AMT) AS F8_ADJ_AMT
-     , F.ARPTOV_FLAG
-     , F.AR_AMT_FLAG
+       END AS BUSINESS_UNIT_NAME  /* 事业部名称 */
+     , SUM(F.TURNOVER_AMT) AS TURNOVER_AMT                       /* 周转金额 */
+     , SUM(F.F1_ODUE_AMT) AS F1_ODUE_AMT                         /* 因素1-超期款 */
+     , SUM(F.F2_EPAY_AMT) AS F2_EPAY_AMT                         /* 因素2-提前回款 */
+     , SUM(F.F3_ECR_AMT) AS F3_ECR_AMT                           /* 因素3-电商零售节奏 */
+     , SUM(F.F4_UREB_AMT) AS F4_UREB_AMT                         /* 因素4-未兑现返利余额 */
+     , SUM(F.F5_UFEE_AMT) AS F5_UFEE_AMT                         /* 因素5-欠付费用 */
+     , SUM(F.F6_INVSM_AMT) AS F6_INVSM_AMT                       /* 因素6-开票样机额度 */
+     , SUM(F.F7_GSUB_AMT) AS F7_GSUB_AMT                         /* 因素7-国补未回款 */
+     , SUM(F.F8_ADJ_AMT) AS F8_ADJ_AMT                           /* 因素8-手工导入 */
+     , F.ARPTOV_FLAG                                             /* 周转取数来源标记 */
+     , F.AR_AMT_FLAG                                            /* 应收占用正负向标记 */
   FROM FINAL_TURNOVER F
  GROUP BY F.COD_SCENARIO
         , F.COD_PERIODO

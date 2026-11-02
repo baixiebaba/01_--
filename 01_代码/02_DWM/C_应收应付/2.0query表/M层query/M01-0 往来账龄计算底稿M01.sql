@@ -1,110 +1,109 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 17:23
- * 本次修改：ALTER BY 20261102 17:23 SHIQINGFENG.EX 统一 Query 文件头、关键字大小写、字段逐行排列和查询条件排版，未修改业务主体。
- * 上次修改：原文件无修改记录。
+ * 最后更新时间：20261102 17:35
+ * 本次修改：ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
+ * 上次修改：ALTER BY 20261102 17:23 SHIQINGFENG.EX 统一 Query 文件头、关键字大小写、字段逐行排列和查询条件排版，未修改业务主体。
  *
  * 查询名称  ：往来账龄计算底稿M01
- * 功能描述  ：按场景、期间和公司查询往来账龄计算底稿及维度描述。
- * 宿主表    ：AW_MR9_ARPM01_000001
- * 展示逻辑  ：按原有字段顺序展示账龄金额、调整金额、币种和更新信息。
+ * 源表      ：AW_MR9_ARPM01_000001
  *
  * 修改历史：
+ *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
  *   ALTER BY 20261102 17:23 SHIQINGFENG.EX 统一 Query 文件头、关键字大小写、字段逐行排列和查询条件排版，未修改业务主体。
  *******************************************************************************/
-SELECT COD_SCENARIO
-     , COD_PERIODO
-     , COD_AZIENDA
-     , COD_CONTO
-     , COD_CATEGORIA
-     , D_ADJ_TYPE
-     , SRC_DETAIL
-     , CUST_CODE
-     , CUST_NAME
-     , CUST_HEAD_CODE
-     , CUST_HEAD_NAME
-     , CUST_BRANCH_CODE
-     , CUST_BRANCH_NAME
-     , COD_AZI_CTP
-     , COUNTRY_CODE
-     , COUNTRY_NAME
-     , ACCT_SRC_CODE
-     , ACCT_REC_CODE
-     , ACCT_MAP_CODE
-     , LE_AGE_FLAG
-     , IS_REC_LG
-     , ME_AGE_FLAG
-     , IS_REC_ME
-     , MB_AGE_FLAG
-     , IS_REC_MB
-     , GRP_SCOPE
-     , D_CHANNEL
-     , F_TGK_GET_DIMNAME('D_CHANNEL', D_CHANNEL) AS D_CHANNEL_DESC
-     , D_ONOFFLINE
-     , F_TGK_GET_DIMNAME('D_ONOFFLINE', D_ONOFFLINE) AS D_ONOFFLINE_DESC
-     , COD_DEST2
-     , F_TGK_GET_DIMNAME('DEST2', COD_DEST2) AS COD_DEST2_DESC
-     , COD_DEST3
-     , F_TGK_GET_DIMNAME('DEST3', COD_DEST3) AS COD_DEST3_DESC
-     , D_SALE_DEPT
-     , F_TGK_GET_DIMNAME('D_SALE_DEPT', D_SALE_DEPT) AS D_SALE_DEPT_DESC
-     , D_TOV_CHAN
-     , F_TGK_GET_DIMNAME('D_TOV_CHAN', D_TOV_CHAN) AS D_TOV_CHAN_DESC
-     , D_CC_CUSTGRP
-     , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', D_CC_CUSTGRP) AS D_CC_CUSTGRP_DESC
-     , COD_VALUTA
-     , COD_VALUTA_ORIGINARIA
-     , BCY_0_AMT
-     , BCY_1_AMT
-     , BCY_2_AMT
-     , BCY_3_AMT
-     , BCY_4_AMT
-     , BCY_5_AMT
-     , BCY_6_AMT
-     , BCY_7_AMT
-     , BCY_8_AMT
-     , BCY_9_AMT
-     , BCY_10_AMT
-     , BCY_11_AMT
-     , BCY_12_AMT
-     , BCY_13_AMT
-     , BCY_14_AMT
-     , BCY_15_AMT
-     , QCY_0_AMT
-     , QCY_1_AMT
-     , QCY_2_AMT
-     , QCY_3_AMT
-     , QCY_4_AMT
-     , QCY_5_AMT
-     , QCY_6_AMT
-     , QCY_7_AMT
-     , QCY_8_AMT
-     , QCY_9_AMT
-     , QCY_10_AMT
-     , QCY_11_AMT
-     , QCY_12_AMT
-     , QCY_13_AMT
-     , QCY_14_AMT
-     , QCY_15_AMT
-     , PAY_TERM_CODE
-     , PAY_TERM_DESC
-     , NATURE_L1_NAME
-     , NATURE_L2_NAME
-     , NATURE_L3_NAME
-     , CLOSING_RATE_BCY_AMT
-     , POSTING_RATE_BCY_AMT
-     , EXCHANGE_RATE_EVAL_FLAG
-     , SYSTEM_SRC
-     , TH_FX_EVAL_AMT
-     , CURRENCY_ACCT_DETAIL
-     , ADJ_REB_AMT
-     , ADJ_RET_AMT
-     , TAX_RATE
-     , UFEE_UREB_FLAG
-     , ECLS_FLAG
-     , DATEUPD
-     , USERUPD
+SELECT COD_SCENARIO                         /* 场景 */
+     , COD_PERIODO                               /* 期间 */
+     , COD_AZIENDA                               /* 公司 */
+     , COD_CONTO                                 /* 科目 */
+     , COD_CATEGORIA                             /* 类别 */
+     , D_ADJ_TYPE                                /* 调整类型 */
+     , SRC_DETAIL                                /* 数据分类 */
+     , CUST_CODE                                 /* 客商编码 */
+     , CUST_NAME                                 /* 客商名称 */
+     , CUST_HEAD_CODE                            /* 主户编码 */
+     , CUST_HEAD_NAME                            /* 主户名称 */
+     , CUST_BRANCH_CODE                          /* 分户编码 */
+     , CUST_BRANCH_NAME                          /* 分户名称 */
+     , COD_AZI_CTP                               /* 对方公司 */
+     , COUNTRY_CODE                              /* 国家编码 */
+     , COUNTRY_NAME                              /* 国家名称 */
+     , ACCT_SRC_CODE                             /* 原始科目编码 */
+     , ACCT_REC_CODE                             /* 重分类科目编码 */
+     , ACCT_MAP_CODE                             /* 映射后科目编码 */
+     , LE_AGE_FLAG                               /* 法人单体账龄标识 */
+     , IS_REC_LG                                 /* 是否重分类_法人 */
+     , ME_AGE_FLAG                               /* 管理单体账龄标识 */
+     , IS_REC_ME                                 /* 是否重分类_管理 */
+     , MB_AGE_FLAG                               /* 管理分公司账龄标识 */
+     , IS_REC_MB                                 /* 是否重分类_管理分公司 */
+     , GRP_SCOPE                                 /* 集团归属范围（ profitcenter_code,varchar(30),利润中心编码 cod_dest2,varchar(30),利润中心编码 onoffline_code,varchar(30),渠道分组编码 d_onoffline,varchar(30),渠道分组编码 channel_l3_code,varchar(30),三级公司分类编码 d_channel,varchar(30),三级公司分类编码 bus_range_code,varchar(30),业务范围编码 bcy_0_amt,number(27 */
+     , D_CHANNEL                                 /* 三级公司分类编码 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL', D_CHANNEL) AS D_CHANNEL_DESC /* 三级公司分类名称 */
+     , D_ONOFFLINE                               /* 渠道分组编码 */
+     , F_TGK_GET_DIMNAME('D_ONOFFLINE', D_ONOFFLINE) AS D_ONOFFLINE_DESC /* 渠道分组名称 */
+     , COD_DEST2                                 /* 利润中心编码 */
+     , F_TGK_GET_DIMNAME('DEST2', COD_DEST2) AS COD_DEST2_DESC /* 利润中心名称 */
+     , COD_DEST3                                 /* 业务范围编码 */
+     , F_TGK_GET_DIMNAME('DEST3', COD_DEST3) AS COD_DEST3_DESC /* 业务范围名称 */
+     , D_SALE_DEPT                               /* 业务管理单元编码 */
+     , F_TGK_GET_DIMNAME('D_SALE_DEPT', D_SALE_DEPT) AS D_SALE_DEPT_DESC /* 业务管理单元名称 */
+     , D_TOV_CHAN                                /* 周转分析渠道 */
+     , F_TGK_GET_DIMNAME('D_TOV_CHAN', D_TOV_CHAN) AS D_TOV_CHAN_DESC /* 周转分析渠道名称 */
+     , D_CC_CUSTGRP                              /* 商冷客户群 */
+     , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', D_CC_CUSTGRP) AS D_CC_CUSTGRP_DESC /* 商冷客户群名称 */
+     , COD_VALUTA                                /* 本位币币种 */
+     , COD_VALUTA_ORIGINARIA                     /* 交易币币种 */
+     , BCY_0_AMT                                 /* 本位币金额-本月账龄 */
+     , BCY_1_AMT                                 /* 本位币金额-账龄区间段1 */
+     , BCY_2_AMT                                 /* 本位币金额-账龄区间段2 */
+     , BCY_3_AMT                                 /* 本位币金额-账龄区间段3 */
+     , BCY_4_AMT                                 /* 本位币金额-账龄区间段4 */
+     , BCY_5_AMT                                 /* 本位币金额-账龄区间段5 */
+     , BCY_6_AMT                                 /* 本位币金额-账龄区间段6 */
+     , BCY_7_AMT                                 /* 本位币金额-账龄区间段7 */
+     , BCY_8_AMT                                 /* 本位币金额-账龄区间段8 */
+     , BCY_9_AMT                                 /* 本位币金额-账龄区间段9 */
+     , BCY_10_AMT                                /* 本位币金额-账龄区间段10 */
+     , BCY_11_AMT                                /* 本位币金额-账龄区间段11 */
+     , BCY_12_AMT                                /* 本位币金额-账龄区间段12 */
+     , BCY_13_AMT                                /* 本位币金额-账龄区间段13 */
+     , BCY_14_AMT                                /* 本位币金额-账龄区间段14 */
+     , BCY_15_AMT                                /* 本位币金额-账龄区间段15 */
+     , QCY_0_AMT                                 /* 交易币金额-本月账龄 */
+     , QCY_1_AMT                                 /* 交易币金额-账龄区间段1 */
+     , QCY_2_AMT                                 /* 交易币金额-账龄区间段2 */
+     , QCY_3_AMT                                 /* 交易币金额-账龄区间段3 */
+     , QCY_4_AMT                                 /* 交易币金额-账龄区间段4 */
+     , QCY_5_AMT                                 /* 交易币金额-账龄区间段5 */
+     , QCY_6_AMT                                 /* 交易币金额-账龄区间段6 */
+     , QCY_7_AMT                                 /* 交易币金额-账龄区间段7 */
+     , QCY_8_AMT                                 /* 交易币金额-账龄区间段8 */
+     , QCY_9_AMT                                 /* 交易币金额-账龄区间段9 */
+     , QCY_10_AMT                                /* 交易币金额-账龄区间段10 */
+     , QCY_11_AMT                                /* 交易币金额-账龄区间段11 */
+     , QCY_12_AMT                                /* 交易币金额-账龄区间段12 */
+     , QCY_13_AMT                                /* 交易币金额-账龄区间段13 */
+     , QCY_14_AMT                                /* 交易币金额-账龄区间段14 */
+     , QCY_15_AMT                                /* 交易币金额-账龄区间段15 */
+     , PAY_TERM_CODE                             /* 付款条件代码 */
+     , PAY_TERM_DESC                             /* 付款条件描述 */
+     , NATURE_L1_NAME                            /* 一级性质 */
+     , NATURE_L2_NAME                            /* 二级性质 */
+     , NATURE_L3_NAME                            /* 三级性质 */
+     , CLOSING_RATE_BCY_AMT                      /* 期末汇率余额 */
+     , POSTING_RATE_BCY_AMT                      /* 记账汇率余额 */
+     , EXCHANGE_RATE_EVAL_FLAG                   /* 汇率评估标识 */
+     , SYSTEM_SRC                                /* 来源系统 */
+     , TH_FX_EVAL_AMT                            /* 理论汇兑评估金额 */
+     , CURRENCY_ACCT_DETAIL                      /* 币种科目构成明细 */
+     , ADJ_REB_AMT                               /* 调整后返利金额 */
+     , ADJ_RET_AMT                               /* 调整后退货金额 */
+     , TAX_RATE                                  /* 税率 */
+     , UFEE_UREB_FLAG                            /* 返利/费用标识 */
+     , ECLS_FLAG                                 /* 电商零售标识 */
+     , DATEUPD                                   /* 更新时间 */
+     , USERUPD                                   /* 更新用户 */
   FROM AW_MR9_ARPM01_000001
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}

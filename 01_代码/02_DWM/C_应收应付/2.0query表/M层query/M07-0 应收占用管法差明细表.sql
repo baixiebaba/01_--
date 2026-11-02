@@ -1,44 +1,19 @@
 /*******************************************************************************
- *                                  脚本说明
+ *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261029 15:15
- * 本次修改：ALTER BY 20261029 15:15 SHIQINGFENG.EX 排除法人口径、管理口径及调整金额全部为0的明细记录。
- * 上次修改：ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
+ * 最后更新时间：20261102 17:36
+ * 本次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 统一查询说明文件头为查询名称+源表精简版式，未修改业务主体。
+ * 上次修改：ALTER BY 20261029 15:15 SHIQINGFENG.EX 排除法人口径、管理口径及调整金额全部为0的明细记录。
+ *   ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
  *
- * 脚本名称  ：应收占用管法差明细表query.sql
- * 功能描述  ：按事业部范围读取M02账龄数据，匹配M03管理口径应收占用，计算其他调整项、调整后管理口径应收占用及管法差金额。
- * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM03_000001、AW_RUL_ATSMAP_000001、AW_RUL_ARPTOV_000001，详见Query正文。
- * 目标表    ：无，报表Query直接输出。
+ * 查询名称  ：应收占用管法差明细表
+ * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM03_000001、AW_RUL_ARPTOV_000001 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 统一查询说明文件头为查询名称+源表精简版式，未修改业务主体。
  *   ALTER BY 20261029 15:15 SHIQINGFENG.EX 排除法人口径、管理口径及调整金额全部为0的明细记录。
  *   ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
- *   ALTER BY 20261029 11:16 SHIQINGFENG.EX 按DEST3层级平铺表补充大区名称，优先取4级节点描述并回退5级节点描述。
- *   ALTER BY 20261029 11:14 SHIQINGFENG.EX BUSINESS_UNIT_NAME改为通过F_TGK_GET_DIMNAME函数获取，保留账套节点描述原值。
- *   ALTER BY 20261029 11:05 SHIQINGFENG.EX 保留节点描述，仅将维度要素名称改为通过F_TGK_GET_DIMNAME函数获取。
- *   ALTER BY 20261029 11:03 SHIQINGFENG.EX 维度名称统一使用F_TGK_GET_DIMNAME函数获取。
- *   ALTER BY 20261029 10:57 SHIQINGFENG.EX 取消公司参数限制，按所选事业部下全部有效账套取数。
- *   ALTER BY 20261029 10:49 SHIQINGFENG.EX 新增应收占用管法差明细表Query。
  *******************************************************************************/
-
-/*
- * 参数说明：
- * ${$Scenario.code}：场景，例如2026ACT（实际）或2026BGT（预算/计划）。
- * ${$Period.code}：期间，取值01至12。
- * ${$ANL_D_BG.code}：事业部清单，用于取得事业部下当前期间有效的全部账套；本Query不使用公司参数限制。
- *
- * 口径说明：
- * 1. 法人口径账龄分类取LE_AGE_FLAG，管理口径账龄分类取ME_AGE_FLAG。
- * 2. M02仅保留LE_AGE_FLAG或ME_AGE_FLAG属于AR、CA、A10的数据。
- * 3. 法人口径应收占用仅在LE_AGE_FLAG属于AR、CA、A10时取BCY_0_AMT。
- * 4. 管理口径应收占用按事业部、公司、客商、利润中心匹配M03的AR_AMT；
- *    管理单体账龄对应M03的ZAMOUNT类别。
- * 5. 日立公司范围按公司架构HIE=10、NODE=050识别，其他调整项取UREB_AMT；
- *    非日立公司其他调整项取SPC_DSV_DED_AMT。
- * 6. 管理口径应收占用-调整后 = 管理口径应收占用 - 其他调整项。
- * 7. 管法差金额 = 法人口径应收占用 - 管理口径应收占用-调整后。
- * 8. M03先按四个匹配键汇总再关联，避免M03自身多行直接连接放大M02记录。
- */
 WITH
 /* 当前期间、参数事业部下的全部有效账套范围；事业部和公司名称通过维度函数获取，账套节点描述保留配置表原值。 */
 BUSINESS_SCOPE AS (
@@ -194,50 +169,50 @@ CALC_DETAIL AS (
        AND M.PROFITCENTER_MATCH_CODE = A.PROFITCENTER_MATCH_CODE
 )
 /* 按需求字段顺序输出应收占用管法差明细。 */
-SELECT A.COD_SCENARIO AS SCENARIO
-     , A.COD_PERIODO AS PERIOD_CODE
-     , A.BUSINESS_UNIT_CODE
-     , A.BUSINESS_UNIT_NAME
-     , A.COMPANY_CODE
-     , A.COMPANY_NAME
-     , A.LEGAL_AGE_CLASS
-     , A.MANAGE_AGE_CLASS
-     , A.CUST_CODE
-     , A.CUST_NAME
-     , A.CUST_HEAD_CODE
-     , A.CUST_HEAD_NAME
-     , A.CUST_BRANCH_CODE
-     , A.CUST_BRANCH_NAME
-     , A.GRP_SCOPE
-     , A.CP_COMPANY_CODE
-     , A.COUNTRY_NAME
-     , A.NATURE_L2_NAME
-     , C.CHANNEL_L1_CODE
-     , C.CHANNEL_L1_NAME
-     , C.CHANNEL_L2_CODE
-     , C.CHANNEL_L2_NAME
-     , C.CHANNEL_L3_CODE
-     , F_TGK_GET_DIMNAME('D_CHANNEL', C.CHANNEL_L3_CODE) AS CHANNEL_L3_NAME
-     , A.D_ONOFFLINE AS CHANNEL_GROUP_CODE
-     , F_TGK_GET_DIMNAME('D_ONOFFLINE', A.D_ONOFFLINE) AS CHANNEL_GROUP_NAME
-     , A.PROFITCENTER_CODE
-     , F_TGK_GET_DIMNAME('DEST2', A.PROFITCENTER_CODE) AS PROFITCENTER_NAME
-     , A.BUSINESS_RANGE_CODE
-     , F_TGK_GET_DIMNAME('DEST3', A.BUSINESS_RANGE_CODE) AS BUSINESS_RANGE_NAME
-     , A.SALE_DEPT_CODE
-     , F_TGK_GET_DIMNAME('D_SALE_DEPT', A.SALE_DEPT_CODE) AS SALE_DEPT_NAME
-     , A.TOV_CHANNEL_CODE
-     , F_TGK_GET_DIMNAME('D_TOV_CHAN', A.TOV_CHANNEL_CODE) AS TOV_CHANNEL_NAME
-     , A.CC_CUST_GROUP_CODE
-     , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', A.CC_CUST_GROUP_CODE) AS CC_CUST_GROUP_NAME
-     , A.LOCAL_CURRENCY_CODE
-     , NVL(R.DESC_DEST3_ELEGER4, R.DESC_DEST3_ELEGER5) AS REGION_NAME
-     , A.LEGAL_AR_OCCUPATION_AMT
-     , A.MANAGE_AR_OCCUPATION_AMT
-     , A.OTHER_ADJ_AMT
-     , A.MANAGE_AR_OCCUPATION_ADJ_AMT
-     , A.LEGAL_MANAGE_DIFF_AMT
-     , A.DIFF_REASON
+SELECT A.COD_SCENARIO AS SCENARIO                               /* 场景 */
+     , A.COD_PERIODO AS PERIOD_CODE                                  /* 期间 */
+     , A.BUSINESS_UNIT_CODE                                          /* 事业部编码 */
+     , A.BUSINESS_UNIT_NAME                                          /* 事业部名称 */
+     , A.COMPANY_CODE                                                /* 公司编码 */
+     , A.COMPANY_NAME                                                /* 公司名称 */
+     , A.LEGAL_AGE_CLASS                                             /* 法人口径账龄分类 */
+     , A.MANAGE_AGE_CLASS                                            /* 管理口径账龄分类 */
+     , A.CUST_CODE                                                   /* 客商编码 */
+     , A.CUST_NAME                                                   /* 客商名称 */
+     , A.CUST_HEAD_CODE                                              /* 主户编码 */
+     , A.CUST_HEAD_NAME                                              /* 主户名称 */
+     , A.CUST_BRANCH_CODE                                            /* 分户编码 */
+     , A.CUST_BRANCH_NAME                                            /* 分户名称 */
+     , A.GRP_SCOPE                                                   /* 集团归属范围 */
+     , A.CP_COMPANY_CODE                                             /* 对方公司 */
+     , A.COUNTRY_NAME                                                /* 国家名称 */
+     , A.NATURE_L2_NAME                                              /* 二级性质 */
+     , C.CHANNEL_L1_CODE                                             /* 一级公司分类编码 */
+     , C.CHANNEL_L1_NAME                                             /* 一级公司分类名称 */
+     , C.CHANNEL_L2_CODE                                             /* 二级公司分类编码 */
+     , C.CHANNEL_L2_NAME                                             /* 二级公司分类名称 */
+     , C.CHANNEL_L3_CODE                                             /* 三级公司分类编码 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL', C.CHANNEL_L3_CODE) AS CHANNEL_L3_NAME /* 三级公司分类名称 */
+     , A.D_ONOFFLINE AS CHANNEL_GROUP_CODE                           /* 渠道分组编码 */
+     , F_TGK_GET_DIMNAME('D_ONOFFLINE', A.D_ONOFFLINE) AS CHANNEL_GROUP_NAME /* 渠道分组名称 */
+     , A.PROFITCENTER_CODE                                           /* 利润中心编码 */
+     , F_TGK_GET_DIMNAME('DEST2', A.PROFITCENTER_CODE) AS PROFITCENTER_NAME /* 利润中心名称 */
+     , A.BUSINESS_RANGE_CODE                                         /* 业务范围编码 */
+     , F_TGK_GET_DIMNAME('DEST3', A.BUSINESS_RANGE_CODE) AS BUSINESS_RANGE_NAME /* 业务范围名称 */
+     , A.SALE_DEPT_CODE                                              /* 业务管理单元编码 */
+     , F_TGK_GET_DIMNAME('D_SALE_DEPT', A.SALE_DEPT_CODE) AS SALE_DEPT_NAME /* 业务管理单元名称 */
+     , A.TOV_CHANNEL_CODE                                            /* 周转分析渠道编码 */
+     , F_TGK_GET_DIMNAME('D_TOV_CHAN', A.TOV_CHANNEL_CODE) AS TOV_CHANNEL_NAME /* 周转分析渠道名称 */
+     , A.CC_CUST_GROUP_CODE                                          /* 商冷客户群编码 */
+     , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', A.CC_CUST_GROUP_CODE) AS CC_CUST_GROUP_NAME /* 商冷客户群名称 */
+     , A.LOCAL_CURRENCY_CODE                                         /* 本位币币种 */
+     , NVL(R.DESC_DEST3_ELEGER4, R.DESC_DEST3_ELEGER5) AS REGION_NAME /* 业务范围区域名称 */
+     , A.LEGAL_AR_OCCUPATION_AMT                                     /* 法人口径应收占用 */
+     , A.MANAGE_AR_OCCUPATION_AMT                                    /* 管理口径应收占用 */
+     , A.OTHER_ADJ_AMT                                               /* 其他调整金额 */
+     , A.MANAGE_AR_OCCUPATION_ADJ_AMT                                /* 调整后管理口径应收占用 */
+     , A.LEGAL_MANAGE_DIFF_AMT                                       /* 管法差金额 */
+     , A.DIFF_REASON                                                /* 差异原因 */
   FROM CALC_DETAIL A
   LEFT JOIN CHANNEL_DIM C
     ON C.CHANNEL_L3_CODE = A.D_CHANNEL

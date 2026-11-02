@@ -1,12 +1,16 @@
-/*
-============================================================================
-REVM01收入校验查询
-用途：仅核对REVM01管理口径收入，并按参数映射收入利润中心和事业部。
-口径：收入计算复刻CPM_SP_M2M_ARP_TOV_M_PHASE2的REVENUE_CALC，不参与周转匹配。
-参数：场景、期间、账套和事业部由查询参数控制；事业部参数命中指定范围，同时保留事业部为空的记录。
-说明：输出收入原始利润中心、映射后收入利润中心、利润中心事业部、账套事业部和管理口径收入，按最终映射粒度汇总。
-============================================================================
-*/
+/*******************************************************************************
+ *                                  查询说明
+ *-----------------------------------------------------------------------------
+ * 最后更新时间：20261102 17:36
+ * 本次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ * 上次修改：原文件无修改记录。
+ *
+ * 查询名称  ：应收周转收入明细表-收入过程数据检查
+ * 源表      ：AW_MR9_REVM01_000001、TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 等，详见正文。
+ *
+ * 修改历史：
+ *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ *******************************************************************************/
 WITH
 /* 收入利润中心映射规则：按源收入利润中心和有效期匹配。 */
 PROFIT_CENTER_RULE AS (
@@ -251,20 +255,20 @@ REVENUE_AGG AS (
             , R.BUSINESS_UNIT_NAME
     HAVING NVL(SUM(R.MANAGE_REV_AMT), 0) <> 0
 )
-SELECT R.COD_SCENARIO AS SCENARIO
-     , R.COD_PERIODO AS PERIODO
-     , R.COD_AZIENDA AS COMPANY_CODE
-     , R.CUST_CODE
-     , R.CUST_NAME
-     , R.GRP_SCOPE
-     , R.COD_AZI_CTP AS CP_COMPANY_CODE
-     , R.INCOME_PROFITCENTER_CODE
-     , R.INCOME_PROFITCENTER_NAME
-     , R.MAPPED_PROFITCENTER_CODE AS TURNOVER_PROFITCENTER_CODE
-     , R.MAPPED_PROFITCENTER_NAME AS TURNOVER_PROFITCENTER_NAME
-     , R.BUSINESS_UNIT_CODE
-     , R.BUSINESS_UNIT_NAME
-     , R.MANAGE_REV_AMT
+SELECT R.COD_SCENARIO AS SCENARIO                       /* 场景 */
+     , R.COD_PERIODO AS PERIODO                              /* 期间 */
+     , R.COD_AZIENDA AS COMPANY_CODE                         /* 公司 */
+     , R.CUST_CODE                                           /* 客商编码 */
+     , R.CUST_NAME                                           /* 客商名称 */
+     , R.GRP_SCOPE                                           /* 集团归属范围 */
+     , R.COD_AZI_CTP AS CP_COMPANY_CODE                      /* 对方公司 */
+     , R.INCOME_PROFITCENTER_CODE                            /* 收入利润中心编码 */
+     , R.INCOME_PROFITCENTER_NAME                            /* 收入利润中心名称 */
+     , R.MAPPED_PROFITCENTER_CODE AS TURNOVER_PROFITCENTER_CODE /* 映射后周转利润中心编码 */
+     , R.MAPPED_PROFITCENTER_NAME AS TURNOVER_PROFITCENTER_NAME /* 映射后周转利润中心名称 */
+     , R.BUSINESS_UNIT_CODE                                  /* 事业部编码 */
+     , R.BUSINESS_UNIT_NAME                                  /* 事业部名称 */
+     , R.MANAGE_REV_AMT                                      /* 管理口径收入金额 */
   FROM REVENUE_AGG R
  ORDER BY R.COD_AZIENDA
         , R.CUST_CODE
