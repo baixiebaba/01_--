@@ -48,8 +48,8 @@ SELECT COD_SCENARIO                                                       /* 场
      , F_TGK_GET_DIMNAME('DEST3', COD_DEST3) AS COD_DEST3_DESC            /* 业务范围名称 */
      , D_SALE_DEPT                                                        /* 业务管理单元 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', D_SALE_DEPT) AS D_SALE_DEPT_DESC  /* 业务管理单元名称 */
-     , D_TOV_CHAN                                                         /* 【二期新增】应收周转分析渠道 */
-     , F_TGK_GET_DIMNAME('D_TOV_CHAN', D_TOV_CHAN) AS D_TOV_CHAN_DESC     /* 周转分析渠道名称 */
+     , D_CHANNEL_BU                                                         /* 【二期新增】应收周转分析渠道 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', D_CHANNEL_BU) AS D_TOV_CHAN_DESC     /* 周转分析渠道名称 */
      , D_CC_CUSTGRP                                                       /* 【二期新增】商冷客户群 */
      , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', D_CC_CUSTGRP) AS D_CC_CUSTGRP_DESC  /* 商冷客户群名称 */
      , COD_VALUTA                                                         /* 本位币币种 */
@@ -108,4 +108,4 @@ SELECT COD_SCENARIO                                                       /* 场
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
- ORDER BY SRC_DETAIL
+ ORDER BY SRC_DETAIL,COD_AZIENDA,COD_CONTO

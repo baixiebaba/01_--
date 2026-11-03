@@ -116,7 +116,7 @@ M02_BASE AS (
          , NVL(LTRIM(TRIM(A.COD_DEST2), '0'), '0') AS PROFITCENTER_MATCH_CODE
          , A.COD_DEST3 AS BUSINESS_RANGE_CODE
          , A.D_SALE_DEPT AS SALE_DEPT_CODE
-         , A.D_TOV_CHAN AS TOV_CHANNEL_CODE
+         , A.D_CHANNEL_BU AS TOV_CHANNEL_CODE
          , A.D_CC_CUSTGRP AS CC_CUST_GROUP_CODE
          , A.COD_VALUTA AS LOCAL_CURRENCY_CODE
          , CASE
@@ -211,7 +211,7 @@ SELECT A.COD_SCENARIO AS SCENARIO                                      /* 场景
      , A.SALE_DEPT_CODE                                                /* 业务管理单元编码 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', A.SALE_DEPT_CODE) AS SALE_DEPT_NAME  /* 业务管理单元名称 */
      , A.TOV_CHANNEL_CODE                                              /* 周转分析渠道编码 */
-     , F_TGK_GET_DIMNAME('D_TOV_CHAN', A.TOV_CHANNEL_CODE) AS TOV_CHANNEL_NAME  /* 周转分析渠道名称 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', A.TOV_CHANNEL_CODE) AS TOV_CHANNEL_NAME  /* 周转分析渠道名称 */
      , A.CC_CUST_GROUP_CODE                                            /* 商冷客户群编码 */
      , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', A.CC_CUST_GROUP_CODE) AS CC_CUST_GROUP_NAME  /* 商冷客户群名称 */
      , A.LOCAL_CURRENCY_CODE                                           /* 本位币币种 */

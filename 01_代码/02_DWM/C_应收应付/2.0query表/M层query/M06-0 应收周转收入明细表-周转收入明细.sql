@@ -22,7 +22,7 @@ BASE AS (
     T.CUST_BRANCH_CODE, T.CUST_BRANCH_NAME, T.GRP_SCOPE, T.COD_AZI_CTP,
     T.COUNTRY_NAME, T.NATURE_L2_NAME,
     T.D_CHANNEL, T.D_ONOFFLINE, T.COD_DEST2, T.COD_DEST3, T.D_SALE_DEPT,
-    T.D_TOV_CHAN, T.D_CC_CUSTGRP, T.COD_VALUTA,
+    T.D_CHANNEL_BU, T.D_CC_CUSTGRP, T.COD_VALUTA,
     T.REV_AMT,
     T.DATEUPD, T.USERUPD,
     CASE
@@ -83,8 +83,8 @@ SELECT
      , B.D_SALE_DEPT                                                             /* 业务管理单元编码 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', B.D_SALE_DEPT)    AS D_SALE_DEPT_DESC    /* 业务管理单元名称 */
  /* TOV 渠道 */
-     , B.D_TOV_CHAN                                                              /* 周转分析渠道 */
-     , F_TGK_GET_DIMNAME('D_TOV_CHAN', B.D_TOV_CHAN)     AS D_TOV_CHAN_DESC      /* 周转分析渠道名称 */
+     , B.D_CHANNEL_BU                                                              /* 周转分析渠道 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', B.D_CHANNEL_BU)     AS D_TOV_CHAN_DESC      /* 周转分析渠道名称 */
  /* CC 客户组 */
      , B.D_CC_CUSTGRP                                                            /* 商冷客户群 */
      , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', B.D_CC_CUSTGRP)   AS D_CC_CUSTGRP_DESC  /* 商冷客户群名称 */
@@ -130,7 +130,7 @@ SELECT
         B.COD_AZIENDA, B.D_BG, B.CUST_CODE, B.CUST_HEAD_CODE, B.CUST_BRANCH_CODE
         , B.GRP_SCOPE, B.COD_AZI_CTP
         , B.D_CHANNEL, B.D_ONOFFLINE, B.COD_DEST2, B.COD_DEST3, B.D_SALE_DEPT
-        , B.D_TOV_CHAN, B.D_CC_CUSTGRP, B.COD_VALUTA
+        , B.D_CHANNEL_BU, B.D_CC_CUSTGRP, B.COD_VALUTA
         , G.COD_ELEGER6, G.DESC_ELEGER6, G.COD_ELEGER7, G.DESC_ELEGER7
         , DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER4, DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5
 
