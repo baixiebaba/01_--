@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 16:10
- * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
- * 上次修改：ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段按1030变更停用（注释保留）。
+ * 最后更新时间：20261103 14:53
+ * 本次修改：ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。
+ * 上次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -18,6 +18,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *   ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段停用（注释保留）。
  *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
@@ -1844,45 +1845,58 @@ ar_bmu_profitcenter_rule AS (
      GROUP BY NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
 ),
 -- ALTER BY 20261023 16:15 SHIQINGFENG.EX 按映射后利润中心补充业务管理单元，作为业务管理单元映射表未命中时的兜底。
+-- ALTER BY 20261103 14:53 ZHOUHONG.EX 按fact_key聚合，避免同一凭证行有多条记录时本结果集随之增多、回连主表时放大行数。
 ar_bmu_profitcenter_pick AS (
     SELECT b.fact_key
-         , r.bmu_code
-         , r.bmu_name
+         , MAX(r.bmu_code) AS bmu_code
+         , MAX(r.bmu_name) AS bmu_name
       FROM ar_mapping_base b
      INNER JOIN ar_bmu_profitcenter_rule r
         ON r.profitcenter_code = NULLIF(LTRIM(TRIM(b.profitcenter_code), '0'), '')
+     GROUP BY b.fact_key
 ),
 -- 汇总业务范围与业务管理单元映射结果。
+-- ALTER BY 20261103 14:53 ZHOUHONG.EX 按fact_key聚合，使本结果集每个fact_key只保留一行，杜绝与主表n×n放大。
 ar_business_mapping AS (
     SELECT b.fact_key
-         , CASE WHEN n.fact_key IS NOT NULL THEN n.nature_l1_name ELSE b.kverm END AS nature_l1_name
-         , CASE WHEN n.fact_key IS NOT NULL THEN n.nature_l2_name ELSE NULL END AS nature_l2_name
-         , CASE WHEN n.fact_key IS NOT NULL THEN n.nature_l3_name ELSE NULL END AS nature_l3_name
-         , CASE
-               WHEN b.company_scope = '商显公司' AND UPPER(TRIM(b.country_code)) = 'CN'
-                   THEN '2000'
-               WHEN b.company_scope = '商显公司'
-                   THEN '3000'
-               WHEN b.company_scope = '日立公司' AND UPPER(TRIM(b.country_code)) = 'CN'
-                   THEN '2200'
-               WHEN b.company_scope = '日立公司'
-                   THEN cr.bus_range_code
-               ELSE br.bus_range_code
-           END AS bus_range_code
-         , CASE
-               WHEN b.company_scope = '商显公司' AND UPPER(TRIM(b.country_code)) = 'CN'
-                   THEN '中国区公共'
-               WHEN b.company_scope = '商显公司'
-                   THEN '海外公共'
-               WHEN b.company_scope = '日立公司' AND UPPER(TRIM(b.country_code)) = 'CN'
-                   THEN '日立国内营销分公司公共'
-               WHEN b.company_scope = '日立公司'
-                   THEN cr.bus_range_name
-               ELSE br.bus_range_name
-           END AS bus_range_name
+         , MAX(
+               CASE WHEN n.fact_key IS NOT NULL THEN n.nature_l1_name ELSE b.kverm END
+           ) AS nature_l1_name
+         , MAX(
+               CASE WHEN n.fact_key IS NOT NULL THEN n.nature_l2_name ELSE NULL END
+           ) AS nature_l2_name
+         , MAX(
+               CASE WHEN n.fact_key IS NOT NULL THEN n.nature_l3_name ELSE NULL END
+           ) AS nature_l3_name
+         , MAX(
+               CASE
+                   WHEN b.company_scope = '商显公司' AND UPPER(TRIM(b.country_code)) = 'CN'
+                       THEN '2000'
+                   WHEN b.company_scope = '商显公司'
+                       THEN '3000'
+                   WHEN b.company_scope = '日立公司' AND UPPER(TRIM(b.country_code)) = 'CN'
+                       THEN '2200'
+                   WHEN b.company_scope = '日立公司'
+                       THEN cr.bus_range_code
+                   ELSE br.bus_range_code
+               END
+           ) AS bus_range_code
+         , MAX(
+               CASE
+                   WHEN b.company_scope = '商显公司' AND UPPER(TRIM(b.country_code)) = 'CN'
+                       THEN '中国区公共'
+                   WHEN b.company_scope = '商显公司'
+                       THEN '海外公共'
+                   WHEN b.company_scope = '日立公司' AND UPPER(TRIM(b.country_code)) = 'CN'
+                       THEN '日立国内营销分公司公共'
+                   WHEN b.company_scope = '日立公司'
+                       THEN cr.bus_range_name
+                   ELSE br.bus_range_name
+               END
+           ) AS bus_range_name
          -- ALTER BY 20261023 16:09 SHIQINGFENG.EX 优先按业务管理单元映射表取值，未命中时使用映射后利润中心对应业务管理单元。
-         , COALESCE(NULLIF(TRIM(bd.marketing_dept_code), ''), bp.bmu_code) AS marketing_dept_code
-         , COALESCE(NULLIF(TRIM(bd.marketing_dept_name), ''), bp.bmu_name) AS marketing_dept_name
+         , MAX(COALESCE(NULLIF(TRIM(bd.marketing_dept_code), ''), bp.bmu_code)) AS marketing_dept_code
+         , MAX(COALESCE(NULLIF(TRIM(bd.marketing_dept_name), ''), bp.bmu_name)) AS marketing_dept_name
       FROM ar_mapping_base b
       LEFT JOIN ar_nature_pick n
         ON n.fact_key = b.fact_key
@@ -1894,6 +1908,7 @@ ar_business_mapping AS (
         ON bd.fact_key = b.fact_key
       LEFT JOIN ar_bmu_profitcenter_pick bp
         ON bp.fact_key = b.fact_key
+     GROUP BY b.fact_key
 ),
 -- 仅保留语言为1的利润中心文本，并按系统/利润中心聚合。
 profitcenter_dim AS (
