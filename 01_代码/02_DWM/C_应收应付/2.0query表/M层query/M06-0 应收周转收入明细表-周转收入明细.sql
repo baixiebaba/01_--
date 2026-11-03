@@ -1,16 +1,16 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 09:53
- *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
- * 本次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
- * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
+ * 最后更新时间：20261103 14:08
+ * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ * 上次修改：ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，统一渠道层级视图来源，未修改金额和过滤逻辑。
  *
  * 查询名称  ：应收周转收入明细表-周转收入明细
- * 源表      ：AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
+ * 源表      ：AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
- *   ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
+ *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ *   ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，统一渠道层级视图来源，未修改金额和过滤逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
@@ -64,11 +64,15 @@ SELECT
      , B.COD_AZI_CTP                                                             /* 对方公司 */
      , MAX(CASE WHEN B.COD_PERIODO = ${$Period.code} THEN B.COUNTRY_NAME   END) AS COUNTRY_NAME  /* 国家名称 */
      , MAX(CASE WHEN B.COD_PERIODO = ${$Period.code} THEN B.NATURE_L2_NAME  END) AS NATURE_L2_NAME  /* 二级性质 */
- /* 渠道层级: 6级 ? COD_ELEGER6 / DESC_ELEGER6, 7级 ? COD_ELEGER7 / DESC_ELEGER7 */
-     , G.COD_ELEGER6                     AS COD_ELEGER6                          /* 渠道6级编码 */
-     , G.DESC_ELEGER6                     AS DESC_ELEGER6                        /* 渠道6级名称 */
+ /* ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，统一渠道层级视图来源，未修改金额和过滤逻辑。 */
+ /* ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。 */
+ /* 公司分类层级: D_CHANNEL为公司三级分类，E6为一级分类，E5为二级分类。 */
+     , G.COD_ELEGER6                     AS COD_ELEGER6                          /* 公司一级分类编码 */
+     , G.DESC_ELEGER6                   AS DESC_ELEGER6                        /* 公司一级分类描述 */
+     , G.COD_ELEGER5                     AS COD_ELEGER5                          /* 公司二级分类编码 */
+     , G.DESC_ELEGER5                   AS DESC_ELEGER5                        /* 公司二级分类描述 */
      , G.COD_ELEGER7                     AS COD_ELEGER7                          /* 渠道7级编码 */
-     , G.DESC_ELEGER7                     AS DESC_ELEGER7                        /* 渠道7级名称 */
+     , G.DESC_ELEGER7                   AS DESC_ELEGER7                        /* 渠道7级名称 */
  /* 渠道 */
      , B.D_CHANNEL                                                               /* 三级公司分类编码 */
      , F_TGK_GET_DIMNAME('D_CHANNEL', B.D_CHANNEL)      AS D_CHANNEL_DESC        /* 三级公司分类名称 */
@@ -119,8 +123,9 @@ SELECT
 
   FROM BASE B
 /* 渠道层级扁平表 */
-  LEFT JOIN ED_D_CHANNEL_GERARCHIA_FLAT G
+  LEFT JOIN TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT G
     ON G.COD = B.D_CHANNEL
+   AND G.COD_GERARCHIA = '01'
 /* DEST3 层级扁平表 (hie = '01' 切片) */
   LEFT JOIN (
  SELECT COD_DEST3, DESC_DEST3_ELEGER4, DESC_DEST3_ELEGER5
@@ -133,6 +138,7 @@ SELECT
         , B.GRP_SCOPE, B.COD_AZI_CTP
         , B.D_CHANNEL, B.D_ONOFFLINE, B.COD_DEST2, B.COD_DEST3, B.D_SALE_DEPT
         , B.D_CHANNEL_BU, B.D_CC_CUSTGRP, B.COD_VALUTA
-        , G.COD_ELEGER6, G.DESC_ELEGER6, G.COD_ELEGER7, G.DESC_ELEGER7
+        , G.COD_ELEGER6, G.DESC_ELEGER6, G.COD_ELEGER5, G.DESC_ELEGER5
+        , G.COD_ELEGER7, G.DESC_ELEGER7
         , DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER4, DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5
 

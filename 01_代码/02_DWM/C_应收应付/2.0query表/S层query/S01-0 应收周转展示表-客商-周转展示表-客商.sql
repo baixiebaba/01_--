@@ -1,16 +1,16 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 11:13
- * 本次修改：ALTER BY 20261103 11:13 SHIQINGFENG.EX 按要求移除维度描述解码函数，保留 F_TGK_GET_DIMNAME 取值逻辑，未修改业务口径。
- * 上次修改：ALTER BY 20261103 11:03 SHIQINGFENG.EX 统一 S 层 Query 文件头、字段排版、参数 IN 写法及维度描述解码，未修改业务口径。
+ * 最后更新时间：20261103 14:08
+ * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ * 上次修改：ALTER BY 20261103 11:41 SHIQINGFENG.EX 删除展示字段前的列字母注释，新增公司一级/二级分类编码及描述字段，未修改金额和过滤逻辑。
  *
  * 查询名称  ：应收周转展示表-客商-周转展示表-客商
  * 源表      ：AW_MR7_ARPA01_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
- *   ALTER BY 20261103 11:13 SHIQINGFENG.EX 按要求移除维度描述解码函数，保留 F_TGK_GET_DIMNAME 取值逻辑，未修改业务口径。
- *   ALTER BY 20261103 11:03 SHIQINGFENG.EX 统一 S 层 Query 文件头、字段排版、参数 IN 写法及维度描述解码，未修改业务口径。
+ *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ *   ALTER BY 20261103 11:41 SHIQINGFENG.EX 删除展示字段前的列字母注释，新增公司一级/二级分类编码及描述字段，未修改金额和过滤逻辑。
  *******************************************************************************/
 WITH
 /* 读取应收周转客商明细及金额、因素字段，供展示层计算期间和累计周转指标。 */
@@ -112,7 +112,7 @@ SRC AS (
          , T.LY_YTD_F7_GSUB_AMT
          , T.LY_YTD_F8_ADJ_AMT
       FROM AW_MR7_ARPA01_000001 T
-     /* ALTER BY 20261103 11:13 SHIQINGFENG.EX 按要求移除维度描述解码函数，保留 F_TGK_GET_DIMNAME 取值逻辑，未修改业务口径。 */
+     /* ALTER BY 20261103 11:41 SHIQINGFENG.EX 删除展示字段前的列字母注释，新增公司一级/二级分类编码及描述字段，未修改金额和过滤逻辑。 */
      WHERE T.COD_SCENARIO = ${$Scenario.code}
        AND T.COD_PERIODO = ${$Period.code}
        /* 公司和事业部范围由报表参数传入，保留 IN 写法支持多值参数。 */
@@ -121,136 +121,141 @@ SRC AS (
        AND T.COD_CATEGORIA = 'ZAMOUNT'
 )
 SELECT
-/* ==================== B ~ AE: 维度区 (30 列) ==================== */
-       /* B */ S.COD_SCENARIO AS COD_SCENARIO
-     , /* C */ S.COD_PERIODO AS COD_PERIODO
-     , /* D */ S.D_BG AS D_BG
-     , /* E */ F_TGK_GET_DIMNAME('D_BG', NVL(S.D_BG, 'ZZZZ')) AS D_BG_DESC
-     , /* F */ S.COD_AZIENDA AS COD_AZIENDA
-     , /* G */ F_TGK_GET_DIMNAME('AZIENDA', NVL(S.COD_AZIENDA, 'ZZZZ')) AS COD_AZIENDA_DESC
-     , /* H */ S.CUST_CODE AS CUST_CODE
-     , /* I */ S.CUST_NAME AS CUST_NAME
-     , /* J */ S.CUST_HEAD_CODE AS CUST_HEAD_CODE
-     , /* K */ S.CUST_HEAD_NAME AS CUST_HEAD_NAME
-     , /* L */ S.CUST_BRANCH_CODE AS CUST_BRANCH_CODE
-     , /* M */ S.CUST_BRANCH_NAME AS CUST_BRANCH_NAME
-     , /* N */ S.GRP_SCOPE AS GRP_SCOPE
-     , /* O */ G.COD_ELEGER6 AS COD_ELEGER6
-     , /* P */ G.COD_ELEGER7 AS COD_ELEGER7
-     , /* Q */ S.D_CHANNEL AS D_CHANNEL
-     , /* R */ S.D_ONOFFLINE AS D_ONOFFLINE
-     , /* S */ F_TGK_GET_DIMNAME('D_ONOFFLINE', NVL(S.D_ONOFFLINE, 'ZZZZ')) AS D_ONOFFLINE_DESC
-     , /* T */ S.COD_DEST2 AS COD_DEST2
-     , /* U */ F_TGK_GET_DIMNAME('DEST2', NVL(S.COD_DEST2, 'ZZZZ')) AS COD_DEST2_DESC
-     , /* V */ S.COD_DEST3 AS COD_DEST3
-     , /* W */ F_TGK_GET_DIMNAME('DEST3', NVL(S.COD_DEST3, 'ZZZZ')) AS COD_DEST3_DESC
-     , /* X */ S.D_SALE_DEPT AS D_SALE_DEPT
-     , /* Y */ F_TGK_GET_DIMNAME('D_SALE_DEPT', NVL(S.D_SALE_DEPT, 'ZZZZ')) AS D_SALE_DEPT_DESC
-     , /* Z */ S.D_CHANNEL_BU AS D_CHANNEL_BU
-     , /* AA */ F_TGK_GET_DIMNAME('D_CHANNEL_BU', NVL(S.D_CHANNEL_BU, 'ZZZZ')) AS D_TOV_CHAN_DESC
-     , /* AB */ S.D_CC_CUSTGRP AS D_CC_CUSTGRP
-     , /* AC */ F_TGK_GET_DIMNAME('D_CC_CUSTGRP', NVL(S.D_CC_CUSTGRP, 'ZZZZ')) AS D_CC_CUSTGRP_DESC
-     , /* AD */ NVL(D3.DESC_DEST3_ELEGER4, D3.DESC_DEST3_ELEGER5) AS DESC_DEST3_ELEGER4
-     , /* AE */ S.COUNTRY_NAME AS COUNTRY_NAME
-/* ==================== AF ~ AN: 当月周转区 (9 列): 上月占用 / 期末占用 / 当月收入 / 同期 / 较同期 ==================== */
-     , /* AF */ S.ACT_LM_OCP_AMT AS ACT_LM_OCP_AMT
-     , /* AG */ S.ACT_END_OCP_AMT AS ACT_END_OCP_AMT
-     , /* AH */ S.ACT_MTD_CSM_AMT AS ACT_MTD_CSM_AMT
-     , /* AI */ ROUND((NVL(S.ACT_LM_OCP_AMT, 0) + NVL(S.ACT_END_OCP_AMT, 0)) / 2 / NULLIF(S.ACT_MTD_CSM_AMT, 0) * 30, 2) AS ACT_MTD_TOV_RATIO
-     , /* AJ */ S.LY_LM_OCP_AMT AS LY_LM_OCP_AMT
-     , /* AK */ S.LY_END_OCP_AMT AS LY_END_OCP_AMT
-     , /* AL */ S.LY_MTD_CSM_AMT AS LY_MTD_CSM_AMT
-     , /* AM */ ROUND((NVL(S.LY_LM_OCP_AMT, 0) + NVL(S.LY_END_OCP_AMT, 0)) / 2 / NULLIF(S.LY_MTD_CSM_AMT, 0) * 30, 2) AS LY_MTD_TOV_RATIO
-     , /* AN */ ROUND((NVL(S.ACT_LM_OCP_AMT, 0) + NVL(S.ACT_END_OCP_AMT, 0)) / 2 / NULLIF(S.ACT_MTD_CSM_AMT, 0) * 30, 2)
+/* ==================== B ~ AG: 维度及描述区 (32 列) ==================== */
+       S.COD_SCENARIO AS COD_SCENARIO
+     , S.COD_PERIODO AS COD_PERIODO
+     , S.D_BG AS D_BG
+     , F_TGK_GET_DIMNAME('D_BG', NVL(S.D_BG, 'ZZZZ')) AS D_BG_DESC
+     , S.COD_AZIENDA AS COD_AZIENDA
+     , F_TGK_GET_DIMNAME('AZIENDA', NVL(S.COD_AZIENDA, 'ZZZZ')) AS COD_AZIENDA_DESC
+     , S.CUST_CODE AS CUST_CODE
+     , S.CUST_NAME AS CUST_NAME 
+     , S.CUST_HEAD_CODE AS CUST_HEAD_CODE
+     , S.CUST_HEAD_NAME AS CUST_HEAD_NAME
+     , S.CUST_BRANCH_CODE AS CUST_BRANCH_CODE
+     , S.CUST_BRANCH_NAME AS CUST_BRANCH_NAME
+     , S.GRP_SCOPE AS GRP_SCOPE
+     , G.COD_ELEGER6 AS COD_ELEGER6    /* 公司一级分类编码 */
+     , G.DESC_ELEGER6 AS DESC_ELEGER6  /* 公司一级分类描述 */
+     , G.COD_ELEGER5 AS COD_ELEGER5    /* 公司二级分类编码 */
+     , G.DESC_ELEGER5 AS DESC_ELEGER5  /* 公司二级分类描述 */
+     , S.D_CHANNEL AS D_CHANNEL
+     , F_TGK_GET_DIMNAME('D_CHANNEL', S.D_CHANNEL) AS CHANNEL_L3_NAME
+     , S.D_ONOFFLINE AS D_ONOFFLINE
+     , F_TGK_GET_DIMNAME('D_ONOFFLINE', NVL(S.D_ONOFFLINE, 'ZZZZ')) AS D_ONOFFLINE_DESC
+     , S.COD_DEST2 AS COD_DEST2
+     , F_TGK_GET_DIMNAME('DEST2', NVL(S.COD_DEST2, 'ZZZZ')) AS COD_DEST2_DESC
+     , S.COD_DEST3 AS COD_DEST3
+     , F_TGK_GET_DIMNAME('DEST3', NVL(S.COD_DEST3, 'ZZZZ')) AS COD_DEST3_DESC
+     , S.D_SALE_DEPT AS D_SALE_DEPT
+     , F_TGK_GET_DIMNAME('D_SALE_DEPT', NVL(S.D_SALE_DEPT, 'ZZZZ')) AS D_SALE_DEPT_DESC
+     , S.D_CHANNEL_BU AS D_CHANNEL_BU
+     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', NVL(S.D_CHANNEL_BU, 'ZZZZ')) AS D_TOV_CHAN_DESC
+     , S.D_CC_CUSTGRP AS D_CC_CUSTGRP
+     , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', NVL(S.D_CC_CUSTGRP, 'ZZZZ')) AS D_CC_CUSTGRP_DESC
+     , NVL(D3.DESC_DEST3_ELEGER4, D3.DESC_DEST3_ELEGER5) AS DESC_DEST3_ELEGER4
+     , S.COUNTRY_NAME AS COUNTRY_NAME
+/* ==================== AH ~ AP: 当月周转区 (9 列): 上月占用 / 期末占用 / 当月收入 / 同期 / 较同期 ==================== */
+     , S.ACT_LM_OCP_AMT AS ACT_LM_OCP_AMT
+     , S.ACT_END_OCP_AMT AS ACT_END_OCP_AMT
+     , S.ACT_MTD_CSM_AMT AS ACT_MTD_CSM_AMT
+     , ROUND((NVL(S.ACT_LM_OCP_AMT, 0) + NVL(S.ACT_END_OCP_AMT, 0)) / 2 / NULLIF(S.ACT_MTD_CSM_AMT, 0) * 30, 2) AS ACT_MTD_TOV_RATIO
+     , S.LY_LM_OCP_AMT AS LY_LM_OCP_AMT
+     , S.LY_END_OCP_AMT AS LY_END_OCP_AMT
+     , S.LY_MTD_CSM_AMT AS LY_MTD_CSM_AMT
+     , ROUND((NVL(S.LY_LM_OCP_AMT, 0) + NVL(S.LY_END_OCP_AMT, 0)) / 2 / NULLIF(S.LY_MTD_CSM_AMT, 0) * 30, 2) AS LY_MTD_TOV_RATIO
+     , ROUND((NVL(S.ACT_LM_OCP_AMT, 0) + NVL(S.ACT_END_OCP_AMT, 0)) / 2 / NULLIF(S.ACT_MTD_CSM_AMT, 0) * 30, 2)
        - ROUND((NVL(S.LY_LM_OCP_AMT, 0) + NVL(S.LY_END_OCP_AMT, 0)) / 2 / NULLIF(S.LY_MTD_CSM_AMT, 0) * 30, 2) AS MTD_TOV_DIFF
-/* ==================== AO ~ AV: 当月因素 1..8 (期末, 实际) 8 列 ==================== */
-     , /* AO */ S.ACT_END_F1_ODUE_AMT AS ACT_END_F1_ODUE_AMT
-     , /* AP */ S.ACT_END_F2_EPAY_AMT AS ACT_END_F2_EPAY_AMT
-     , /* AQ */ S.ACT_END_F3_ECR_AMT AS ACT_END_F3_ECR_AMT
-     , /* AR */ S.ACT_END_F4_UREB_AMT AS ACT_END_F4_UREB_AMT
-     , /* AS */ S.ACT_END_F5_UFEE_AMT AS ACT_END_F5_UFEE_AMT
-     , /* AT */ S.ACT_END_F6_INVSM_AMT AS ACT_END_F6_INVSM_AMT
-     , /* AU */ S.ACT_END_F7_GSUB_AMT AS ACT_END_F7_GSUB_AMT
-     , /* AV */ S.ACT_END_F8_ADJ_AMT AS ACT_END_F8_ADJ_AMT
-/* ==================== AW ~ BD: 上月因素 1..8 (实际) 8 列 ==================== */
-     , /* AW */ S.ACT_LM_F1_ODUE_AMT AS ACT_LM_F1_ODUE_AMT
-     , /* AX */ S.ACT_LM_F2_EPAY_AMT AS ACT_LM_F2_EPAY_AMT
-     , /* AY */ S.ACT_LM_F3_ECR_AMT AS ACT_LM_F3_ECR_AMT
-     , /* AZ */ S.ACT_LM_F4_UREB_AMT AS ACT_LM_F4_UREB_AMT
-     , /* BA */ S.ACT_LM_F5_UFEE_AMT AS ACT_LM_F5_UFEE_AMT
-     , /* BB */ S.ACT_LM_F6_INVSM_AMT AS ACT_LM_F6_INVSM_AMT
-     , /* BC */ S.ACT_LM_F7_GSUB_AMT AS ACT_LM_F7_GSUB_AMT
-     , /* BD */ S.ACT_LM_F8_ADJ_AMT AS ACT_LM_F8_ADJ_AMT
-/* ==================== BE ~ BL: 同期上月因素 1..8 (同期) 8 列 ==================== */
-     , /* BE */ S.LY_LM_F1_ODUE_AMT AS LY_LM_F1_ODUE_AMT
-     , /* BF */ S.LY_LM_F2_EPAY_AMT AS LY_LM_F2_EPAY_AMT
-     , /* BG */ S.LY_LM_F3_ECR_AMT AS LY_LM_F3_ECR_AMT
-     , /* BH */ S.LY_LM_F4_UREB_AMT AS LY_LM_F4_UREB_AMT
-     , /* BI */ S.LY_LM_F5_UFEE_AMT AS LY_LM_F5_UFEE_AMT
-     , /* BJ */ S.LY_LM_F6_INVSM_AMT AS LY_LM_F6_INVSM_AMT
-     , /* BK */ S.LY_LM_F7_GSUB_AMT AS LY_LM_F7_GSUB_AMT
-     , /* BL */ S.LY_LM_F8_ADJ_AMT AS LY_LM_F8_ADJ_AMT
-/* ==================== BM ~ BT: 同期期末因素 1..8 (同期) 8 列 ==================== */
-     , /* BM */ S.LY_END_F1_ODUE_AMT AS LY_END_F1_ODUE_AMT
-     , /* BN */ S.LY_END_F2_EPAY_AMT AS LY_END_F2_EPAY_AMT
-     , /* BO */ S.LY_END_F3_ECR_AMT AS LY_END_F3_ECR_AMT
-     , /* BP */ S.LY_END_F4_UREB_AMT AS LY_END_F4_UREB_AMT
-     , /* BQ */ S.LY_END_F5_UFEE_AMT AS LY_END_F5_UFEE_AMT
-     , /* BR */ S.LY_END_F6_INVSM_AMT AS LY_END_F6_INVSM_AMT
-     , /* BS */ S.LY_END_F7_GSUB_AMT AS LY_END_F7_GSUB_AMT
-     , /* BT */ S.LY_END_F8_ADJ_AMT AS LY_END_F8_ADJ_AMT
-/* ==================== BU ~ CC: 累计周转区 (9 列): 年初占用 / 累计占用 / 累计收入 / 累计周转 / 同期 / 较同期 ==================== */
-     , /* BU */ S.ACT_BEG_OCP_AMT AS ACT_BEG_OCP_AMT
-     , /* BV */ S.ACT_YTD_OCP_AMT AS ACT_YTD_OCP_AMT
-     , /* BW */ S.ACT_YTD_CSM_AMT AS ACT_YTD_CSM_AMT
-     , /* BX */ ROUND((NVL(S.ACT_BEG_OCP_AMT, 0) / 2 + NVL(S.ACT_YTD_OCP_AMT, 0) - NVL(S.ACT_END_OCP_AMT, 0) / 2) / NULLIF(S.ACT_YTD_CSM_AMT, 0) * 30, 2) AS ACT_YTD_TOV_RATIO
-     , /* BY */ S.LY_BEG_OCP_AMT AS LY_BEG_OCP_AMT
-     , /* BZ */ S.LY_YTD_OCP_AMT AS LY_YTD_OCP_AMT
-     , /* CA */ S.LY_YTD_CSM_AMT AS LY_YTD_CSM_AMT
-     , /* CB */ ROUND((NVL(S.LY_BEG_OCP_AMT, 0) / 2 + NVL(S.LY_YTD_OCP_AMT, 0) - NVL(S.LY_END_OCP_AMT, 0) / 2) / NULLIF(S.LY_YTD_CSM_AMT, 0) * 30, 2) AS LY_YTD_TOV_RATIO
-     , /* CC */ ROUND((NVL(S.ACT_BEG_OCP_AMT, 0) / 2 + NVL(S.ACT_YTD_OCP_AMT, 0) - NVL(S.ACT_END_OCP_AMT, 0) / 2) / NULLIF(S.ACT_YTD_CSM_AMT, 0) * 30, 2)
+/* ==================== AQ ~ AX: 当月因素 1..8 (期末, 实际) 8 列 ==================== */
+     , S.ACT_END_F1_ODUE_AMT AS ACT_END_F1_ODUE_AMT
+     , S.ACT_END_F2_EPAY_AMT AS ACT_END_F2_EPAY_AMT
+     , S.ACT_END_F3_ECR_AMT AS ACT_END_F3_ECR_AMT
+     , S.ACT_END_F4_UREB_AMT AS ACT_END_F4_UREB_AMT
+     , S.ACT_END_F5_UFEE_AMT AS ACT_END_F5_UFEE_AMT
+     , S.ACT_END_F6_INVSM_AMT AS ACT_END_F6_INVSM_AMT
+     , S.ACT_END_F7_GSUB_AMT AS ACT_END_F7_GSUB_AMT
+     , S.ACT_END_F8_ADJ_AMT AS ACT_END_F8_ADJ_AMT
+/* ==================== AY ~ BF: 上月因素 1..8 (实际) 8 列 ==================== */
+     , S.ACT_LM_F1_ODUE_AMT AS ACT_LM_F1_ODUE_AMT
+     , S.ACT_LM_F2_EPAY_AMT AS ACT_LM_F2_EPAY_AMT
+     , S.ACT_LM_F3_ECR_AMT AS ACT_LM_F3_ECR_AMT
+     , S.ACT_LM_F4_UREB_AMT AS ACT_LM_F4_UREB_AMT
+     , S.ACT_LM_F5_UFEE_AMT AS ACT_LM_F5_UFEE_AMT
+     , S.ACT_LM_F6_INVSM_AMT AS ACT_LM_F6_INVSM_AMT
+     , S.ACT_LM_F7_GSUB_AMT AS ACT_LM_F7_GSUB_AMT
+     , S.ACT_LM_F8_ADJ_AMT AS ACT_LM_F8_ADJ_AMT
+/* ==================== BG ~ BN: 同期上月因素 1..8 (同期) 8 列 ==================== */
+     , S.LY_LM_F1_ODUE_AMT AS LY_LM_F1_ODUE_AMT
+     , S.LY_LM_F2_EPAY_AMT AS LY_LM_F2_EPAY_AMT
+     , S.LY_LM_F3_ECR_AMT AS LY_LM_F3_ECR_AMT
+     , S.LY_LM_F4_UREB_AMT AS LY_LM_F4_UREB_AMT
+     , S.LY_LM_F5_UFEE_AMT AS LY_LM_F5_UFEE_AMT
+     , S.LY_LM_F6_INVSM_AMT AS LY_LM_F6_INVSM_AMT
+     , S.LY_LM_F7_GSUB_AMT AS LY_LM_F7_GSUB_AMT
+     , S.LY_LM_F8_ADJ_AMT AS LY_LM_F8_ADJ_AMT
+/* ==================== BO ~ BV: 同期期末因素 1..8 (同期) 8 列 ==================== */
+     , S.LY_END_F1_ODUE_AMT AS LY_END_F1_ODUE_AMT
+     , S.LY_END_F2_EPAY_AMT AS LY_END_F2_EPAY_AMT
+     , S.LY_END_F3_ECR_AMT AS LY_END_F3_ECR_AMT
+     , S.LY_END_F4_UREB_AMT AS LY_END_F4_UREB_AMT
+     , S.LY_END_F5_UFEE_AMT AS LY_END_F5_UFEE_AMT
+     , S.LY_END_F6_INVSM_AMT AS LY_END_F6_INVSM_AMT
+     , S.LY_END_F7_GSUB_AMT AS LY_END_F7_GSUB_AMT
+     , S.LY_END_F8_ADJ_AMT AS LY_END_F8_ADJ_AMT
+/* ==================== BW ~ CE: 累计周转区 (9 列): 年初占用 / 累计占用 / 累计收入 / 累计周转 / 同期 / 较同期 ==================== */
+     , S.ACT_BEG_OCP_AMT AS ACT_BEG_OCP_AMT
+     , S.ACT_YTD_OCP_AMT AS ACT_YTD_OCP_AMT
+     , S.ACT_YTD_CSM_AMT AS ACT_YTD_CSM_AMT
+     , ROUND((NVL(S.ACT_BEG_OCP_AMT, 0) / 2 + NVL(S.ACT_YTD_OCP_AMT, 0) - NVL(S.ACT_END_OCP_AMT, 0) / 2) / NULLIF(S.ACT_YTD_CSM_AMT, 0) * 30, 2) AS ACT_YTD_TOV_RATIO
+     , S.LY_BEG_OCP_AMT AS LY_BEG_OCP_AMT
+     , S.LY_YTD_OCP_AMT AS LY_YTD_OCP_AMT
+     , S.LY_YTD_CSM_AMT AS LY_YTD_CSM_AMT
+     , ROUND((NVL(S.LY_BEG_OCP_AMT, 0) / 2 + NVL(S.LY_YTD_OCP_AMT, 0) - NVL(S.LY_END_OCP_AMT, 0) / 2) / NULLIF(S.LY_YTD_CSM_AMT, 0) * 30, 2) AS LY_YTD_TOV_RATIO
+     , ROUND((NVL(S.ACT_BEG_OCP_AMT, 0) / 2 + NVL(S.ACT_YTD_OCP_AMT, 0) - NVL(S.ACT_END_OCP_AMT, 0) / 2) / NULLIF(S.ACT_YTD_CSM_AMT, 0) * 30, 2)
        - ROUND((NVL(S.LY_BEG_OCP_AMT, 0) / 2 + NVL(S.LY_YTD_OCP_AMT, 0) - NVL(S.LY_END_OCP_AMT, 0) / 2) / NULLIF(S.LY_YTD_CSM_AMT, 0) * 30, 2) AS YTD_TOV_DIFF
-/* ==================== CD ~ CK: 年初因素 1..8 (实际) 8 列  v2 新增 ==================== */
-     , /* CD */ S.ACT_BEG_F1_ODUE_AMT AS ACT_BEG_F1_ODUE_AMT
-     , /* CE */ S.ACT_BEG_F2_EPAY_AMT AS ACT_BEG_F2_EPAY_AMT
-     , /* CF */ S.ACT_BEG_F3_ECR_AMT AS ACT_BEG_F3_ECR_AMT
-     , /* CG */ S.ACT_BEG_F4_UREB_AMT AS ACT_BEG_F4_UREB_AMT
-     , /* CH */ S.ACT_BEG_F5_UFEE_AMT AS ACT_BEG_F5_UFEE_AMT
-     , /* CI */ S.ACT_BEG_F6_INVSM_AMT AS ACT_BEG_F6_INVSM_AMT
-     , /* CJ */ S.ACT_BEG_F7_GSUB_AMT AS ACT_BEG_F7_GSUB_AMT
-     , /* CK */ S.ACT_BEG_F8_ADJ_AMT AS ACT_BEG_F8_ADJ_AMT
-/* ==================== CL ~ CS: 累计因素 1..8 (实际) 8 列 ==================== */
-     , /* CL */ S.ACT_YTD_F1_ODUE_AMT AS ACT_YTD_F1_ODUE_AMT
-     , /* CM */ S.ACT_YTD_F2_EPAY_AMT AS ACT_YTD_F2_EPAY_AMT
-     , /* CN */ S.ACT_YTD_F3_ECR_AMT AS ACT_YTD_F3_ECR_AMT
-     , /* CO */ S.ACT_YTD_F4_UREB_AMT AS ACT_YTD_F4_UREB_AMT
-     , /* CP */ S.ACT_YTD_F5_UFEE_AMT AS ACT_YTD_F5_UFEE_AMT
-     , /* CQ */ S.ACT_YTD_F6_INVSM_AMT AS ACT_YTD_F6_INVSM_AMT
-     , /* CR */ S.ACT_YTD_F7_GSUB_AMT AS ACT_YTD_F7_GSUB_AMT
-     , /* CS */ S.ACT_YTD_F8_ADJ_AMT AS ACT_YTD_F8_ADJ_AMT
-/* ==================== CT ~ DA: 同期年初因素 1..8  v2 新增 ==================== */
-     , /* CT */ S.LY_BEG_F1_ODUE_AMT AS LY_BEG_F1_ODUE_AMT
-     , /* CU */ S.LY_BEG_F2_EPAY_AMT AS LY_BEG_F2_EPAY_AMT
-     , /* CV */ S.LY_BEG_F3_ECR_AMT AS LY_BEG_F3_ECR_AMT
-     , /* CW */ S.LY_BEG_F4_UREB_AMT AS LY_BEG_F4_UREB_AMT
-     , /* CX */ S.LY_BEG_F5_UFEE_AMT AS LY_BEG_F5_UFEE_AMT
-     , /* CY */ S.LY_BEG_F6_INVSM_AMT AS LY_BEG_F6_INVSM_AMT
-     , /* CZ */ S.LY_BEG_F7_GSUB_AMT AS LY_BEG_F7_GSUB_AMT
-     , /* DA */ S.LY_BEG_F8_ADJ_AMT AS LY_BEG_F8_ADJ_AMT
-/* ==================== DB ~ DI: 同期累计因素 1..8 (同期) 8 列 ==================== */
-     , /* DB */ S.LY_YTD_F1_ODUE_AMT AS LY_YTD_F1_ODUE_AMT
-     , /* DC */ S.LY_YTD_F2_EPAY_AMT AS LY_YTD_F2_EPAY_AMT
-     , /* DD */ S.LY_YTD_F3_ECR_AMT AS LY_YTD_F3_ECR_AMT
-     , /* DE */ S.LY_YTD_F4_UREB_AMT AS LY_YTD_F4_UREB_AMT
-     , /* DF */ S.LY_YTD_F5_UFEE_AMT AS LY_YTD_F5_UFEE_AMT
-     , /* DG */ S.LY_YTD_F6_INVSM_AMT AS LY_YTD_F6_INVSM_AMT
-     , /* DH */ S.LY_YTD_F7_GSUB_AMT AS LY_YTD_F7_GSUB_AMT
-     , /* DI */ S.LY_YTD_F8_ADJ_AMT AS LY_YTD_F8_ADJ_AMT
+/* ==================== CF ~ CM: 年初因素 1..8 (实际) 8 列  v2 新增 ==================== */
+     , S.ACT_BEG_F1_ODUE_AMT AS ACT_BEG_F1_ODUE_AMT
+     , S.ACT_BEG_F2_EPAY_AMT AS ACT_BEG_F2_EPAY_AMT
+     , S.ACT_BEG_F3_ECR_AMT AS ACT_BEG_F3_ECR_AMT
+     , S.ACT_BEG_F4_UREB_AMT AS ACT_BEG_F4_UREB_AMT
+     , S.ACT_BEG_F5_UFEE_AMT AS ACT_BEG_F5_UFEE_AMT
+     , S.ACT_BEG_F6_INVSM_AMT AS ACT_BEG_F6_INVSM_AMT
+     , S.ACT_BEG_F7_GSUB_AMT AS ACT_BEG_F7_GSUB_AMT
+     , S.ACT_BEG_F8_ADJ_AMT AS ACT_BEG_F8_ADJ_AMT
+/* ==================== CN ~ CU: 累计因素 1..8 (实际) 8 列 ==================== */
+     , S.ACT_YTD_F1_ODUE_AMT AS ACT_YTD_F1_ODUE_AMT
+     , S.ACT_YTD_F2_EPAY_AMT AS ACT_YTD_F2_EPAY_AMT
+     , S.ACT_YTD_F3_ECR_AMT AS ACT_YTD_F3_ECR_AMT
+     , S.ACT_YTD_F4_UREB_AMT AS ACT_YTD_F4_UREB_AMT
+     , S.ACT_YTD_F5_UFEE_AMT AS ACT_YTD_F5_UFEE_AMT
+     , S.ACT_YTD_F6_INVSM_AMT AS ACT_YTD_F6_INVSM_AMT
+     , S.ACT_YTD_F7_GSUB_AMT AS ACT_YTD_F7_GSUB_AMT
+     , S.ACT_YTD_F8_ADJ_AMT AS ACT_YTD_F8_ADJ_AMT
+/* ==================== CV ~ DC: 同期年初因素 1..8  v2 新增 ==================== */
+     , S.LY_BEG_F1_ODUE_AMT AS LY_BEG_F1_ODUE_AMT
+     , S.LY_BEG_F2_EPAY_AMT AS LY_BEG_F2_EPAY_AMT
+     , S.LY_BEG_F3_ECR_AMT AS LY_BEG_F3_ECR_AMT
+     , S.LY_BEG_F4_UREB_AMT AS LY_BEG_F4_UREB_AMT
+     , S.LY_BEG_F5_UFEE_AMT AS LY_BEG_F5_UFEE_AMT
+     , S.LY_BEG_F6_INVSM_AMT AS LY_BEG_F6_INVSM_AMT
+     , S.LY_BEG_F7_GSUB_AMT AS LY_BEG_F7_GSUB_AMT
+     , S.LY_BEG_F8_ADJ_AMT AS LY_BEG_F8_ADJ_AMT
+/* ==================== DD ~ DK: 同期累计因素 1..8 (同期) 8 列 ==================== */
+     , S.LY_YTD_F1_ODUE_AMT AS LY_YTD_F1_ODUE_AMT
+     , S.LY_YTD_F2_EPAY_AMT AS LY_YTD_F2_EPAY_AMT
+     , S.LY_YTD_F3_ECR_AMT AS LY_YTD_F3_ECR_AMT
+     , S.LY_YTD_F4_UREB_AMT AS LY_YTD_F4_UREB_AMT
+     , S.LY_YTD_F5_UFEE_AMT AS LY_YTD_F5_UFEE_AMT
+     , S.LY_YTD_F6_INVSM_AMT AS LY_YTD_F6_INVSM_AMT
+     , S.LY_YTD_F7_GSUB_AMT AS LY_YTD_F7_GSUB_AMT
+     , S.LY_YTD_F8_ADJ_AMT AS LY_YTD_F8_ADJ_AMT
   FROM SRC S
 /* 渠道层级扁平视图：用 D_CHANNEL 匹配 COD，带出一级/二级公司分类（第 6/7 级编码）。 */
+/* ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。 */
 /* ALTER BY ZHOUHONG.EX 20261022 11:49:36 原表 ED_D_CHANNEL_GERARCHIA_FLAT 不可用，改 V_ED_D_CHANNEL_FLAT。 */
   LEFT JOIN TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT G
     ON G.COD = S.D_CHANNEL
+   AND G.COD_GERARCHIA = '01'
 /* 业务范围层级扁平表：取 HIE='01' 的 4 级 / 5 级描述，4 级优先作为「大区」。 */
   LEFT JOIN (
         SELECT COD_DEST3

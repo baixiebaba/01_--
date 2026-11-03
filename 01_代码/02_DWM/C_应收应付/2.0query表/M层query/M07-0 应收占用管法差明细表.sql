@@ -1,18 +1,17 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 09:53
- *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
- * 本次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
- * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
+ * 最后更新时间：20261103 14:08
+ * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ * 上次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
  *   ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
  *
  * 查询名称  ：应收占用管法差明细表
- * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM03_000001、AW_RUL_ARPTOV_000001 等，详见正文。
+ * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、AW_RUL_ARPTOV_000001 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
- *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 统一查询说明文件头为查询名称+源表精简版式，未修改业务主体。
  *   ALTER BY 20261029 15:15 SHIQINGFENG.EX 排除法人口径、管理口径及调整金额全部为0的明细记录。
@@ -39,6 +38,7 @@ HITACHI_COMPANY AS (
      WHERE A.HIE = '10'
        AND A.NODE = '050'
 ),
+/* ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。 */
 /* 公司分类层级：一级、二级节点描述保留层级视图原值，三级维度要素名称在输出层通过函数获取。 */
 CHANNEL_DIM AS (
     SELECT C.COD AS CHANNEL_L3_CODE
@@ -48,6 +48,7 @@ CHANNEL_DIM AS (
          , MAX(C.COD_ELEGER6) AS CHANNEL_L1_CODE
          , MAX(C.DESC_ELEGER6) AS CHANNEL_L1_NAME
       FROM TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT C
+     WHERE C.COD_GERARCHIA = '01'
      GROUP BY C.COD
 ),
 /* DEST3????:?HIE=01取得大区描述，优先使用4级节点，4级为空时回退5级节点。 */
@@ -202,8 +203,8 @@ SELECT A.COD_SCENARIO AS SCENARIO                                      /* 场景
      , C.CHANNEL_L1_NAME                                               /* 一级公司分类名称 */
      , C.CHANNEL_L2_CODE                                               /* 二级公司分类编码 */
      , C.CHANNEL_L2_NAME                                               /* 二级公司分类名称 */
-     , C.CHANNEL_L3_CODE                                               /* 三级公司分类编码 */
-     , F_TGK_GET_DIMNAME('D_CHANNEL', C.CHANNEL_L3_CODE) AS CHANNEL_L3_NAME  /* 三级公司分类名称 */
+     , A.D_CHANNEL                                                     /* 三级公司分类编码 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL', A.D_CHANNEL) AS CHANNEL_L3_NAME  /* 三级公司分类名称 */
      , A.D_ONOFFLINE AS CHANNEL_GROUP_CODE                             /* 渠道分组编码 */
      , F_TGK_GET_DIMNAME('D_ONOFFLINE', A.D_ONOFFLINE) AS CHANNEL_GROUP_NAME  /* 渠道分组名称 */
      , A.PROFITCENTER_CODE                                             /* 利润中心编码 */

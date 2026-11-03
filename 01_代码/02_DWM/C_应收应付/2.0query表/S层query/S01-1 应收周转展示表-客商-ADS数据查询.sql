@@ -1,19 +1,19 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 11:24
- * 本次修改：ALTER BY 20261103 11:24 SHIQINGFENG.EX 按最新规范统一参数条件运算符两侧保留一个空格，修正 D_BG IN 条件排版，未修改业务逻辑。
- * 上次修改：ALTER BY 20261103 11:20 SHIQINGFENG.EX 新增维度描述字段，统一使用 F_TGK_GET_DIMNAME 取值且不使用解码函数，未修改金额和过滤逻辑。
+ * 最后更新时间：20261103 14:08
+ * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ * 上次修改：ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，未修改金额和过滤逻辑。
  *
  * 查询名称  ：应收周转展示表-客商-ADS数据查询
- * 源表      ：AW_MR7_ARPA01_000001，详见正文。
+ * 源表      ：AW_MR7_ARPA01_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT，详见正文。
  *
  * 修改历史：
- *   ALTER BY 20261103 11:24 SHIQINGFENG.EX 按最新规范统一参数条件运算符两侧保留一个空格，修正 D_BG IN 条件排版，未修改业务逻辑。
- *   ALTER BY 20261103 11:20 SHIQINGFENG.EX 新增维度描述字段，统一使用 F_TGK_GET_DIMNAME 取值且不使用解码函数，未修改金额和过滤逻辑。
+ *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ *   ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，未修改金额和过滤逻辑。
  *******************************************************************************/
-/* ==================== 维度及描述（31列） ==================== */
-/* ALTER BY 20261103 11:20 SHIQINGFENG.EX 新增维度描述字段，统一使用 F_TGK_GET_DIMNAME 取值且不使用解码函数，未修改金额和过滤逻辑。 */
+/* ==================== 维度及描述（33列） ==================== */
+/* ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，未修改金额和过滤逻辑。 */
 SELECT T.COD_SCENARIO
      , T.COD_PERIODO
      , T.D_BG
@@ -28,6 +28,10 @@ SELECT T.COD_SCENARIO
      , T.CUST_BRANCH_CODE
      , T.CUST_BRANCH_NAME
      , T.COD_AZI_CTP
+     , G.COD_ELEGER6 AS COD_ELEGER6       /* 公司一级分类编码 */
+     , G.DESC_ELEGER6 AS DESC_ELEGER6   /* 公司一级分类描述 */
+     , G.COD_ELEGER5 AS COD_ELEGER5       /* 公司二级分类编码 */
+     , G.DESC_ELEGER5 AS DESC_ELEGER5   /* 公司二级分类描述 */
      , T.D_CHANNEL
      , F_TGK_GET_DIMNAME('D_CHANNEL', NVL(T.D_CHANNEL, 'ZZZZ')) AS D_CHANNEL_DESC
      , T.D_ONOFFLINE
@@ -141,7 +145,10 @@ SELECT T.COD_SCENARIO
      , T.DATEUPD
      , T.USERUPD
   FROM AW_MR7_ARPA01_000001 T
- /* ALTER BY 20261103 11:24 SHIQINGFENG.EX 按最新规范统一参数条件运算符两侧保留一个空格，修正 D_BG IN 条件排版，未修改业务逻辑。 */
+/* ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。 */
+  LEFT JOIN TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT G
+    ON G.COD = T.D_CHANNEL
+   AND G.COD_GERARCHIA = '01'
  WHERE T.COD_SCENARIO = ${$Scenario.code}
    AND T.COD_PERIODO = ${$Period.code}
    /* 公司和事业部范围由报表参数传入，保留 IN 写法支持多值参数。 */

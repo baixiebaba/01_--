@@ -1,19 +1,32 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 09:53
- *   ALTER BY 20261102 17:26 SHIQINGFENG.EX 将公司参数筛选由等值判断统一为 IN 写法，并统一 Query 排版，未修改其他逻辑。
- * 本次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
- * 上次修改：ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
+ * 最后更新时间：20261103 14:08
+ * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ * 上次修改：ALTER BY 20261103 14:04 SHIQINGFENG.EX 将公司分类标量子查询改为去重后的 CHANNEL_DIM 关联，未修改业务逻辑。
  *
  * 查询名称  ：账龄汇总展示表（含坏账）
- * 源表      ：AW_MR9_ARPM02_000001
+ * 源表      ：AW_MR9_ARPM02_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT，详见正文。
  *
  * 修改历史：
- *   ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
+ *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ *   ALTER BY 20261103 14:04 SHIQINGFENG.EX 将公司分类标量子查询改为去重后的 CHANNEL_DIM 关联，未修改业务逻辑。
  *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
  *   ALTER BY 20261102 17:26 SHIQINGFENG.EX 将公司参数筛选由等值判断统一为 IN 写法，并统一 Query 排版，未修改其他逻辑。
  *******************************************************************************/
+WITH
+/* 按公司三级分类编码去重，供公司一级、二级分类字段关联，避免明细行被层级表重复记录放大。 */
+CHANNEL_DIM AS (
+    SELECT C.COD
+         , MAX(C.COD_ELEGER6) AS COD_ELEGER6
+         , MAX(C.DESC_ELEGER6) AS DESC_ELEGER6
+         , MAX(C.COD_ELEGER5) AS COD_ELEGER5
+         , MAX(C.DESC_ELEGER5) AS DESC_ELEGER5
+      FROM TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT C
+     WHERE C.COD_GERARCHIA = '01'
+     GROUP BY C.COD
+)
+/* ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。 */
 SELECT COD_SCENARIO                                                       /* 场景 */
      , COD_PERIODO                                                        /* 期间 */
      , COD_AZIENDA                                                        /* 公司 */
@@ -38,6 +51,11 @@ SELECT COD_SCENARIO                                                       /* 场
      , NATURE_L1_NAME                                                     /* 一级性质 */
      , NATURE_L2_NAME                                                     /* 二级性质 */
      , NATURE_L3_NAME                                                     /* 三级性质 */
+/* ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，未修改金额和过滤逻辑。 */
+     , C.COD_ELEGER6 AS COD_ELEGER6                                  /* 公司一级分类编码 */
+     , C.DESC_ELEGER6 AS DESC_ELEGER6                                /* 公司一级分类描述 */
+     , C.COD_ELEGER5 AS COD_ELEGER5                                  /* 公司二级分类编码 */
+     , C.DESC_ELEGER5 AS DESC_ELEGER5                                /* 公司二级分类描述 */
      , D_CHANNEL                                                          /* 公司三级分类 */
      , F_TGK_GET_DIMNAME('D_CHANNEL', D_CHANNEL) AS D_CHANNEL_DESC        /* 三级公司分类名称 */
      , D_ONOFFLINE                                                        /* 渠道分组 */
@@ -169,6 +187,8 @@ SELECT COD_SCENARIO                                                       /* 场
      , A.USERUPD                                                          /* 更新用户 */
      , A.DATEUPD                                                          /* 更新时间 */
   FROM AW_MR9_ARPM02_000001 A
+  LEFT JOIN CHANNEL_DIM C
+    ON C.COD = A.D_CHANNEL
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
