@@ -1,9 +1,10 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 14:53
- * 本次修改：ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。
- * 上次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+ * 最后更新时间：20261103 16:45
+ * 本次修改：ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
+ * 上次修改：ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。
+ *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -18,6 +19,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
  *   ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *   ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段停用（注释保留）。
@@ -1329,9 +1331,18 @@ ar_profitcenter_rule AS (
             , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
             , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '')
 ),
--- 按周转渠道、公司、旧利润中心、科目和渠道分组生成利润中心候选。
+-- 电商零售类客户的渠道BU清单：客商类型规则库按渠道BU圈定客户范围，有效期与利润中心映射同口径。
+ecomm_channel_bu AS (
+    SELECT DISTINCT TRIM(channel_bu_code) AS channel_bu_code
+      FROM dim.dim_rule_fi_mr_ar_cust_type
+     WHERE TRIM(cust_type) = '电商零售类客户'
+       AND NULLIF(TRIM(channel_bu_code), '') IS NOT NULL
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+),
+-- 按渠道BU、公司、旧利润中心、科目和渠道分组生成利润中心候选。
 profitcenter_candidate AS (
-    /* ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道停用，依赖其ARTA_A_07前缀的利润中心 batch_id=1 规则整支停用。
+    -- ALTER BY 20261103 16:45 SHIQINGFENG.EX 电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库的渠道BU编码判定，命中后走batch_id=1旧利润中心→新利润中心映射。
     SELECT b.fact_key
          , r.batch_id
          , r.profitcenter_code
@@ -1348,51 +1359,36 @@ profitcenter_candidate AS (
                          , COALESCE(a.acct_cert_item, '')
                        )
                    ) AS fact_key
-                 , a.system_src
-                 , a.ods_src
-                 , a.company_code
-                 , a.gjahr
-                 , a.acct_cert_id
-                 , a.acct_cert_item
                  , a.src_profitcenter_code
-                 , a.acct_src_code
-                 , tc.tov_channel_code
-                 , CASE
-                       WHEN nf.fact_key IS NOT NULL THEN nf.onoffline_code
-                       ELSE '020_OFF_002'
-                   END AS onoffline_code
+                 , bu.channel_bu_code
               FROM normalized_items a
-              LEFT JOIN tov_channel_pick tc
-                ON tc.fact_key = MD5(
-                       CONCAT_WS(
-                           '|'
-                         , COALESCE(a.system_src, '')
-                         , COALESCE(a.ods_src, '')
-                         , COALESCE(a.company_code, '')
-                         , COALESCE(a.gjahr, '')
-                         , COALESCE(a.acct_cert_id, '')
-                         , COALESCE(a.acct_cert_item, '')
-                       )
-                   )
-              LEFT JOIN nf_final nf
-                ON nf.fact_key = MD5(
-                       CONCAT_WS(
-                           '|'
-                         , COALESCE(a.system_src, '')
-                         , COALESCE(a.ods_src, '')
-                         , COALESCE(a.company_code, '')
-                         , COALESCE(a.gjahr, '')
-                         , COALESCE(a.acct_cert_id, '')
-                         , COALESCE(a.acct_cert_item, '')
-                       )
-                   )
+              LEFT JOIN customer_supplier_dim ch
+                ON ch.cust_sap_code = CASE
+                                          WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
+                                              THEN a.cust_branch_code
+                                          ELSE a.cust_head_code
+                                      END
+               AND ch.cust_sap_client = a.system_src
+               AND ch.cust_supp_type = CASE
+                                          WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                          ELSE 'S'
+                                      END
+              LEFT JOIN (
+                    SELECT TRIM(com_3rd_code) AS com_3rd_code
+                         , MAX(channel_bu_code) AS channel_bu_code
+                      FROM dim.dim_rule_mrs_mr3_channel_bu_relation
+                     GROUP BY TRIM(com_3rd_code)
+              ) bu
+                ON bu.com_3rd_code = ch.com_3rd_code
       ) b
      INNER JOIN ar_profitcenter_rule r
         ON r.batch_id = 1
-       AND b.tov_channel_code LIKE 'ARTA_A_07%'
+       AND b.channel_bu_code IN (
+              SELECT channel_bu_code
+                FROM ecomm_channel_bu
+           )
        AND r.src_profitcenter_code = b.src_profitcenter_code
     UNION ALL
-    */
     SELECT b.fact_key
          , r.batch_id
          , r.profitcenter_code
