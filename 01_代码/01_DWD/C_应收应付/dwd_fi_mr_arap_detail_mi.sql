@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 16:45
- * 本次修改：ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
- * 上次修改：ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。
+ * 最后更新时间：20261103 17:45
+ * 本次修改：ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果：重映射（batch 1→3→4→5）未命中时回退源利润中心，参与busdept batch1与bmu兜底匹配（修复6800因利润中心batch1停用导致业务管理单元全空）。
+ * 上次修改：ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
@@ -19,6 +19,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果：重映射（batch 1→3→4→5）未命中时回退源利润中心，参与busdept batch1与bmu兜底匹配（修复6800因利润中心batch1停用导致业务管理单元全空）。
  *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
  *   ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
@@ -1546,6 +1547,8 @@ ar_mapping_base AS (
          , ch.com_2nd_code AS channel_l2_code
          , ch.country_code
          , pc.profitcenter_code
+         -- ALTER BY 20261103 17:45 SHIQINGFENG.EX 带出源利润中心，供业务管理单元映射在重映射未命中时回退
+         , a.src_profitcenter_code
          , cs.company_scope
          , k.kverm
       FROM normalized_items a
@@ -1780,7 +1783,8 @@ ar_busdept_rule AS (
             , profitcenter_code
             , nature_l3_name
 ),
--- 按1（系统+映射后利润中心）→2（系统+三级性质）→3（系统+公司）生成业务管理单元候选。
+-- 按1（系统+映射后利润中心，未命中回退源利润中心）→2（系统+三级性质）→3（系统+公司）生成业务管理单元候选。
+-- ALTER BY 20261103 17:45 SHIQINGFENG.EX 重映射未命中时回退源利润中心参与映射，修复6800业务管理单元全空。
 ar_busdept_candidate AS (
     SELECT b.fact_key
          , r.batch_id
@@ -1790,7 +1794,8 @@ ar_busdept_candidate AS (
      INNER JOIN ar_busdept_rule r
         ON r.batch_id = 1
        AND r.system_src = b.system_src
-       AND r.profitcenter_code = b.profitcenter_code
+       -- ALTER BY 20261103 17:45 SHIQINGFENG.EX 映射后利润中心为空时回退源利润中心参与匹配
+       AND r.profitcenter_code = COALESCE(NULLIF(TRIM(b.profitcenter_code), ''), b.src_profitcenter_code)
     UNION ALL
     SELECT b.fact_key
          , r.batch_id
@@ -1848,7 +1853,8 @@ ar_bmu_profitcenter_pick AS (
          , MAX(r.bmu_name) AS bmu_name
       FROM ar_mapping_base b
      INNER JOIN ar_bmu_profitcenter_rule r
-        ON r.profitcenter_code = NULLIF(LTRIM(TRIM(b.profitcenter_code), '0'), '')
+        -- ALTER BY 20261103 17:45 SHIQINGFENG.EX 映射后利润中心为空时回退源利润中心参与兜底匹配
+        ON r.profitcenter_code = NULLIF(LTRIM(TRIM(COALESCE(NULLIF(TRIM(b.profitcenter_code), ''), b.src_profitcenter_code)), '0'), '')
      GROUP BY b.fact_key
 ),
 -- 汇总业务范围与业务管理单元映射结果。
