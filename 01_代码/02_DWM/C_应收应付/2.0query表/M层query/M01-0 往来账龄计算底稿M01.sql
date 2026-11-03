@@ -1,14 +1,16 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 17:35
- * 本次修改：ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
- * 上次修改：ALTER BY 20261102 17:23 SHIQINGFENG.EX 统一 Query 文件头、关键字大小写、字段逐行排列和查询条件排版，未修改业务主体。
+ * 最后更新时间：20261103 09:53
+ *   ALTER BY 20261102 17:23 SHIQINGFENG.EX 统一 Query 文件头、关键字大小写、字段逐行排列和查询条件排版，未修改业务主体。
+ * 本次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
+ * 上次修改：ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
  *
  * 查询名称  ：往来账龄计算底稿M01
  * 源表      ：AW_MR9_ARPM01_000001
  *
  * 修改历史：
+ *   ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
  *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
  *   ALTER BY 20261102 17:23 SHIQINGFENG.EX 统一 Query 文件头、关键字大小写、字段逐行排列和查询条件排版，未修改业务主体。
  *******************************************************************************/
@@ -48,8 +50,8 @@ SELECT COD_SCENARIO                                                       /* 场
      , F_TGK_GET_DIMNAME('DEST3', COD_DEST3) AS COD_DEST3_DESC            /* 业务范围名称 */
      , D_SALE_DEPT                                                        /* 业务管理单元 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', D_SALE_DEPT) AS D_SALE_DEPT_DESC  /* 业务管理单元名称 */
-     , D_CHANNEL_BU                                                         /* 【二期新增】应收周转分析渠道 */
-     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', D_CHANNEL_BU) AS D_TOV_CHAN_DESC     /* 周转分析渠道名称 */
+     , D_CHANNEL_BU                                                       /* 【二期新增】渠道BU */
+     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', D_CHANNEL_BU) AS D_TOV_CHAN_DESC  /* 渠道BU名称 */
      , D_CC_CUSTGRP                                                       /* 【二期新增】商冷客户群 */
      , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', D_CC_CUSTGRP) AS D_CC_CUSTGRP_DESC  /* 商冷客户群名称 */
      , COD_VALUTA                                                         /* 本位币币种 */

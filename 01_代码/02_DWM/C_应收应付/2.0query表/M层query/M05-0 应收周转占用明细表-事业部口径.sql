@@ -1,14 +1,16 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 最后更新时间：20261103 09:53
+ *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 本次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
+ * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *
  * 查询名称  ：应收周转占用明细表-事业部口径
  * 源表      ：AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
@@ -83,9 +85,9 @@ SELECT
  /* 销售部门 */
      , B.D_SALE_DEPT                                                             /* 业务管理单元编码 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', B.D_SALE_DEPT)    AS D_SALE_DEPT_DESC    /* 业务管理单元名称 */
- /* TOV 渠道 */
-     , B.D_CHANNEL_BU                                                              /* 周转分析渠道 */
-     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', B.D_CHANNEL_BU)     AS D_TOV_CHAN_DESC      /* 周转分析渠道名称 */
+ /* 渠道BU */
+     , B.D_CHANNEL_BU                                                            /* 渠道BU编码 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', B.D_CHANNEL_BU)     AS D_TOV_CHAN_DESC  /* 渠道BU名称 */
  /* CC 客户组 */
      , B.D_CC_CUSTGRP                                                            /* 商冷客户群 */
      , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', B.D_CC_CUSTGRP)   AS D_CC_CUSTGRP_DESC  /* 商冷客户群名称 */
@@ -204,7 +206,7 @@ SELECT
     ON G.COD = B.D_CHANNEL
 /* DEST3 层级扁平表 (hie = '01' 切片) */
   LEFT JOIN (
- SELECT COD_DEST3, DESC_DEST3_ELEGER3, DESC_DEST3_ELEGER4, AS DESC_DEST3_ELEGER5
+ SELECT COD_DEST3, DESC_DEST3_ELEGER3, DESC_DEST3_ELEGER4, DESC_DEST3_ELEGER5
    FROM DEST3_GERARCHIA_FLAT
   WHERE COD_DEST3_GERARCHIA = '01'
 ) DEST3_GERARCHIA_FLAT

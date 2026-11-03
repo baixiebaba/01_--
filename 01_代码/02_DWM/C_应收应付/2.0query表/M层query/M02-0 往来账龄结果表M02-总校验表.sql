@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 最后更新时间：20261103 10:31
+ * 本次修改：ALTER BY 20261103 10:31 SHIQINGFENG.EX 修复 Oracle FROM 子句中不支持的 AS 表别名写法，未修改业务逻辑。
+ * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *
  * 查询名称  ：往来账龄结果表M02-总校验表
  * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.FORM_DATI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261103 10:31 SHIQINGFENG.EX 修复 Oracle FROM 子句中不支持的 AS 表别名写法，未修改业务逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
@@ -144,13 +145,14 @@ TSD AS (
             , I.SEQ
             , I.ITEM_NAME
 ),
+/* ALTER BY 20261103 10:31 SHIQINGFENG.EX 修复 Oracle FROM 子句中不支持的 AS 表别名写法，未修改业务逻辑。 */
 /* 原合计口径的公司驱动集合，保留单体法人来源公司。 */
 COMPANY_DIM_TOTAL AS (
-    SELECT COMPANY_CODE FROM AS T20_TOTAL
+    SELECT COMPANY_CODE FROM T20_TOTAL
      UNION
-    SELECT COMPANY_CODE FROM AS T10_TOTAL
+    SELECT COMPANY_CODE FROM T10_TOTAL
      UNION
-    SELECT COMPANY_CODE FROM AS TSD
+    SELECT COMPANY_CODE FROM TSD
 ),
 /* ALTER BY SHIQINGFENG.EX 20261023 18:30 在原合计后新增集团所属范围三段校验；新增段Lordi固定为0且不参与校验。 */
 /* 新增三段校验配置：控制2.0集团所属范围、1.0类别和展示顺序。 */
@@ -213,9 +215,9 @@ T10_SCOPE AS (
 ),
 /* 新增范围口径的公司驱动集合，仅由2.0和1.0账龄表构成。 */
 COMPANY_DIM_SCOPE AS (
-    SELECT COMPANY_CODE FROM AS T20_SCOPE
+    SELECT COMPANY_CODE FROM T20_SCOPE
      UNION
-    SELECT COMPANY_CODE FROM AS T10_SCOPE
+    SELECT COMPANY_CODE FROM T10_SCOPE
 ),
 /* 原合计结果：金额和单体法人校验逻辑保持原样，仅补充总计范围标识。 */
 TOTAL_RESULT AS (

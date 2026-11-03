@@ -1,15 +1,17 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 最后更新时间：20261103 09:53
+ *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 本次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
+ * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
  *
  * 查询名称  ：应收占用管法差明细表
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM03_000001、AW_RUL_ARPTOV_000001 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 统一查询说明文件头为查询名称+源表精简版式，未修改业务主体。
@@ -210,8 +212,8 @@ SELECT A.COD_SCENARIO AS SCENARIO                                      /* 场景
      , F_TGK_GET_DIMNAME('DEST3', A.BUSINESS_RANGE_CODE) AS BUSINESS_RANGE_NAME  /* 业务范围名称 */
      , A.SALE_DEPT_CODE                                                /* 业务管理单元编码 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', A.SALE_DEPT_CODE) AS SALE_DEPT_NAME  /* 业务管理单元名称 */
-     , A.TOV_CHANNEL_CODE                                              /* 周转分析渠道编码 */
-     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', A.TOV_CHANNEL_CODE) AS TOV_CHANNEL_NAME  /* 周转分析渠道名称 */
+     , A.TOV_CHANNEL_CODE                                              /* 渠道BU编码 */
+     , F_TGK_GET_DIMNAME('D_CHANNEL_BU', A.TOV_CHANNEL_CODE) AS TOV_CHANNEL_NAME  /* 渠道BU名称 */
      , A.CC_CUST_GROUP_CODE                                            /* 商冷客户群编码 */
      , F_TGK_GET_DIMNAME('D_CC_CUSTGRP', A.CC_CUST_GROUP_CODE) AS CC_CUST_GROUP_NAME  /* 商冷客户群名称 */
      , A.LOCAL_CURRENCY_CODE                                           /* 本位币币种 */
