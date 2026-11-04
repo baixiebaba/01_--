@@ -7,24 +7,23 @@ CREATE OR REPLACE PROCEDURE TGK_FIMA_HISENSE.CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261102 16:10
-   * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换；签名行恢复TGK_FIMA_HISENSE前缀与线上一致。
-   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
+   * 最后更新时间：20261104 12:10
+   * 本次修改：ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
+   * 上次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2 
    * 功能描述  ：DWD->DWM往来账龄数据抽取
-   * 源表      ：DWD_FI_MR_ARAP_SUM_MI、AW_MR9_REVM01_000001、DIM_RULE_FI_MR_AR_PROFIT_MAPPING
+   * 源表      ：DWD_FI_MR_ARAP_SUM_MI、AW_MR9_REVM01_000001、DIM_RULE_FI_MR_AR_PROFIT_MAPPING、AW_MR9_ARPM01_000001（底稿调整数据自读）
    * 目标表    ：AW_MR9_ARPM01_000001
    * 
    * 修改历史：
+   *   ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
    *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换；签名行恢复TGK_FIMA_HISENSE前缀与线上一致。
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU：来源及装载列清单同步增加，出库与退货分支按D_CHANNEL同样从来源继承，MERGE列与值一一对齐。
    *   ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。
    *   ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射新增BATCH_ID=6（按公司company_code%+物料组material_group_code），优先级BATCH_ID=2>6>收入原利润中心。
    *   ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。
-   *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
-   *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
    *   ALTER BY 20261027 14:08 SHIQINGFENG.EX M01收入按BATCH_ID=2利润中心映射表转换为往来利润中心
    *   20261010 修正账龄标识对应科目映射、来源字段作用域及未命中时保留原科目
    *   20260924 汇率和税率处理由AG过程负责，D2M仅完成ARPM01来源装载及重分类标识回写
@@ -41,403 +40,498 @@ CREATE OR REPLACE PROCEDURE TGK_FIMA_HISENSE.CPM_SP_D2M_ARP_M_PHASE2(
   V_ERROR_COD     NUMBER;
   V_ERROR_MSG     VARCHAR2(4000);
 BEGIN
+  /* 会话与参数初始化：清理本会话残留数据，装载本次公司范围并计算期间参数，写入开始日志。 */
+  BEGIN
+    V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
+    /* 删除本session的参数公司，防止再同一个窗口跑中止后接着跑，之后出现公司范围扩大 */
+    DELETE FROM SESSION_AZIENDA_LIST
+     WHERE SESSION_ID = V_SESSION_ID;
+    DELETE FROM SESSION_V_REF_AZIENDA
+     WHERE SESSION_ID = V_SESSION_ID;
 
-  V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
-  /* 删除本session的参数公司，防止再同一个窗口跑中止后接着跑，之后出现公司范围扩大 */
-  DELETE FROM SESSION_AZIENDA_LIST
-   WHERE SESSION_ID = V_SESSION_ID;
-  DELETE FROM SESSION_V_REF_AZIENDA
-   WHERE SESSION_ID = V_SESSION_ID;
+    INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
+    SELECT V_SESSION_ID, HIE, NODE, ELEM
+      FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
 
-  INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
-  SELECT V_SESSION_ID, HIE, NODE, ELEM
-    FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
+    /* 时间参数初始化 */
+    V_SCENARIO := P_SCENARIO;
+    V_PERIODO := LPAD(P_PERIODO, 2, '0');
 
-  /* 时间参数初始化 */
-  V_SCENARIO := P_SCENARIO;
-  V_PERIODO := LPAD(P_PERIODO, 2, '0');
+    V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
+    V_LAST_DAY := LAST_DAY(TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD'));
 
-  V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
-  V_LAST_DAY := LAST_DAY(TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD'));
+    /* 组织参数初始化 */
+    INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
+    SELECT DISTINCT V_SESSION_ID
+         , ELEM
+      FROM SESSION_V_REF_AZIENDA
+     WHERE HIE = '10'
+       AND (
+             INSTR(',' || P_AZIENDA || ',', ',' || ELEM || ',') > 0
+          OR INSTR(',' || P_AZIENDA || ',', ',' || NODE || ',') > 0
+          OR P_AZIENDA = 'ALL'
+       )
+       /*需要再抽取范围内的公司才抽数*/
+       AND ELEM IN (SELECT COD_AZIENDA
+                      FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
+                     WHERE ARP_FLAG = 'Y'
+                       AND VALID_FR <= V_YEARMONTH
+                       AND NVL(VALID_TO,'999999') >= V_YEARMONTH
+                       AND COD_CONTO = 'ZAW_D2M_IN'
+                    )
+      /*排除锁定公司*/
+       AND ELEM NOT IN (
+             SELECT COD_AZIENDA
+               FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
+              WHERE ARP_FLAG = 'Y'
+                AND T.COD_SCENARIO = V_SCENARIO
+                AND T.COD_PERIODO = V_PERIODO
+                AND T.COD_CONTO = 'ZAW_D2M_LOCK'
+       );
+    /* 获取所有跑的公司列表，供日志插入使用 */
+    SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
+      INTO V_AZIENDA
+      FROM (
+        SELECT DISTINCT ELEM
+          FROM SESSION_AZIENDA_LIST
+         WHERE SESSION_ID = V_SESSION_ID
+      );
 
-  /* 组织参数初始化 */
-  INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
-  SELECT DISTINCT V_SESSION_ID
-       , ELEM
-    FROM SESSION_V_REF_AZIENDA
-   WHERE HIE = '10'
-     AND (
-           INSTR(',' || P_AZIENDA || ',', ',' || ELEM || ',') > 0
-        OR INSTR(',' || P_AZIENDA || ',', ',' || NODE || ',') > 0
-        OR P_AZIENDA = 'ALL'
-     )
-     /*需要再抽取范围内的公司才抽数*/
-     AND ELEM IN (SELECT COD_AZIENDA
-                    FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
-                   WHERE ARP_FLAG = 'Y'
-                     AND VALID_FR <= V_YEARMONTH
-                     AND NVL(VALID_TO,'999999') >= V_YEARMONTH
-                     AND COD_CONTO = 'ZAW_D2M_IN'
-                  )
-    /*排除锁定公司*/
-     AND ELEM NOT IN (
-           SELECT COD_AZIENDA
-             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
-            WHERE ARP_FLAG = 'Y'
-              AND T.COD_SCENARIO = V_SCENARIO
-              AND T.COD_PERIODO = V_PERIODO
-              AND T.COD_CONTO = 'ZAW_D2M_LOCK'
-     );
-  /* 获取所有跑的公司列表，供日志插入使用 */
-  SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
-    INTO V_AZIENDA
-    FROM (
-      SELECT DISTINCT ELEM
-        FROM SESSION_AZIENDA_LIST
-       WHERE SESSION_ID = V_SESSION_ID
+    INSERT INTO ZTAB_CPM_LOG(
+        CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+    ) VALUES (
+        'CPM_SP_D2M_ARP_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER,
+        V_SCENARIO, V_PERIODO, V_AZIENDA
     );
-
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_D2M_ARP_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
-  );
-  COMMIT;
+    COMMIT;
+  END;
 
   /* 删除当前批次，保证增量重跑不产生重复数据 */
-  DELETE FROM AW_MR9_ARPM01_000001
-   WHERE COD_SCENARIO = V_SCENARIO
-     AND COD_PERIODO = V_PERIODO
-     AND COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
-     )
-     AND PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
-     ;
+  BEGIN
+    DELETE FROM AW_MR9_ARPM01_000001
+     WHERE COD_SCENARIO = V_SCENARIO
+       AND COD_PERIODO = V_PERIODO
+       AND COD_AZIENDA IN (
+             SELECT ELEM
+               FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+       )
+       AND PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+       ;
 
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_D2M_ARP_M_PHASE2', '当前批次删除完成', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
-  );
+    INSERT INTO ZTAB_CPM_LOG(
+        CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+    ) VALUES (
+        'CPM_SP_D2M_ARP_M_PHASE2', '当前批次删除完成', SYSDATE, SESSION_USER,
+        V_SCENARIO, V_PERIODO, V_AZIENDA
+    );
+  END;
 
   /* 统一标准事实接口并写入目标表 */
-  INSERT INTO AW_MR9_ARPM01_000001(
-      OID
-    , COD_SCENARIO
-    , COD_PERIODO
-    , COD_AZIENDA
-    , COD_CATEGORIA
-    , SRC_DETAIL
-    , CUST_CODE
-    , CUST_NAME
-    , CUST_HEAD_CODE
-    , CUST_HEAD_NAME
-    , CUST_BRANCH_CODE
-    , CUST_BRANCH_NAME
-    , COD_AZI_CTP
-    , COUNTRY_CODE
-    , COUNTRY_NAME
-    , ACCT_SRC_CODE
-    , ACCT_REC_CODE
-    , ACCT_MAP_CODE
-    , LE_AGE_FLAG
-    , ME_AGE_FLAG
-    , MB_AGE_FLAG
-    , GRP_SCOPE
-    , D_CHANNEL
-    , D_CHANNEL_BU
-    , D_CC_CUSTGRP
-    , D_ONOFFLINE
-    , COD_DEST2
-    , COD_DEST3
-    , D_SALE_DEPT
-    , NATURE_L1_NAME
-    , NATURE_L2_NAME
-    , NATURE_L3_NAME
-    , UFEE_UREB_FLAG
-    , ECLS_FLAG
-    , PAY_TERM_CODE
-    , PAY_TERM_DESC
-    , EXCHANGE_RATE_EVAL_FLAG
-    , TAX_RATE
-    , COD_VALUTA
-    , COD_VALUTA_ORIGINARIA
-    , BCY_0_AMT
-    , BCY_1_AMT
-    , BCY_2_AMT
-    , BCY_3_AMT
-    , BCY_4_AMT
-    , BCY_5_AMT
-    , BCY_6_AMT
-    , BCY_7_AMT
-    , BCY_8_AMT
-    , BCY_9_AMT
-    , BCY_10_AMT
-    , BCY_11_AMT
-    , BCY_12_AMT
-    , BCY_13_AMT
-    , BCY_14_AMT
-    , BCY_15_AMT
-    , QCY_0_AMT
-    , QCY_1_AMT
-    , QCY_2_AMT
-    , QCY_3_AMT
-    , QCY_4_AMT
-    , QCY_5_AMT
-    , QCY_6_AMT
-    , QCY_7_AMT
-    , QCY_8_AMT
-    , QCY_9_AMT
-    , QCY_10_AMT
-    , QCY_11_AMT
-    , QCY_12_AMT
-    , QCY_13_AMT
-    , QCY_14_AMT
-    , QCY_15_AMT
-    , SYSTEM_SRC
-    , D_ADJ_TYPE
-    , PROVENIENZA
-    , DATEUPD
-    , USERUPD
-  )
-  WITH
-  -- ALTER BY 20261027 14:08 SHIQINGFENG.EX 收入利润中心按有效期及BATCH_ID=2映射为往来利润中心；按源利润中心去前导零去重。
-  PROFIT_CENTER_RULE AS (
-    SELECT LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
-         , MAX(PROFITCENTER_CODE) AS PROFITCENTER_CODE
-      FROM DIM_RULE_FI_MR_AR_PROFIT_MAPPING
-     WHERE BATCH_ID = 2
-       AND VALID_FR <= V_YEARMONTH
-       AND NVL(VALID_TO, '999999') >= V_YEARMONTH
-     GROUP BY LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0')
-  ),
-  -- ALTER BY 20261029 18:10 SHIQINGFENG.EX 新增BATCH_ID=6利润中心映射规则；先按公司主数据AZIENDA展开为具体公司，事实侧用等号关联，避免在收入事实表上做LIKE。物料组为空的规则不参与匹配。
-  PROFIT_CENTER_RULE_6 AS (
-    SELECT A.COD_AZIENDA AS COMPANY_CODE
-         , TRIM(PM.MATERIAL_GROUP_CODE) AS MATERIAL_GROUP_CODE
-         , MAX(PM.PROFITCENTER_CODE) AS PROFITCENTER_CODE
-      FROM TGK_FIMA_HISENSE.DIM_RULE_FI_MR_AR_PROFIT_MAPPING PM
-      JOIN (SELECT DISTINCT COD_AZIENDA
-              FROM TGK_FIMA_HISENSE.AZIENDA) A
-        ON A.COD_AZIENDA LIKE TRIM(PM.COMPANY_CODE)
-     WHERE PM.BATCH_ID = 6
-       AND NVL(TRIM(PM.MATERIAL_GROUP_CODE), 'ZZZZ') <> 'ZZZZ'
-       AND PM.VALID_FR <= V_YEARMONTH
-       AND NVL(PM.VALID_TO, '999999') >= V_YEARMONTH
-     GROUP BY A.COD_AZIENDA
-            , TRIM(PM.MATERIAL_GROUP_CODE)
-  ),
-  /* DWD普通账龄：读取源表并直接转换为目标事实接口 */
-  DWD_STANDARD AS (
-    SELECT V_SCENARIO AS COD_SCENARIO
-         , V_PERIODO AS COD_PERIODO
-         , COMPANY_CODE AS COD_AZIENDA
-         , 'ZAMOUNT' AS COD_CATEGORIA
-         , ODS_SRC AS SRC_DETAIL
-         , CUST_CODE
-         , CUST_NAME
-         , CUST_HEAD_CODE
-         , CUST_HEAD_NAME
-         , CUST_BRANCH_CODE
-         , CUST_BRANCH_NAME
-         , CP_COMPANY_CODE AS COD_AZI_CTP
-         , COUNTRY_CODE
-         , COUNTRY_NAME
-         , ACCT_SRC_CODE
-         , CASE
-               WHEN ACCT_SRC_CODE LIKE '1466%' THEN '1466000000'
-               WHEN COMPANY_CODE IN ('6500', '6510')
-                AND ACCT_SRC_CODE IN ('2241010100', '2241010200', '2241020000', '2241040000') THEN '2241010100'
-               WHEN COMPANY_CODE IN ('6500', '6510')
-                AND ACCT_SRC_CODE IN ('1221010000', '1221020000', '1221040000') THEN '1221010000'
-               WHEN COMPANY_CODE IN ('1007', '1008', '1041')
-                AND ACCT_SRC_CODE LIKE '2202%' THEN '2202000000'
-               WHEN COMPANY_CODE LIKE '66%'
-                AND COMPANY_CODE <> '6600'
-                AND ACCT_SRC_CODE LIKE '1131%'
-                AND ACCT_SRC_CODE <> '1131999001' THEN '1131002000'
-               WHEN COMPANY_CODE LIKE '66%'
-                AND COMPANY_CODE <> '6600'
-                AND ACCT_SRC_CODE LIKE '1133%'
-                AND ACCT_SRC_CODE <> '1133999001' THEN '1133001003'
-               WHEN COMPANY_CODE LIKE '66%'
-                AND COMPANY_CODE <> '6600'
-                AND ACCT_SRC_CODE LIKE '2181%'
-                AND ACCT_SRC_CODE <> '2181999001' THEN '2181001005'
-               WHEN COMPANY_CODE LIKE '66%'
-                AND COMPANY_CODE <> '6600'
-                AND ACCT_SRC_CODE LIKE '2121%'
-                AND ACCT_SRC_CODE <> '2121999001' THEN '2121001000'
-               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
-                AND ACCT_SRC_CODE LIKE '1131%' THEN '1131002000'
-               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
-                AND ACCT_SRC_CODE LIKE '1133%' THEN '1133001003'
-               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
-                AND ACCT_SRC_CODE LIKE '2181%' THEN '2181001005'
-               WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
-                AND ACCT_SRC_CODE LIKE '2121%' THEN '2121001000'
-               WHEN COMPANY_CODE LIKE '16%'
-                AND COMPANY_CODE NOT LIKE '163%'
-                AND COMPANY_CODE NOT LIKE '162%'
-                AND ACCT_SRC_CODE IN ('2202000000', '2202000089') THEN '2202000000'
-               ELSE ACCT_SRC_CODE
-           END AS ACCT_REC_CODE
-         , ACCT_MAP_CODE
-         , NULL AS LE_AGE_FLAG
-         , NULL AS ME_AGE_FLAG
-         , NULL AS MB_AGE_FLAG
-         , NULL AS GRP_SCOPE
-         , CHANNEL_L3_CODE AS D_CHANNEL
-         , CHANNEL_BU_CODE AS D_CHANNEL_BU
-         , CC_CUST_GROUP_CODE AS D_CC_CUSTGRP
-         , ONOFFLINE_CODE AS D_ONOFFLINE
-         , PROFITCENTER_CODE AS COD_DEST2
-         , BUS_RANGE_CODE AS COD_DEST3
-         , MARKETING_DEPT_CODE AS D_SALE_DEPT
-         , NATURE_L1_NAME
-         , NATURE_L2_NAME
-         , NATURE_L3_NAME
-         , UFEE_UREB_FLAG
-         , ECLS_FLAG
-         , PAY_TERM_CODE
-         , PAY_TERM_DESC
-         , EXCHANGE_RATE_EVAL_FLAG
-         , TAX_RATE
-         , BCY_CODE AS COD_VALUTA
-         , QCY_CODE AS COD_VALUTA_ORIGINARIA
-         , NVL(BCY_0_AMT, 0) AS BCY_0_AMT
-         , NVL(BCY_1_AMT, 0) AS BCY_1_AMT
-         , NVL(BCY_2_AMT, 0) AS BCY_2_AMT
-         , NVL(BCY_3_AMT, 0) AS BCY_3_AMT
-         , NVL(BCY_4_AMT, 0) AS BCY_4_AMT
-         , NVL(BCY_5_AMT, 0) AS BCY_5_AMT
-         , NVL(BCY_6_AMT, 0) AS BCY_6_AMT
-         , NVL(BCY_7_AMT, 0) AS BCY_7_AMT
-         , NVL(BCY_8_AMT, 0) AS BCY_8_AMT
-         , NVL(BCY_9_AMT, 0) AS BCY_9_AMT
-         , NVL(BCY_10_AMT, 0) AS BCY_10_AMT
-         , NVL(BCY_11_AMT, 0) AS BCY_11_AMT
-         , NVL(BCY_12_AMT, 0) AS BCY_12_AMT
-         , NVL(BCY_13_AMT, 0) AS BCY_13_AMT
-         , NVL(BCY_14_AMT, 0) AS BCY_14_AMT
-         , NVL(BCY_15_AMT, 0) AS BCY_15_AMT
-         , NVL(QCY_0_AMT, 0) AS QCY_0_AMT
-         , NVL(QCY_1_AMT, 0) AS QCY_1_AMT
-         , NVL(QCY_2_AMT, 0) AS QCY_2_AMT
-         , NVL(QCY_3_AMT, 0) AS QCY_3_AMT
-         , NVL(QCY_4_AMT, 0) AS QCY_4_AMT
-         , NVL(QCY_5_AMT, 0) AS QCY_5_AMT
-         , NVL(QCY_6_AMT, 0) AS QCY_6_AMT
-         , NVL(QCY_7_AMT, 0) AS QCY_7_AMT
-         , NVL(QCY_8_AMT, 0) AS QCY_8_AMT
-         , NVL(QCY_9_AMT, 0) AS QCY_9_AMT
-         , NVL(QCY_10_AMT, 0) AS QCY_10_AMT
-         , NVL(QCY_11_AMT, 0) AS QCY_11_AMT
-         , NVL(QCY_12_AMT, 0) AS QCY_12_AMT
-         , NVL(QCY_13_AMT, 0) AS QCY_13_AMT
-         , NVL(QCY_14_AMT, 0) AS QCY_14_AMT
-         , NVL(QCY_15_AMT, 0) AS QCY_15_AMT
-         , SYSTEM_SRC
-         , 'ZZZZ' AS D_ADJ_TYPE
-      FROM DWD_FI_MR_ARAP_SUM_MI
-     WHERE DT_MONTH = V_YEARMONTH
-       /* 限制需要进数范围的公司和客商，在D打标为Y或为空的 */
-       AND NVL(IS_APAR_FLAG, 'Y') = 'Y'
-       AND COMPANY_CODE IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
-              WHERE SESSION_ID = V_SESSION_ID
-       )
-  ),
+  BEGIN
+    INSERT INTO AW_MR9_ARPM01_000001(
+        OID
+      , COD_SCENARIO
+      , COD_PERIODO
+      , COD_AZIENDA
+      , COD_CATEGORIA
+      , SRC_DETAIL
+      , CUST_CODE
+      , CUST_NAME
+      , CUST_HEAD_CODE
+      , CUST_HEAD_NAME
+      , CUST_BRANCH_CODE
+      , CUST_BRANCH_NAME
+      , COD_AZI_CTP
+      , COUNTRY_CODE
+      , COUNTRY_NAME
+      , ACCT_SRC_CODE
+      , ACCT_REC_CODE
+      , ACCT_MAP_CODE
+      , LE_AGE_FLAG
+      , ME_AGE_FLAG
+      , MB_AGE_FLAG
+      , GRP_SCOPE
+      , D_CHANNEL
+      , D_CHANNEL_BU
+      , D_CC_CUSTGRP
+      , D_ONOFFLINE
+      , COD_DEST2
+      , COD_DEST3
+      , D_SALE_DEPT
+      , NATURE_L1_NAME
+      , NATURE_L2_NAME
+      , NATURE_L3_NAME
+      , UFEE_UREB_FLAG
+      , ECLS_FLAG
+      , PAY_TERM_CODE
+      , PAY_TERM_DESC
+      , EXCHANGE_RATE_EVAL_FLAG
+      , TAX_RATE
+      , COD_VALUTA
+      , COD_VALUTA_ORIGINARIA
+      , BCY_0_AMT
+      , BCY_1_AMT
+      , BCY_2_AMT
+      , BCY_3_AMT
+      , BCY_4_AMT
+      , BCY_5_AMT
+      , BCY_6_AMT
+      , BCY_7_AMT
+      , BCY_8_AMT
+      , BCY_9_AMT
+      , BCY_10_AMT
+      , BCY_11_AMT
+      , BCY_12_AMT
+      , BCY_13_AMT
+      , BCY_14_AMT
+      , BCY_15_AMT
+      , QCY_0_AMT
+      , QCY_1_AMT
+      , QCY_2_AMT
+      , QCY_3_AMT
+      , QCY_4_AMT
+      , QCY_5_AMT
+      , QCY_6_AMT
+      , QCY_7_AMT
+      , QCY_8_AMT
+      , QCY_9_AMT
+      , QCY_10_AMT
+      , QCY_11_AMT
+      , QCY_12_AMT
+      , QCY_13_AMT
+      , QCY_14_AMT
+      , QCY_15_AMT
+      , SYSTEM_SRC
+      , D_ADJ_TYPE
+      , PROVENIENZA
+      , DATEUPD
+      , USERUPD
+    )
+    WITH
+    /* ALTER BY 20261027 14:08 SHIQINGFENG.EX 收入利润中心按有效期及BATCH_ID=2映射为往来利润中心；按源利润中心去前导零去重。 */
+    PROFIT_CENTER_RULE AS (
+      SELECT LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
+           , MAX(PROFITCENTER_CODE) AS PROFITCENTER_CODE
+        FROM DIM_RULE_FI_MR_AR_PROFIT_MAPPING
+       WHERE BATCH_ID = 2
+         AND VALID_FR <= V_YEARMONTH
+         AND NVL(VALID_TO, '999999') >= V_YEARMONTH
+       GROUP BY LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0')
+    ),
+    /* ALTER BY 20261029 18:10 SHIQINGFENG.EX 新增BATCH_ID=6利润中心映射规则；先按公司主数据AZIENDA展开为具体公司，事实侧用等号关联，避免在收入事实表上做LIKE。物料组为空的规则不参与匹配。 */
+    PROFIT_CENTER_RULE_6 AS (
+      SELECT A.COD_AZIENDA AS COMPANY_CODE
+           , TRIM(PM.MATERIAL_GROUP_CODE) AS MATERIAL_GROUP_CODE
+           , MAX(PM.PROFITCENTER_CODE) AS PROFITCENTER_CODE
+        FROM TGK_FIMA_HISENSE.DIM_RULE_FI_MR_AR_PROFIT_MAPPING PM
+        JOIN (SELECT DISTINCT COD_AZIENDA
+                FROM TGK_FIMA_HISENSE.AZIENDA) A
+          ON A.COD_AZIENDA LIKE TRIM(PM.COMPANY_CODE)
+       WHERE PM.BATCH_ID = 6
+         AND NVL(TRIM(PM.MATERIAL_GROUP_CODE), 'ZZZZ') <> 'ZZZZ'
+         AND PM.VALID_FR <= V_YEARMONTH
+         AND NVL(PM.VALID_TO, '999999') >= V_YEARMONTH
+       GROUP BY A.COD_AZIENDA
+              , TRIM(PM.MATERIAL_GROUP_CODE)
+    ),
+    /* DWD普通账龄：读取源表并直接转换为目标事实接口 */
+    DWD_STANDARD AS (
+      SELECT V_SCENARIO AS COD_SCENARIO
+           , V_PERIODO AS COD_PERIODO
+           , COMPANY_CODE AS COD_AZIENDA
+           , 'ZAMOUNT' AS COD_CATEGORIA
+           , ODS_SRC AS SRC_DETAIL
+           , CUST_CODE
+           , CUST_NAME
+           , CUST_HEAD_CODE
+           , CUST_HEAD_NAME
+           , CUST_BRANCH_CODE
+           , CUST_BRANCH_NAME
+           , CP_COMPANY_CODE AS COD_AZI_CTP
+           , COUNTRY_CODE
+           , COUNTRY_NAME
+           , ACCT_SRC_CODE
+           , CASE
+                 WHEN ACCT_SRC_CODE LIKE '1466%' THEN '1466000000'
+                 WHEN COMPANY_CODE IN ('6500', '6510')
+                  AND ACCT_SRC_CODE IN ('2241010100', '2241010200', '2241020000', '2241040000') THEN '2241010100'
+                 WHEN COMPANY_CODE IN ('6500', '6510')
+                  AND ACCT_SRC_CODE IN ('1221010000', '1221020000', '1221040000') THEN '1221010000'
+                 WHEN COMPANY_CODE IN ('1007', '1008', '1041')
+                  AND ACCT_SRC_CODE LIKE '2202%' THEN '2202000000'
+                 WHEN COMPANY_CODE LIKE '66%'
+                  AND COMPANY_CODE <> '6600'
+                  AND ACCT_SRC_CODE LIKE '1131%'
+                  AND ACCT_SRC_CODE <> '1131999001' THEN '1131002000'
+                 WHEN COMPANY_CODE LIKE '66%'
+                  AND COMPANY_CODE <> '6600'
+                  AND ACCT_SRC_CODE LIKE '1133%'
+                  AND ACCT_SRC_CODE <> '1133999001' THEN '1133001003'
+                 WHEN COMPANY_CODE LIKE '66%'
+                  AND COMPANY_CODE <> '6600'
+                  AND ACCT_SRC_CODE LIKE '2181%'
+                  AND ACCT_SRC_CODE <> '2181999001' THEN '2181001005'
+                 WHEN COMPANY_CODE LIKE '66%'
+                  AND COMPANY_CODE <> '6600'
+                  AND ACCT_SRC_CODE LIKE '2121%'
+                  AND ACCT_SRC_CODE <> '2121999001' THEN '2121001000'
+                 WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
+                  AND ACCT_SRC_CODE LIKE '1131%' THEN '1131002000'
+                 WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
+                  AND ACCT_SRC_CODE LIKE '1133%' THEN '1133001003'
+                 WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
+                  AND ACCT_SRC_CODE LIKE '2181%' THEN '2181001005'
+                 WHEN COMPANY_CODE IN ('6000','6000A','6000B','6000C', '6600')
+                  AND ACCT_SRC_CODE LIKE '2121%' THEN '2121001000'
+                 WHEN COMPANY_CODE LIKE '16%'
+                  AND COMPANY_CODE NOT LIKE '163%'
+                  AND COMPANY_CODE NOT LIKE '162%'
+                  AND ACCT_SRC_CODE IN ('2202000000', '2202000089') THEN '2202000000'
+                 ELSE ACCT_SRC_CODE
+             END AS ACCT_REC_CODE
+           , ACCT_MAP_CODE
+           , NULL AS LE_AGE_FLAG
+           , NULL AS ME_AGE_FLAG
+           , NULL AS MB_AGE_FLAG
+           , NULL AS GRP_SCOPE
+           , CHANNEL_L3_CODE AS D_CHANNEL
+           , CHANNEL_BU_CODE AS D_CHANNEL_BU
+           , CC_CUST_GROUP_CODE AS D_CC_CUSTGRP
+           , ONOFFLINE_CODE AS D_ONOFFLINE
+           , PROFITCENTER_CODE AS COD_DEST2
+           , BUS_RANGE_CODE AS COD_DEST3
+           , MARKETING_DEPT_CODE AS D_SALE_DEPT
+           , NATURE_L1_NAME
+           , NATURE_L2_NAME
+           , NATURE_L3_NAME
+           , UFEE_UREB_FLAG
+           , ECLS_FLAG
+           , PAY_TERM_CODE
+           , PAY_TERM_DESC
+           , EXCHANGE_RATE_EVAL_FLAG
+           , TAX_RATE
+           , BCY_CODE AS COD_VALUTA
+           , QCY_CODE AS COD_VALUTA_ORIGINARIA
+           , NVL(BCY_0_AMT, 0) AS BCY_0_AMT
+           , NVL(BCY_1_AMT, 0) AS BCY_1_AMT
+           , NVL(BCY_2_AMT, 0) AS BCY_2_AMT
+           , NVL(BCY_3_AMT, 0) AS BCY_3_AMT
+           , NVL(BCY_4_AMT, 0) AS BCY_4_AMT
+           , NVL(BCY_5_AMT, 0) AS BCY_5_AMT
+           , NVL(BCY_6_AMT, 0) AS BCY_6_AMT
+           , NVL(BCY_7_AMT, 0) AS BCY_7_AMT
+           , NVL(BCY_8_AMT, 0) AS BCY_8_AMT
+           , NVL(BCY_9_AMT, 0) AS BCY_9_AMT
+           , NVL(BCY_10_AMT, 0) AS BCY_10_AMT
+           , NVL(BCY_11_AMT, 0) AS BCY_11_AMT
+           , NVL(BCY_12_AMT, 0) AS BCY_12_AMT
+           , NVL(BCY_13_AMT, 0) AS BCY_13_AMT
+           , NVL(BCY_14_AMT, 0) AS BCY_14_AMT
+           , NVL(BCY_15_AMT, 0) AS BCY_15_AMT
+           , NVL(QCY_0_AMT, 0) AS QCY_0_AMT
+           , NVL(QCY_1_AMT, 0) AS QCY_1_AMT
+           , NVL(QCY_2_AMT, 0) AS QCY_2_AMT
+           , NVL(QCY_3_AMT, 0) AS QCY_3_AMT
+           , NVL(QCY_4_AMT, 0) AS QCY_4_AMT
+           , NVL(QCY_5_AMT, 0) AS QCY_5_AMT
+           , NVL(QCY_6_AMT, 0) AS QCY_6_AMT
+           , NVL(QCY_7_AMT, 0) AS QCY_7_AMT
+           , NVL(QCY_8_AMT, 0) AS QCY_8_AMT
+           , NVL(QCY_9_AMT, 0) AS QCY_9_AMT
+           , NVL(QCY_10_AMT, 0) AS QCY_10_AMT
+           , NVL(QCY_11_AMT, 0) AS QCY_11_AMT
+           , NVL(QCY_12_AMT, 0) AS QCY_12_AMT
+           , NVL(QCY_13_AMT, 0) AS QCY_13_AMT
+           , NVL(QCY_14_AMT, 0) AS QCY_14_AMT
+           , NVL(QCY_15_AMT, 0) AS QCY_15_AMT
+           , SYSTEM_SRC
+           , 'ZZZZ' AS D_ADJ_TYPE
+        FROM DWD_FI_MR_ARAP_SUM_MI
+       WHERE DT_MONTH = V_YEARMONTH
+         /* 限制需要进数范围的公司和客商，在D打标为Y或为空的 */
+         AND NVL(IS_APAR_FLAG, 'Y') = 'Y'
+         AND COMPANY_CODE IN (
+               SELECT ELEM
+                 FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+         )
+    ),
 
-  /* M01：出库未开、退货未办，BCY_REV写入本位币0/1桶，ORG_REV写入交易币0/1桶 */
-  M01_FACT AS (
-    SELECT V_SCENARIO AS COD_SCENARIO
-         , V_PERIODO AS COD_PERIODO
-         , T.COD_AZIENDA
-         , 'ZAMOUNT' AS COD_CATEGORIA
-         , CASE WHEN T.COD_CONTO LIKE 'S600101%' THEN 'ZTSO04_CK'
-                WHEN T.COD_CONTO LIKE 'S600102%' THEN 'ZTSO04_TH' 
-           END AS SRC_DETAIL
-         , T.CUST_CODE
-         , T.CUST_NAME
-         , NULL AS CUST_HEAD_CODE
-         , NULL AS CUST_HEAD_NAME
-         , NULL AS CUST_BRANCH_CODE
-         , NULL AS CUST_BRANCH_NAME
-         , T.COD_AZI_CTP
-         , NULL AS COUNTRY_CODE
-         , NULL AS COUNTRY_NAME
-         , '1122000000' AS ACCT_SRC_CODE
-         , '1122000000' AS ACCT_REC_CODE
-         , '1122000000' AS ACCT_MAP_CODE
-         , NULL AS LE_AGE_FLAG
-         , NULL AS ME_AGE_FLAG
-         , NULL AS MB_AGE_FLAG
-         , NULL AS GRP_SCOPE
-         , T.D_CHANNEL
-         -- ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU跟D_CHANNEL一样从来源继承（M01是出库/退货，无周转渠道但有三类渠道）。
-         , T.D_CHANNEL_BU
-         , NULL AS D_CC_CUSTGRP
-         , T.D_ONOFFLINE
-         -- ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射优先级：BATCH_ID=2 > BATCH_ID=6 > 收入原利润中心。
-         , NVL(PM.PROFITCENTER_CODE, NVL(PM6.PROFITCENTER_CODE, T.COD_DEST2)) AS COD_DEST2
-         , T.COD_DEST3
-         , T.D_SALE_DEPT
-         , NULL AS NATURE_L1_NAME
-         , NULL AS NATURE_L2_NAME
-         , NULL AS NATURE_L3_NAME
-         , NULL AS UFEE_UREB_FLAG
-         , NULL AS ECLS_FLAG
-         , NULL AS PAY_TERM_CODE
-         , NULL AS PAY_TERM_DESC
-         , NULL AS EXCHANGE_RATE_EVAL_FLAG
-         , NULL AS TAX_RATE
-         , T.COD_VALUTA
-         , T.COD_VALUTA_ORIGINARIA
-         , T.BCY_REV AS BCY_0_AMT
-         , T.BCY_REV AS BCY_1_AMT
-         , 0 AS BCY_2_AMT, 0 AS BCY_3_AMT, 0 AS BCY_4_AMT
-         , 0 AS BCY_5_AMT, 0 AS BCY_6_AMT, 0 AS BCY_7_AMT
-         , 0 AS BCY_8_AMT, 0 AS BCY_9_AMT, 0 AS BCY_10_AMT
-         , 0 AS BCY_11_AMT, 0 AS BCY_12_AMT, 0 AS BCY_13_AMT
-         , 0 AS BCY_14_AMT, 0 AS BCY_15_AMT
-         , T.ORG_REV AS QCY_0_AMT
-         , T.ORG_REV AS QCY_1_AMT
-         , 0 AS QCY_2_AMT, 0 AS QCY_3_AMT, 0 AS QCY_4_AMT
-         , 0 AS QCY_5_AMT, 0 AS QCY_6_AMT, 0 AS QCY_7_AMT
-         , 0 AS QCY_8_AMT, 0 AS QCY_9_AMT, 0 AS QCY_10_AMT
-         , 0 AS QCY_11_AMT, 0 AS QCY_12_AMT, 0 AS QCY_13_AMT
-         , 0 AS QCY_14_AMT, 0 AS QCY_15_AMT
-         , 'TA' AS SYSTEM_SRC
-         , NVL(T.D_ADJ_TYPE, 'ZZZZ') AS D_ADJ_TYPE
-      FROM AW_MR9_REVM01_000001 T
-      LEFT JOIN PROFIT_CENTER_RULE PM
-        ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(T.COD_DEST2), '0')
-      -- ALTER BY 20261029 18:10 SHIQINGFENG.EX 新增BATCH_ID=6关联；规则侧已按公司主数据展开，此处用等号匹配公司+物料组；物料组为空则不关联、保留原利润中心。
-      LEFT JOIN PROFIT_CENTER_RULE_6 PM6
-        ON PM6.COMPANY_CODE = T.COD_AZIENDA
-       AND PM6.MATERIAL_GROUP_CODE = TRIM(T.MATERIAL_GROUP_CODE)
-     WHERE T.COD_SCENARIO = V_SCENARIO
-       AND T.COD_PERIODO = V_PERIODO
-       AND T.COD_AZIENDA IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
-              WHERE SESSION_ID = V_SESSION_ID
-       )
-       -- ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。
-       AND (T.COD_CONTO LIKE 'S600101%' OR T.COD_CONTO LIKE 'S600102%')
-       AND NVL(T.SRC_DETAIL, 'ZZZZ') NOT LIKE '%LM'
-       AND (NVL(T.SRC_DETAIL, 'ZZZZ') <> 'ADJM01' OR T.D_ADJ_TYPE = 'REV_01_201')
-       -- ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。
-       AND NVL(T.COD_CATEGORIA, 'ZZZZ') NOT IN ('GA00_PA_IN', 'GA00_PA_OUT')
-  ),
-  AGG_FACT AS (
-    SELECT COD_SCENARIO
+    /* M01：出库未开、退货未办，BCY_REV写入本位币0/1桶，ORG_REV写入交易币0/1桶 */
+    M01_FACT AS (
+      SELECT V_SCENARIO AS COD_SCENARIO
+           , V_PERIODO AS COD_PERIODO
+           , T.COD_AZIENDA
+           , 'ZAMOUNT' AS COD_CATEGORIA
+           , CASE WHEN T.COD_CONTO LIKE 'S600101%' THEN 'ZTSO04_CK'
+                  WHEN T.COD_CONTO LIKE 'S600102%' THEN 'ZTSO04_TH' 
+             END AS SRC_DETAIL
+           , T.CUST_CODE
+           , T.CUST_NAME
+           , NULL AS CUST_HEAD_CODE
+           , NULL AS CUST_HEAD_NAME
+           , NULL AS CUST_BRANCH_CODE
+           , NULL AS CUST_BRANCH_NAME
+           , T.COD_AZI_CTP
+           , NULL AS COUNTRY_CODE
+           , NULL AS COUNTRY_NAME
+           , '1122000000' AS ACCT_SRC_CODE
+           , '1122000000' AS ACCT_REC_CODE
+           , '1122000000' AS ACCT_MAP_CODE
+           , NULL AS LE_AGE_FLAG
+           , NULL AS ME_AGE_FLAG
+           , NULL AS MB_AGE_FLAG
+           , NULL AS GRP_SCOPE
+           , T.D_CHANNEL
+           /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU跟D_CHANNEL一样从来源继承（M01是出库/退货，无周转渠道但有三类渠道）。 */
+           , T.D_CHANNEL_BU
+           , NULL AS D_CC_CUSTGRP
+           , T.D_ONOFFLINE
+           /* ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射优先级：BATCH_ID=2 > BATCH_ID=6 > 收入原利润中心。 */
+           , NVL(PM.PROFITCENTER_CODE, NVL(PM6.PROFITCENTER_CODE, T.COD_DEST2)) AS COD_DEST2
+           , T.COD_DEST3
+           , T.D_SALE_DEPT
+           , NULL AS NATURE_L1_NAME
+           , NULL AS NATURE_L2_NAME
+           , NULL AS NATURE_L3_NAME
+           , NULL AS UFEE_UREB_FLAG
+           , NULL AS ECLS_FLAG
+           , NULL AS PAY_TERM_CODE
+           , NULL AS PAY_TERM_DESC
+           , NULL AS EXCHANGE_RATE_EVAL_FLAG
+           , NULL AS TAX_RATE
+           , T.COD_VALUTA
+           , T.COD_VALUTA_ORIGINARIA
+           , T.BCY_REV AS BCY_0_AMT
+           , T.BCY_REV AS BCY_1_AMT
+           , 0 AS BCY_2_AMT, 0 AS BCY_3_AMT, 0 AS BCY_4_AMT
+           , 0 AS BCY_5_AMT, 0 AS BCY_6_AMT, 0 AS BCY_7_AMT
+           , 0 AS BCY_8_AMT, 0 AS BCY_9_AMT, 0 AS BCY_10_AMT
+           , 0 AS BCY_11_AMT, 0 AS BCY_12_AMT, 0 AS BCY_13_AMT
+           , 0 AS BCY_14_AMT, 0 AS BCY_15_AMT
+           , T.ORG_REV AS QCY_0_AMT
+           , T.ORG_REV AS QCY_1_AMT
+           , 0 AS QCY_2_AMT, 0 AS QCY_3_AMT, 0 AS QCY_4_AMT
+           , 0 AS QCY_5_AMT, 0 AS QCY_6_AMT, 0 AS QCY_7_AMT
+           , 0 AS QCY_8_AMT, 0 AS QCY_9_AMT, 0 AS QCY_10_AMT
+           , 0 AS QCY_11_AMT, 0 AS QCY_12_AMT, 0 AS QCY_13_AMT
+           , 0 AS QCY_14_AMT, 0 AS QCY_15_AMT
+           , 'TA' AS SYSTEM_SRC
+           , NVL(T.D_ADJ_TYPE, 'ZZZZ') AS D_ADJ_TYPE
+        FROM AW_MR9_REVM01_000001 T
+        LEFT JOIN PROFIT_CENTER_RULE PM
+          ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(T.COD_DEST2), '0')
+        /* ALTER BY 20261029 18:10 SHIQINGFENG.EX 新增BATCH_ID=6关联；规则侧已按公司主数据展开，此处用等号匹配公司+物料组；物料组为空则不关联、保留原利润中心。 */
+        LEFT JOIN PROFIT_CENTER_RULE_6 PM6
+          ON PM6.COMPANY_CODE = T.COD_AZIENDA
+         AND PM6.MATERIAL_GROUP_CODE = TRIM(T.MATERIAL_GROUP_CODE)
+       WHERE T.COD_SCENARIO = V_SCENARIO
+         AND T.COD_PERIODO = V_PERIODO
+         AND T.COD_AZIENDA IN (
+               SELECT ELEM
+                 FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+         )
+         /* ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。 */
+         AND (T.COD_CONTO LIKE 'S600101%' OR T.COD_CONTO LIKE 'S600102%')
+         AND NVL(T.SRC_DETAIL, 'ZZZZ') NOT LIKE '%LM'
+         AND (NVL(T.SRC_DETAIL, 'ZZZZ') <> 'ADJM01' OR T.D_ADJ_TYPE = 'REV_01_201')
+         /* ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。 */
+         AND NVL(T.COD_CATEGORIA, 'ZZZZ') NOT IN ('GA00_PA_IN', 'GA00_PA_OUT')
+    ),
+    AGG_FACT AS (
+      SELECT COD_SCENARIO
+           , COD_PERIODO
+           , COD_AZIENDA
+           , COD_CATEGORIA
+           , SRC_DETAIL
+           , CUST_CODE
+           , CUST_NAME
+           , CUST_HEAD_CODE
+           , CUST_HEAD_NAME
+           , CUST_BRANCH_CODE
+           , CUST_BRANCH_NAME
+           , COD_AZI_CTP
+           , COUNTRY_CODE
+           , COUNTRY_NAME
+           , ACCT_SRC_CODE
+           , ACCT_REC_CODE
+           , ACCT_MAP_CODE
+           , LE_AGE_FLAG
+           , ME_AGE_FLAG
+           , MB_AGE_FLAG
+           , GRP_SCOPE
+           , D_CHANNEL
+           , D_CHANNEL_BU
+           , D_CC_CUSTGRP
+           , D_ONOFFLINE
+           , COD_DEST2
+           , COD_DEST3
+           , D_SALE_DEPT
+           , NATURE_L1_NAME
+           , NATURE_L2_NAME
+           , NATURE_L3_NAME
+           , UFEE_UREB_FLAG
+           , ECLS_FLAG
+           , PAY_TERM_CODE
+           , PAY_TERM_DESC
+           , EXCHANGE_RATE_EVAL_FLAG
+           , TAX_RATE
+           , COD_VALUTA
+           , COD_VALUTA_ORIGINARIA
+           , SUM(BCY_0_AMT) AS BCY_0_AMT
+           , SUM(BCY_1_AMT) AS BCY_1_AMT
+           , SUM(BCY_2_AMT) AS BCY_2_AMT
+           , SUM(BCY_3_AMT) AS BCY_3_AMT
+           , SUM(BCY_4_AMT) AS BCY_4_AMT
+           , SUM(BCY_5_AMT) AS BCY_5_AMT
+           , SUM(BCY_6_AMT) AS BCY_6_AMT
+           , SUM(BCY_7_AMT) AS BCY_7_AMT
+           , SUM(BCY_8_AMT) AS BCY_8_AMT
+           , SUM(BCY_9_AMT) AS BCY_9_AMT
+           , SUM(BCY_10_AMT) AS BCY_10_AMT
+           , SUM(BCY_11_AMT) AS BCY_11_AMT
+           , SUM(BCY_12_AMT) AS BCY_12_AMT
+           , SUM(BCY_13_AMT) AS BCY_13_AMT
+           , SUM(BCY_14_AMT) AS BCY_14_AMT
+           , SUM(BCY_15_AMT) AS BCY_15_AMT
+           , SUM(QCY_0_AMT) AS QCY_0_AMT
+           , SUM(QCY_1_AMT) AS QCY_1_AMT
+           , SUM(QCY_2_AMT) AS QCY_2_AMT
+           , SUM(QCY_3_AMT) AS QCY_3_AMT
+           , SUM(QCY_4_AMT) AS QCY_4_AMT
+           , SUM(QCY_5_AMT) AS QCY_5_AMT
+           , SUM(QCY_6_AMT) AS QCY_6_AMT
+           , SUM(QCY_7_AMT) AS QCY_7_AMT
+           , SUM(QCY_8_AMT) AS QCY_8_AMT
+           , SUM(QCY_9_AMT) AS QCY_9_AMT
+           , SUM(QCY_10_AMT) AS QCY_10_AMT
+           , SUM(QCY_11_AMT) AS QCY_11_AMT
+           , SUM(QCY_12_AMT) AS QCY_12_AMT
+           , SUM(QCY_13_AMT) AS QCY_13_AMT
+           , SUM(QCY_14_AMT) AS QCY_14_AMT
+           , SUM(QCY_15_AMT) AS QCY_15_AMT
+           , SYSTEM_SRC
+           , D_ADJ_TYPE
+        FROM (
+          SELECT * FROM DWD_STANDARD
+          UNION ALL
+          SELECT * FROM M01_FACT
+        )
+       GROUP BY COD_SCENARIO, COD_PERIODO, COD_AZIENDA, COD_CATEGORIA, SRC_DETAIL
+              , CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
+              , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
+              , ACCT_SRC_CODE, ACCT_REC_CODE, ACCT_MAP_CODE
+              , LE_AGE_FLAG, ME_AGE_FLAG, MB_AGE_FLAG, GRP_SCOPE
+              , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+              , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
+              , UFEE_UREB_FLAG, ECLS_FLAG, PAY_TERM_CODE, PAY_TERM_DESC
+              , EXCHANGE_RATE_EVAL_FLAG, TAX_RATE
+              , COD_VALUTA, COD_VALUTA_ORIGINARIA, SYSTEM_SRC, D_ADJ_TYPE
+    )
+    SELECT NEWID() AS OID
+         , COD_SCENARIO
          , COD_PERIODO
          , COD_AZIENDA
          , COD_CATEGORIA
@@ -476,523 +570,613 @@ BEGIN
          , TAX_RATE
          , COD_VALUTA
          , COD_VALUTA_ORIGINARIA
-         , SUM(BCY_0_AMT) AS BCY_0_AMT
-         , SUM(BCY_1_AMT) AS BCY_1_AMT
-         , SUM(BCY_2_AMT) AS BCY_2_AMT
-         , SUM(BCY_3_AMT) AS BCY_3_AMT
-         , SUM(BCY_4_AMT) AS BCY_4_AMT
-         , SUM(BCY_5_AMT) AS BCY_5_AMT
-         , SUM(BCY_6_AMT) AS BCY_6_AMT
-         , SUM(BCY_7_AMT) AS BCY_7_AMT
-         , SUM(BCY_8_AMT) AS BCY_8_AMT
-         , SUM(BCY_9_AMT) AS BCY_9_AMT
-         , SUM(BCY_10_AMT) AS BCY_10_AMT
-         , SUM(BCY_11_AMT) AS BCY_11_AMT
-         , SUM(BCY_12_AMT) AS BCY_12_AMT
-         , SUM(BCY_13_AMT) AS BCY_13_AMT
-         , SUM(BCY_14_AMT) AS BCY_14_AMT
-         , SUM(BCY_15_AMT) AS BCY_15_AMT
-         , SUM(QCY_0_AMT) AS QCY_0_AMT
-         , SUM(QCY_1_AMT) AS QCY_1_AMT
-         , SUM(QCY_2_AMT) AS QCY_2_AMT
-         , SUM(QCY_3_AMT) AS QCY_3_AMT
-         , SUM(QCY_4_AMT) AS QCY_4_AMT
-         , SUM(QCY_5_AMT) AS QCY_5_AMT
-         , SUM(QCY_6_AMT) AS QCY_6_AMT
-         , SUM(QCY_7_AMT) AS QCY_7_AMT
-         , SUM(QCY_8_AMT) AS QCY_8_AMT
-         , SUM(QCY_9_AMT) AS QCY_9_AMT
-         , SUM(QCY_10_AMT) AS QCY_10_AMT
-         , SUM(QCY_11_AMT) AS QCY_11_AMT
-         , SUM(QCY_12_AMT) AS QCY_12_AMT
-         , SUM(QCY_13_AMT) AS QCY_13_AMT
-         , SUM(QCY_14_AMT) AS QCY_14_AMT
-         , SUM(QCY_15_AMT) AS QCY_15_AMT
+         , BCY_0_AMT
+         , BCY_1_AMT
+         , BCY_2_AMT
+         , BCY_3_AMT
+         , BCY_4_AMT
+         , BCY_5_AMT
+         , BCY_6_AMT
+         , BCY_7_AMT
+         , BCY_8_AMT
+         , BCY_9_AMT
+         , BCY_10_AMT
+         , BCY_11_AMT
+         , BCY_12_AMT
+         , BCY_13_AMT
+         , BCY_14_AMT
+         , BCY_15_AMT
+         , QCY_0_AMT
+         , QCY_1_AMT
+         , QCY_2_AMT
+         , QCY_3_AMT
+         , QCY_4_AMT
+         , QCY_5_AMT
+         , QCY_6_AMT
+         , QCY_7_AMT
+         , QCY_8_AMT
+         , QCY_9_AMT
+         , QCY_10_AMT
+         , QCY_11_AMT
+         , QCY_12_AMT
+         , QCY_13_AMT
+         , QCY_14_AMT
+         , QCY_15_AMT
          , SYSTEM_SRC
          , D_ADJ_TYPE
-      FROM (
-        SELECT * FROM DWD_STANDARD
-        UNION ALL
-        SELECT * FROM M01_FACT
-      )
-     GROUP BY COD_SCENARIO, COD_PERIODO, COD_AZIENDA, COD_CATEGORIA, SRC_DETAIL
-            , CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
-            , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
-            , ACCT_SRC_CODE, ACCT_REC_CODE, ACCT_MAP_CODE
-            , LE_AGE_FLAG, ME_AGE_FLAG, MB_AGE_FLAG, GRP_SCOPE
-            , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
-            , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-            , UFEE_UREB_FLAG, ECLS_FLAG, PAY_TERM_CODE, PAY_TERM_DESC
-            , EXCHANGE_RATE_EVAL_FLAG, TAX_RATE
-            , COD_VALUTA, COD_VALUTA_ORIGINARIA, SYSTEM_SRC, D_ADJ_TYPE
-  )
-  SELECT NEWID()
-       , COD_SCENARIO
-       , COD_PERIODO
-       , COD_AZIENDA
-       , COD_CATEGORIA
-       , SRC_DETAIL
-       , CUST_CODE
-       , CUST_NAME
-       , CUST_HEAD_CODE
-       , CUST_HEAD_NAME
-       , CUST_BRANCH_CODE
-       , CUST_BRANCH_NAME
-       , COD_AZI_CTP
-       , COUNTRY_CODE
-       , COUNTRY_NAME
-       , ACCT_SRC_CODE
-       , ACCT_REC_CODE
-       , ACCT_MAP_CODE
-       , LE_AGE_FLAG
-       , ME_AGE_FLAG
-       , MB_AGE_FLAG
-       , GRP_SCOPE
-       , D_CHANNEL
-       , D_CHANNEL_BU
-       , D_CC_CUSTGRP
-       , D_ONOFFLINE
-       , COD_DEST2
-       , COD_DEST3
-       , D_SALE_DEPT
-       , NATURE_L1_NAME
-       , NATURE_L2_NAME
-       , NATURE_L3_NAME
-       , UFEE_UREB_FLAG
-       , ECLS_FLAG
-       , PAY_TERM_CODE
-       , PAY_TERM_DESC
-       , EXCHANGE_RATE_EVAL_FLAG
-       , TAX_RATE
-       , COD_VALUTA
-       , COD_VALUTA_ORIGINARIA
-       , BCY_0_AMT
-       , BCY_1_AMT
-       , BCY_2_AMT
-       , BCY_3_AMT
-       , BCY_4_AMT
-       , BCY_5_AMT
-       , BCY_6_AMT
-       , BCY_7_AMT
-       , BCY_8_AMT
-       , BCY_9_AMT
-       , BCY_10_AMT
-       , BCY_11_AMT
-       , BCY_12_AMT
-       , BCY_13_AMT
-       , BCY_14_AMT
-       , BCY_15_AMT
-       , QCY_0_AMT
-       , QCY_1_AMT
-       , QCY_2_AMT
-       , QCY_3_AMT
-       , QCY_4_AMT
-       , QCY_5_AMT
-       , QCY_6_AMT
-       , QCY_7_AMT
-       , QCY_8_AMT
-       , QCY_9_AMT
-       , QCY_10_AMT
-       , QCY_11_AMT
-       , QCY_12_AMT
-       , QCY_13_AMT
-       , QCY_14_AMT
-       , QCY_15_AMT
-       , SYSTEM_SRC
-       , D_ADJ_TYPE
-       , 'CPM_SP_D2M_ARP_M_PHASE2' AS PROVENIENZA
-       , SYSDATE AS DATEUPD
-       , SESSION_USER AS USERUPD
-    FROM AGG_FACT;
+         , 'CPM_SP_D2M_ARP_M_PHASE2' AS PROVENIENZA
+         , SYSDATE AS DATEUPD
+         , SESSION_USER AS USERUPD
+      FROM AGG_FACT;
+  END;
 
-  -- ============================================================================
-  -- 更新重分类标识及集团归属范围
-  -- 法人/管理单体按账套+公司+有效客商开窗，管理分公司增加利润中心。
-  -- 科目范围由当前目标行ACCT_SRC_CODE传入重分类函数，有主户时优先使用主户编码。
-  -- ============================================================================
-  MERGE INTO AW_MR9_ARPM01_000001 T
-  USING (
-    WITH TARGET_FACT AS (
-    SELECT * 
-      FROM 
-        (
-          SELECT A.OID
-              , A.COD_SCENARIO
-              , A.COD_PERIODO
-              , A.COD_AZIENDA
-              , A.COD_CATEGORIA
-              , A.SRC_DETAIL
-              , A.CUST_CODE
-              , A.CUST_NAME
-              , A.CUST_HEAD_CODE
-              , A.CUST_HEAD_NAME
-              , A.CUST_BRANCH_CODE
-              , A.CUST_BRANCH_NAME
-              , A.CUST_HEAD_CODE AS CUST_KEY
-              , A.COD_AZI_CTP
-              , A.COUNTRY_CODE
-              , A.COUNTRY_NAME
-              , A.ACCT_SRC_CODE
-              , A.ACCT_REC_CODE
-              , A.ACCT_MAP_CODE
-              , A.D_CHANNEL
-              , A.D_ONOFFLINE
-              , A.COD_DEST2
-              , A.COD_DEST3
-              , A.D_SALE_DEPT
-              , A.NATURE_L1_NAME
-              , A.NATURE_L2_NAME
-              , A.NATURE_L3_NAME
-              , A.UFEE_UREB_FLAG
-              , A.ECLS_FLAG
-              , A.PAY_TERM_CODE
-              , A.PAY_TERM_DESC
-              , A.EXCHANGE_RATE_EVAL_FLAG
-              , A.TAX_RATE
-              , A.COD_VALUTA
-              , A.COD_VALUTA_ORIGINARIA
-              , A.SYSTEM_SRC
-              , A.D_ADJ_TYPE
-              , A.PROVENIENZA
-              , AZ.CITTA_LEGALE AS MANDT
-              , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
-              , SUM(
-                    CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+  /* ============================================================================
+   * 更新重分类标识及集团归属范围
+   * 法人/管理单体按账套+公司+有效客商开窗，管理分公司增加利润中心。
+   * 科目范围由当前目标行ACCT_SRC_CODE传入重分类函数，有主户时优先使用主户编码。
+   * ============================================================================ */
+  BEGIN
+    MERGE INTO AW_MR9_ARPM01_000001 T
+    USING (
+      WITH TARGET_FACT AS (
+      SELECT * 
+        FROM 
+          (
+            SELECT A.OID
+                , A.COD_SCENARIO
+                , A.COD_PERIODO
+                , A.COD_AZIENDA
+                , A.COD_CATEGORIA
+                , A.SRC_DETAIL
+                , A.CUST_CODE
+                , A.CUST_NAME
+                , A.CUST_HEAD_CODE
+                , A.CUST_HEAD_NAME
+                , A.CUST_BRANCH_CODE
+                , A.CUST_BRANCH_NAME
+                , A.CUST_HEAD_CODE AS CUST_KEY
+                , A.COD_AZI_CTP
+                , A.COUNTRY_CODE
+                , A.COUNTRY_NAME
+                , A.ACCT_SRC_CODE
+                , A.ACCT_REC_CODE
+                , A.ACCT_MAP_CODE
+                , A.D_CHANNEL
+                , A.D_ONOFFLINE
+                , A.COD_DEST2
+                , A.COD_DEST3
+                , A.D_SALE_DEPT
+                , A.NATURE_L1_NAME
+                , A.NATURE_L2_NAME
+                , A.NATURE_L3_NAME
+                , A.UFEE_UREB_FLAG
+                , A.ECLS_FLAG
+                , A.PAY_TERM_CODE
+                , A.PAY_TERM_DESC
+                , A.EXCHANGE_RATE_EVAL_FLAG
+                , A.TAX_RATE
+                , A.COD_VALUTA
+                , A.COD_VALUTA_ORIGINARIA
+                , A.SYSTEM_SRC
+                , A.D_ADJ_TYPE
+                , A.PROVENIENZA
+                , AZ.CITTA_LEGALE AS MANDT
+                , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
+                , SUM(
+                      CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                              THEN NVL(A.BCY_0_AMT, 0)
+                            ELSE 0
+                      END
+                    ) OVER (
+                      PARTITION BY A.SYSTEM_SRC
+                                  , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                              AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
+                                          THEN '6000' 
+                                          ELSE A.COD_AZIENDA
+                                    END 
+                                  , A.CUST_HEAD_CODE
+                                  , A.ACCT_REC_CODE
+                    ) AS LE_BCY_AMT
+                , SUM(
+                      CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                                  OR A.SRC_DETAIL LIKE 'ZTSO04%'
                             THEN NVL(A.BCY_0_AMT, 0)
-                          ELSE 0
-                    END
-                  ) OVER (
-                    PARTITION BY A.SYSTEM_SRC
-                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
-                                            AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
-                                        THEN '6000' 
-                                        ELSE A.COD_AZIENDA
-                                  END 
-                                , A.CUST_HEAD_CODE
-                                , A.ACCT_REC_CODE
-                  ) AS LE_BCY_AMT
-              , SUM(
-                    CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
-                                OR A.SRC_DETAIL LIKE 'ZTSO04%'
-                          THEN NVL(A.BCY_0_AMT, 0)
-                          ELSE 0
-                    END
-                  ) OVER (
-                    PARTITION BY A.SYSTEM_SRC
-                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
-                                            AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
-                                        THEN '6000' 
-                                        ELSE A.COD_AZIENDA
-                                  END 
-                                , A.CUST_HEAD_CODE
-                                , A.ACCT_REC_CODE
-                  ) AS ME_BCY_AMT
-              , SUM(
-                    CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
-                                OR A.SRC_DETAIL LIKE 'ZTSO04%'
-                          THEN NVL(A.BCY_0_AMT, 0)
-                          ELSE 0
-                    END
-                  ) OVER (
-                    PARTITION BY A.SYSTEM_SRC
-                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
-                                            AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
-                                        THEN '6000' 
-                                        ELSE A.COD_AZIENDA
-                                  END 
-                                , A.CUST_HEAD_CODE
-                                , A.COD_DEST2
-                                , A.ACCT_REC_CODE
-                  ) AS MB_BCY_AMT
-            FROM AW_MR9_ARPM01_000001 A
-            LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
-              ON A.COD_AZIENDA = AZ.COD_AZIENDA
-          WHERE A.COD_SCENARIO = V_SCENARIO
-            AND A.COD_PERIODO = V_PERIODO
-            AND A.COD_AZIENDA IN (
-                  SELECT ELEM
-                    FROM SESSION_AZIENDA_LIST
-                    WHERE SESSION_ID = V_SESSION_ID
+                            ELSE 0
+                      END
+                    ) OVER (
+                      PARTITION BY A.SYSTEM_SRC
+                                  , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                              AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
+                                          THEN '6000' 
+                                          ELSE A.COD_AZIENDA
+                                    END 
+                                  , A.CUST_HEAD_CODE
+                                  , A.ACCT_REC_CODE
+                    ) AS ME_BCY_AMT
+                , SUM(
+                      CASE WHEN A.SRC_DETAIL LIKE 'ORG%'
+                                  OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                            THEN NVL(A.BCY_0_AMT, 0)
+                            ELSE 0
+                      END
+                    ) OVER (
+                      PARTITION BY A.SYSTEM_SRC
+                                  , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                              AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
+                                          THEN '6000' 
+                                          ELSE A.COD_AZIENDA
+                                    END 
+                                  , A.CUST_HEAD_CODE
+                                  , A.COD_DEST2
+                                  , A.ACCT_REC_CODE
+                    ) AS MB_BCY_AMT
+              FROM AW_MR9_ARPM01_000001 A
+              LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
+                ON A.COD_AZIENDA = AZ.COD_AZIENDA
+            WHERE A.COD_SCENARIO = V_SCENARIO
+              AND A.COD_PERIODO = V_PERIODO
+              AND A.COD_AZIENDA IN (
+                    SELECT ELEM
+                      FROM SESSION_AZIENDA_LIST
+                      WHERE SESSION_ID = V_SESSION_ID
                   
-                  UNION ALL
-                  /* 6000/6000A/6000B/6000C/6600 合并重分类 */
-                  SELECT COD_AZIENDA 
-                    FROM AZIENDA AZ
-                   WHERE COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
-                     AND 1 IN (SELECT 1
-                                  FROM SESSION_AZIENDA_LIST
-                                 WHERE SESSION_ID = V_SESSION_ID
-                                   AND ELEM IN ('6000', '6000A', '6000B', '6000C', '6600')
-                                 )
-              )
-            AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
-            AND (A.SRC_DETAIL LIKE 'ORG%'
-                  OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                    UNION ALL
+                    /* 6000/6000A/6000B/6000C/6600 合并重分类 */
+                    SELECT COD_AZIENDA 
+                      FROM AZIENDA AZ
+                     WHERE COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                       AND 1 IN (SELECT 1
+                                    FROM SESSION_AZIENDA_LIST
+                                   WHERE SESSION_ID = V_SESSION_ID
+                                     AND ELEM IN ('6000', '6000A', '6000B', '6000C', '6600')
+                                   )
                 )
-        ) AA
-        WHERE AA.COD_AZIENDA IN (
-                  SELECT ELEM
-                    FROM SESSION_AZIENDA_LIST
-                    WHERE SESSION_ID = V_SESSION_ID
-            )
-    ),
-    REC_FLAG_FACT AS (
-      SELECT F.*
-           , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
-                    THEN 'N'
-                  WHEN F.SRC_DETAIL LIKE 'ORG%'
-                    THEN
-                    TGK_GB_HISENSE.F_APAR_REC(
-                        V_YEARMONTH
-                      , F.MANDT
-                      , F.COD_AZIENDA
-                      , F.ACCT_REC_CODE
-                      , F.CUST_KEY
-                      , F.LE_BCY_AMT
-                      , '1'
-                    )
-                  END AS IS_REC_LG
-           , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
-                    THEN 'AR'
-                  WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
-                    THEN 'AP'
-                  WHEN F.SRC_DETAIL LIKE 'ORG%'
-                    THEN
-                    TGK_GB_HISENSE.F_APAR_REC(
-                        V_YEARMONTH
-                      , F.MANDT
-                      , F.COD_AZIENDA
-                      , F.ACCT_REC_CODE
-                      , F.CUST_KEY
-                      , F.LE_BCY_AMT
-                      , '2'
-                    )
-                  END AS LE_AGE_FLAG
-           , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
-                    THEN 'N'
-                  WHEN F.SRC_DETAIL LIKE 'ORG%'
-                         OR F.SRC_DETAIL LIKE 'ZTSO04%'
-                    THEN
-                    TGK_GB_HISENSE.F_APAR_REC(
-                        V_YEARMONTH
-                      , F.MANDT
-                      , F.COD_AZIENDA
-                      , F.ACCT_REC_CODE
-                      , F.CUST_KEY
-                      , F.ME_BCY_AMT
-                      , '1'
-                    )
-                  END AS IS_REC_ME
-           , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
-                    THEN 'AR'
-                  WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
-                    THEN 'AP'
-                  WHEN F.SRC_DETAIL LIKE 'ORG%'
-                        OR F.SRC_DETAIL LIKE 'ZTSO04%'
-                    THEN
-                    TGK_GB_HISENSE.F_APAR_REC(
-                        V_YEARMONTH
-                      , F.MANDT
-                      , F.COD_AZIENDA
-                      , F.ACCT_REC_CODE
-                      , F.CUST_KEY
-                      , F.ME_BCY_AMT
-                      , '2'
-                    )
-                  END AS ME_AGE_FLAG
-           , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
-                    THEN 'N'
-                  WHEN F.SRC_DETAIL LIKE 'ORG%'
-                        OR F.SRC_DETAIL LIKE 'ZTSO04%'
-                    THEN
-                    TGK_GB_HISENSE.F_APAR_REC(
-                        V_YEARMONTH
-                      , F.MANDT
-                      , F.COD_AZIENDA
-                      , F.ACCT_REC_CODE
-                      , F.CUST_KEY
-                      , F.MB_BCY_AMT
-                      , '1'
-                    )
-                  END AS IS_REC_MB
-           , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
-                    THEN 'AR'
-                  WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
-                    THEN 'AP'
-                  WHEN F.SRC_DETAIL LIKE 'ORG%'
-                        OR F.SRC_DETAIL LIKE 'ZTSO04%'
-                    THEN
-                    TGK_GB_HISENSE.F_APAR_REC(
-                        V_YEARMONTH
-                      , F.MANDT
-                      , F.COD_AZIENDA
-                      , F.ACCT_REC_CODE
-                      , F.CUST_KEY
-                      , F.MB_BCY_AMT
-                      , '2'
-                    )
-                  END AS MB_AGE_FLAG
-        FROM TARGET_FACT F
-    ),
-    NODE_MAP AS (
-      SELECT N.COD_SCENARIO
-           , N.COD_PERIODO
-           , N.ELEM
-           , N.NODE AS NODE
-           , N.NODES AS NODES
-           , CASE WHEN H.ELEM IS NOT NULL THEN 1 ELSE 0 END AS IS_HITACHI
-           , CASE WHEN H.ELEM IS NOT NULL THEN NVL(N.NODES, N.NODE)
-                  ELSE N.NODE
-             END AS SELF_NODE
-           , N.HQ
-        FROM TGK_GB_HISENSE.V_APAR_ELEM_NODE_TAB N
-        LEFT JOIN (
-          SELECT DISTINCT R.ELEM
-            FROM TGK_GB_HISENSE.V_REF_AZIENDA_TV R
-           WHERE R.COD_SCENARIO = V_SCENARIO
-             AND R.COD_PERIODO = V_PERIODO
-             AND R.HIE = '30'
-             AND R.NODE = '1730'
-        ) H
-          ON H.ELEM = N.ELEM
-       WHERE N.COD_SCENARIO = V_SCENARIO
-         AND N.COD_PERIODO = V_PERIODO
+              AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+              AND (A.SRC_DETAIL LIKE 'ORG%'
+                    OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                  )
+          ) AA
+          WHERE AA.COD_AZIENDA IN (
+                    SELECT ELEM
+                      FROM SESSION_AZIENDA_LIST
+                      WHERE SESSION_ID = V_SESSION_ID
+              )
+      ),
+      REC_FLAG_FACT AS (
+        SELECT F.*
+             , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
+                      THEN 'N'
+                    WHEN F.SRC_DETAIL LIKE 'ORG%'
+                      THEN
+                      TGK_GB_HISENSE.F_APAR_REC(
+                          V_YEARMONTH
+                        , F.MANDT
+                        , F.COD_AZIENDA
+                        , F.ACCT_REC_CODE
+                        , F.CUST_KEY
+                        , F.LE_BCY_AMT
+                        , '1'
+                      )
+                    END AS IS_REC_LG
+             , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
+                      THEN 'AR'
+                    WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
+                      THEN 'AP'
+                    WHEN F.SRC_DETAIL LIKE 'ORG%'
+                      THEN
+                      TGK_GB_HISENSE.F_APAR_REC(
+                          V_YEARMONTH
+                        , F.MANDT
+                        , F.COD_AZIENDA
+                        , F.ACCT_REC_CODE
+                        , F.CUST_KEY
+                        , F.LE_BCY_AMT
+                        , '2'
+                      )
+                    END AS LE_AGE_FLAG
+             , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
+                      THEN 'N'
+                    WHEN F.SRC_DETAIL LIKE 'ORG%'
+                           OR F.SRC_DETAIL LIKE 'ZTSO04%'
+                      THEN
+                      TGK_GB_HISENSE.F_APAR_REC(
+                          V_YEARMONTH
+                        , F.MANDT
+                        , F.COD_AZIENDA
+                        , F.ACCT_REC_CODE
+                        , F.CUST_KEY
+                        , F.ME_BCY_AMT
+                        , '1'
+                      )
+                    END AS IS_REC_ME
+             , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
+                      THEN 'AR'
+                    WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
+                      THEN 'AP'
+                    WHEN F.SRC_DETAIL LIKE 'ORG%'
+                          OR F.SRC_DETAIL LIKE 'ZTSO04%'
+                      THEN
+                      TGK_GB_HISENSE.F_APAR_REC(
+                          V_YEARMONTH
+                        , F.MANDT
+                        , F.COD_AZIENDA
+                        , F.ACCT_REC_CODE
+                        , F.CUST_KEY
+                        , F.ME_BCY_AMT
+                        , '2'
+                      )
+                    END AS ME_AGE_FLAG
+             , CASE WHEN F.SRC_DETAIL LIKE '%XH%'
+                      THEN 'N'
+                    WHEN F.SRC_DETAIL LIKE 'ORG%'
+                          OR F.SRC_DETAIL LIKE 'ZTSO04%'
+                      THEN
+                      TGK_GB_HISENSE.F_APAR_REC(
+                          V_YEARMONTH
+                        , F.MANDT
+                        , F.COD_AZIENDA
+                        , F.ACCT_REC_CODE
+                        , F.CUST_KEY
+                        , F.MB_BCY_AMT
+                        , '1'
+                      )
+                    END AS IS_REC_MB
+             , CASE WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '1122000095'
+                      THEN 'AR'
+                    WHEN F.SRC_DETAIL LIKE '%XH%' AND F.ACCT_SRC_CODE = '2202000095'
+                      THEN 'AP'
+                    WHEN F.SRC_DETAIL LIKE 'ORG%'
+                          OR F.SRC_DETAIL LIKE 'ZTSO04%'
+                      THEN
+                      TGK_GB_HISENSE.F_APAR_REC(
+                          V_YEARMONTH
+                        , F.MANDT
+                        , F.COD_AZIENDA
+                        , F.ACCT_REC_CODE
+                        , F.CUST_KEY
+                        , F.MB_BCY_AMT
+                        , '2'
+                      )
+                    END AS MB_AGE_FLAG
+          FROM TARGET_FACT F
+      ),
+      NODE_MAP AS (
+        SELECT N.COD_SCENARIO
+             , N.COD_PERIODO
+             , N.ELEM
+             , N.NODE
+             , N.NODES
+             , CASE WHEN H.ELEM IS NOT NULL THEN 1 ELSE 0 END AS IS_HITACHI
+             , CASE WHEN H.ELEM IS NOT NULL THEN NVL(N.NODES, N.NODE)
+                    ELSE N.NODE
+               END AS SELF_NODE
+             , N.HQ
+          FROM TGK_GB_HISENSE.V_APAR_ELEM_NODE_TAB N
+          LEFT JOIN (
+            SELECT DISTINCT R.ELEM
+              FROM TGK_GB_HISENSE.V_REF_AZIENDA_TV R
+             WHERE R.COD_SCENARIO = V_SCENARIO
+               AND R.COD_PERIODO = V_PERIODO
+               AND R.HIE = '30'
+               AND R.NODE = '1730'
+          ) H
+            ON H.ELEM = N.ELEM
+         WHERE N.COD_SCENARIO = V_SCENARIO
+           AND N.COD_PERIODO = V_PERIODO
+      )
+      /* 以下维度、金额和节点字段仅用于测试查询展示，不参与OID关联。
+         当前公司为日立时，对方公司节点优先使用NODES，NODES为空时回退NODE。 */
+      SELECT F.OID
+           , F.COD_SCENARIO
+           , F.COD_PERIODO
+           , F.COD_AZIENDA
+           , F.COD_CATEGORIA
+           , F.SRC_DETAIL
+           , F.CUST_CODE
+           , F.CUST_NAME
+           , F.CUST_HEAD_CODE
+           , F.CUST_HEAD_NAME
+           , F.CUST_BRANCH_CODE
+           , F.CUST_BRANCH_NAME
+           , F.CUST_KEY
+           , F.COD_AZI_CTP
+           , F.COUNTRY_CODE
+           , F.COUNTRY_NAME
+           , F.ACCT_SRC_CODE
+           , F.ACCT_REC_CODE
+           , F.ACCT_MAP_CODE
+           , F.D_CHANNEL
+           , F.D_ONOFFLINE
+           , F.COD_DEST2
+           , F.COD_DEST3
+           , F.D_SALE_DEPT
+           , F.NATURE_L1_NAME
+           , F.NATURE_L2_NAME
+           , F.NATURE_L3_NAME
+           , F.UFEE_UREB_FLAG
+           , F.ECLS_FLAG
+           , F.PAY_TERM_CODE
+           , F.PAY_TERM_DESC
+           , F.EXCHANGE_RATE_EVAL_FLAG
+           , F.TAX_RATE
+           , F.COD_VALUTA
+           , F.COD_VALUTA_ORIGINARIA
+           , F.SYSTEM_SRC
+           , F.MANDT
+           , F.D_ADJ_TYPE
+           , F.PROVENIENZA
+           , F.BCY_0_AMT
+           , F.LE_BCY_AMT
+           , F.ME_BCY_AMT
+           , F.MB_BCY_AMT
+           , C.SELF_NODE AS CUR_NODE
+           , C.HQ AS CUR_HQ
+           , CASE WHEN C.IS_HITACHI = 1 THEN NVL(P.NODES, P.NODE)
+                  ELSE P.NODE
+             END AS CTP_NODE
+           , P.HQ AS CTP_HQ
+           , F.LE_AGE_FLAG
+           , F.IS_REC_LG
+           , F.ME_AGE_FLAG
+           , F.IS_REC_ME
+           , F.MB_AGE_FLAG
+           , F.IS_REC_MB
+           , CASE
+                 WHEN C.SELF_NODE = CASE WHEN C.IS_HITACHI = 1 THEN NVL(P.NODES, P.NODE)
+                                         ELSE P.NODE
+                                    END
+                  AND C.HQ = P.HQ THEN 'SUB-子公司'
+                 WHEN C.HQ = P.HQ THEN 'GIN-集团内'
+                 ELSE 'GEX-集团外'
+             END AS GRP_SCOPE
+        FROM REC_FLAG_FACT F
+        LEFT JOIN NODE_MAP C
+          ON C.COD_SCENARIO = F.COD_SCENARIO
+         AND C.COD_PERIODO = F.COD_PERIODO
+         AND C.ELEM = F.COD_AZIENDA
+        LEFT JOIN NODE_MAP P
+          ON P.COD_SCENARIO = F.COD_SCENARIO
+         AND P.COD_PERIODO = F.COD_PERIODO
+         AND P.ELEM = F.COD_AZI_CTP
+    ) S
+       ON (T.OID = S.OID)
+     WHEN MATCHED THEN UPDATE SET
+           T.COD_CONTO = CASE
+                                   WHEN S.LE_AGE_FLAG = 'AR' THEN '1122000000'
+                                   WHEN S.LE_AGE_FLAG = 'OR' THEN '122101F'
+                                   WHEN S.LE_AGE_FLAG = 'AS' THEN '1123000000'
+                                   WHEN S.LE_AGE_FLAG = 'CA' THEN '1460000000'
+                                   WHEN S.LE_AGE_FLAG = 'RF' THEN '1124001000'
+                                   WHEN S.LE_AGE_FLAG = 'AP' THEN '2202000000'
+                                   WHEN S.LE_AGE_FLAG = 'OP' THEN '224199F'
+                                   WHEN S.LE_AGE_FLAG = 'AC' THEN '2203000000'
+                                   WHEN S.LE_AGE_FLAG = 'CL' THEN '2204000000'
+                                   WHEN S.LE_AGE_FLAG = 'A9' THEN '1910000A70'
+                                   WHEN S.LE_AGE_FLAG = 'A10' THEN '1531000000'
+                               END
+         , T.LE_AGE_FLAG = S.LE_AGE_FLAG
+         , T.IS_REC_LG = S.IS_REC_LG
+         , T.ME_AGE_FLAG = S.ME_AGE_FLAG
+         , T.IS_REC_ME = S.IS_REC_ME
+         , T.MB_AGE_FLAG = S.MB_AGE_FLAG
+         , T.IS_REC_MB = S.IS_REC_MB
+         , T.GRP_SCOPE = S.GRP_SCOPE
+         , T.DATEUPD = SYSDATE
+         , T.USERUPD = SESSION_USER;
+  END;
+
+  /* 非ORG来源记录统一回写默认应收科目，仅更新本次过程装载的当前场景和期间。 */
+  BEGIN
+    UPDATE AW_MR9_ARPM01_000001
+       SET COD_CONTO = '1122000000'
+     WHERE COD_SCENARIO = V_SCENARIO
+       AND COD_PERIODO = V_PERIODO
+       AND COD_AZIENDA IN (
+             SELECT ELEM
+               FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+       )
+       AND PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+       AND SRC_DETAIL NOT LIKE 'ORG%'
+       AND COD_CONTO IS NULL;
+  END;
+
+  /* 手工插行的底稿调整数据复制为ADJ副本，客商分户优先回退主户；科目只保留COD_CONTO，插行在重分类与默认科目回写之后、不走重分类，副本下轮跑批随当前批次清理。
+     ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载 */
+  BEGIN
+    INSERT INTO AW_MR9_ARPM01_000001(
+        OID
+      , COD_SCENARIO
+      , COD_PERIODO
+      , COD_AZIENDA
+      , COD_CATEGORIA
+      , SRC_DETAIL
+      , CUST_CODE
+      , CUST_NAME
+      , CUST_HEAD_CODE
+      , CUST_HEAD_NAME
+      , CUST_BRANCH_CODE
+      , CUST_BRANCH_NAME
+      , COD_AZI_CTP
+      , COUNTRY_CODE
+      , COUNTRY_NAME
+      , ACCT_SRC_CODE
+      , ACCT_REC_CODE
+      , ACCT_MAP_CODE
+      , LE_AGE_FLAG
+      , ME_AGE_FLAG
+      , MB_AGE_FLAG
+      , GRP_SCOPE
+      , D_CHANNEL
+      , D_CHANNEL_BU
+      , D_CC_CUSTGRP
+      , D_ONOFFLINE
+      , COD_DEST2
+      , COD_DEST3
+      , D_SALE_DEPT
+      , NATURE_L1_NAME
+      , NATURE_L2_NAME
+      , NATURE_L3_NAME
+      , UFEE_UREB_FLAG
+      , ECLS_FLAG
+      , PAY_TERM_CODE
+      , PAY_TERM_DESC
+      , EXCHANGE_RATE_EVAL_FLAG
+      , TAX_RATE
+      , COD_VALUTA
+      , COD_VALUTA_ORIGINARIA
+      , BCY_0_AMT
+      , BCY_1_AMT
+      , BCY_2_AMT
+      , BCY_3_AMT
+      , BCY_4_AMT
+      , BCY_5_AMT
+      , BCY_6_AMT
+      , BCY_7_AMT
+      , BCY_8_AMT
+      , BCY_9_AMT
+      , BCY_10_AMT
+      , BCY_11_AMT
+      , BCY_12_AMT
+      , BCY_13_AMT
+      , BCY_14_AMT
+      , BCY_15_AMT
+      , QCY_0_AMT
+      , QCY_1_AMT
+      , QCY_2_AMT
+      , QCY_3_AMT
+      , QCY_4_AMT
+      , QCY_5_AMT
+      , QCY_6_AMT
+      , QCY_7_AMT
+      , QCY_8_AMT
+      , QCY_9_AMT
+      , QCY_10_AMT
+      , QCY_11_AMT
+      , QCY_12_AMT
+      , QCY_13_AMT
+      , QCY_14_AMT
+      , QCY_15_AMT
+      , SYSTEM_SRC
+      , D_ADJ_TYPE
+      , COD_CONTO
+      , PROVENIENZA
+      , DATEUPD
+      , USERUPD
     )
-    -- 以下维度、金额和节点字段仅用于测试查询展示，不参与OID关联。
-    -- 当前公司为日立时，对方公司节点优先使用NODES，NODES为空时回退NODE。
-    SELECT F.OID
-         , F.COD_SCENARIO
-         , F.COD_PERIODO
-         , F.COD_AZIENDA
-         , F.COD_CATEGORIA
-         , F.SRC_DETAIL
-         , F.CUST_CODE
-         , F.CUST_NAME
-         , F.CUST_HEAD_CODE
-         , F.CUST_HEAD_NAME
-         , F.CUST_BRANCH_CODE
-         , F.CUST_BRANCH_NAME
-         , F.CUST_KEY
-         , F.COD_AZI_CTP
-         , F.COUNTRY_CODE
-         , F.COUNTRY_NAME
-         , F.ACCT_SRC_CODE
-         , F.ACCT_REC_CODE
-         , F.ACCT_MAP_CODE
-         , F.D_CHANNEL
-         , F.D_ONOFFLINE
-         , F.COD_DEST2
-         , F.COD_DEST3
-         , F.D_SALE_DEPT
-         , F.NATURE_L1_NAME
-         , F.NATURE_L2_NAME
-         , F.NATURE_L3_NAME
-         , F.UFEE_UREB_FLAG
-         , F.ECLS_FLAG
-         , F.PAY_TERM_CODE
-         , F.PAY_TERM_DESC
-         , F.EXCHANGE_RATE_EVAL_FLAG
-         , F.TAX_RATE
-         , F.COD_VALUTA
-         , F.COD_VALUTA_ORIGINARIA
-         , F.SYSTEM_SRC
-         , F.MANDT
-         , F.D_ADJ_TYPE
-         , F.PROVENIENZA
-         , F.BCY_0_AMT
-         , F.LE_BCY_AMT
-         , F.ME_BCY_AMT
-         , F.MB_BCY_AMT
-         , C.SELF_NODE AS CUR_NODE
-         , C.HQ AS CUR_HQ
-         , CASE WHEN C.IS_HITACHI = 1 THEN NVL(P.NODES, P.NODE)
-                ELSE P.NODE
-           END AS CTP_NODE
-         , P.HQ AS CTP_HQ
-         , F.LE_AGE_FLAG
-         , F.IS_REC_LG
-         , F.ME_AGE_FLAG
-         , F.IS_REC_ME
-         , F.MB_AGE_FLAG
-         , F.IS_REC_MB
-         , CASE
-               WHEN C.SELF_NODE = CASE WHEN C.IS_HITACHI = 1 THEN NVL(P.NODES, P.NODE)
-                                       ELSE P.NODE
-                                  END
-                AND C.HQ = P.HQ THEN 'SUB-子公司'
-               WHEN C.HQ = P.HQ THEN 'GIN-集团内'
-               ELSE 'GEX-集团外'
-           END AS GRP_SCOPE
-      FROM REC_FLAG_FACT F
-      LEFT JOIN NODE_MAP C
-        ON C.COD_SCENARIO = F.COD_SCENARIO
-       AND C.COD_PERIODO = F.COD_PERIODO
-       AND C.ELEM = F.COD_AZIENDA
-      LEFT JOIN NODE_MAP P
-        ON P.COD_SCENARIO = F.COD_SCENARIO
-       AND P.COD_PERIODO = F.COD_PERIODO
-       AND P.ELEM = F.COD_AZI_CTP
-  ) S
-     ON (T.OID = S.OID)
-   WHEN MATCHED THEN UPDATE SET
-         T.COD_CONTO = CASE
-                                 WHEN S.LE_AGE_FLAG = 'AR' THEN '1122000000'
-                                 WHEN S.LE_AGE_FLAG = 'OR' THEN '122101F'
-                                 WHEN S.LE_AGE_FLAG = 'AS' THEN '1123000000'
-                                 WHEN S.LE_AGE_FLAG = 'CA' THEN '1460000000'
-                                 WHEN S.LE_AGE_FLAG = 'RF' THEN '1124001000'
-                                 WHEN S.LE_AGE_FLAG = 'AP' THEN '2202000000'
-                                 WHEN S.LE_AGE_FLAG = 'OP' THEN '224199F'
-                                 WHEN S.LE_AGE_FLAG = 'AC' THEN '2203000000'
-                                 WHEN S.LE_AGE_FLAG = 'CL' THEN '2204000000'
-                                 WHEN S.LE_AGE_FLAG = 'A9' THEN '1910000A70'
-                                 WHEN S.LE_AGE_FLAG = 'A10' THEN '1531000000'
-                             END
-       , T.LE_AGE_FLAG = S.LE_AGE_FLAG
-       , T.IS_REC_LG = S.IS_REC_LG
-       , T.ME_AGE_FLAG = S.ME_AGE_FLAG
-       , T.IS_REC_ME = S.IS_REC_ME
-       , T.MB_AGE_FLAG = S.MB_AGE_FLAG
-       , T.IS_REC_MB = S.IS_REC_MB
-       , T.GRP_SCOPE = S.GRP_SCOPE
-       , T.DATEUPD = SYSDATE
-       , T.USERUPD = SESSION_USER;
+    SELECT NEWID() AS OID
+         , A.COD_SCENARIO
+         , A.COD_PERIODO
+         , A.COD_AZIENDA
+         , A.COD_CATEGORIA
+         , 'ADJ' AS SRC_DETAIL
+         , NVL(NULLIF(TRIM(A.CUST_BRANCH_CODE), ''), A.CUST_HEAD_CODE) AS CUST_CODE  /* 客商编码：分户优先回退主户 */
+         , NVL(NULLIF(TRIM(A.CUST_BRANCH_NAME), ''), A.CUST_HEAD_NAME) AS CUST_NAME  /* 客商名称：分户优先回退主户 */
+         , A.CUST_HEAD_CODE
+         , A.CUST_HEAD_NAME
+         , A.CUST_BRANCH_CODE
+         , A.CUST_BRANCH_NAME
+         , A.COD_AZI_CTP
+         , NULL AS COUNTRY_CODE
+         , NULL AS COUNTRY_NAME
+         , NULL AS ACCT_SRC_CODE
+         , NULL AS ACCT_REC_CODE
+         , NULL AS ACCT_MAP_CODE
+         , NULL AS LE_AGE_FLAG
+         , NULL AS ME_AGE_FLAG
+         , NULL AS MB_AGE_FLAG
+         , A.GRP_SCOPE
+         , A.D_CHANNEL
+         , A.D_CHANNEL_BU
+         , A.D_CC_CUSTGRP
+         , A.D_ONOFFLINE
+         , A.COD_DEST2
+         , A.COD_DEST3
+         , A.D_SALE_DEPT
+         , NULL AS NATURE_L1_NAME
+         , NULL AS NATURE_L2_NAME
+         , NULL AS NATURE_L3_NAME
+         , NULL AS UFEE_UREB_FLAG
+         , NULL AS ECLS_FLAG
+         , NULL AS PAY_TERM_CODE
+         , NULL AS PAY_TERM_DESC
+         , NULL AS EXCHANGE_RATE_EVAL_FLAG
+         , NULL AS TAX_RATE
+         , A.COD_VALUTA
+         , A.COD_VALUTA_ORIGINARIA
+         , A.BCY_0_AMT
+         , A.BCY_1_AMT
+         , A.BCY_2_AMT
+         , A.BCY_3_AMT
+         , A.BCY_4_AMT
+         , A.BCY_5_AMT
+         , A.BCY_6_AMT
+         , A.BCY_7_AMT
+         , A.BCY_8_AMT
+         , A.BCY_9_AMT
+         , A.BCY_10_AMT
+         , A.BCY_11_AMT
+         , A.BCY_12_AMT
+         , A.BCY_13_AMT
+         , A.BCY_14_AMT
+         , A.BCY_15_AMT
+         , A.QCY_0_AMT
+         , A.QCY_1_AMT
+         , A.QCY_2_AMT
+         , A.QCY_3_AMT
+         , A.QCY_4_AMT
+         , A.QCY_5_AMT
+         , A.QCY_6_AMT
+         , A.QCY_7_AMT
+         , A.QCY_8_AMT
+         , A.QCY_9_AMT
+         , A.QCY_10_AMT
+         , A.QCY_11_AMT
+         , A.QCY_12_AMT
+         , A.QCY_13_AMT
+         , A.QCY_14_AMT
+         , A.QCY_15_AMT
+         , NULL AS SYSTEM_SRC
+         , A.D_ADJ_TYPE
+         , A.COD_CONTO
+         , 'CPM_SP_D2M_ARP_M_PHASE2' AS PROVENIENZA
+         , SYSDATE AS DATEUPD
+         , SESSION_USER AS USERUPD
+      FROM AW_MR9_ARPM01_000001 A
+     WHERE A.COD_SCENARIO = V_SCENARIO
+       AND A.COD_PERIODO = V_PERIODO
+       AND A.COD_CATEGORIA = 'ZFAMOUNT'
+       AND NVL(A.PROVENIENZA, 'ZZZZ') <> 'CPM_SP_D2M_ARP_M_PHASE2'  /* 只取手工插行，排除本过程装载行与上次副本 */
+       AND A.COD_AZIENDA IN (
+             SELECT ELEM
+               FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+       );
+  END;
+  /* 目标表装载完成日志、会话数据清理与结束日志。 */
+  BEGIN
+    INSERT INTO ZTAB_CPM_LOG(
+        CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+    ) VALUES (
+        'CPM_SP_D2M_ARP_M_PHASE2', '目标表装载完成', SYSDATE, SESSION_USER,
+        V_SCENARIO, V_PERIODO, V_AZIENDA
+    );
+    COMMIT;
 
-  -- 非ORG来源记录统一回写默认应收科目，仅更新本次过程装载的当前场景和期间。
-  UPDATE AW_MR9_ARPM01_000001
-     SET COD_CONTO = '1122000000'
-   WHERE COD_SCENARIO = V_SCENARIO
-     AND COD_PERIODO = V_PERIODO
-     AND COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
-     )
-     AND PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
-     AND SRC_DETAIL NOT LIKE 'ORG%'
-     AND COD_CONTO IS NULL;
+    /* 4.1 清理当前会话数据 */
+    DELETE FROM SESSION_AZIENDA_LIST
+     WHERE SESSION_ID = V_SESSION_ID;
+    DELETE FROM SESSION_V_REF_AZIENDA
+     WHERE SESSION_ID = V_SESSION_ID;
 
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_D2M_ARP_M_PHASE2', '目标表装载完成', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
-  );
-  COMMIT;
-
-  /* 4.1 清理当前会话数据 */
-  DELETE FROM SESSION_AZIENDA_LIST
-   WHERE SESSION_ID = V_SESSION_ID;
-  DELETE FROM SESSION_V_REF_AZIENDA
-   WHERE SESSION_ID = V_SESSION_ID;
-
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_D2M_ARP_M_PHASE2', 'END 执行完成', SYSDATE, SESSION_USER,
-      V_SCENARIO, V_PERIODO, V_AZIENDA
-  );
-  COMMIT;
+    INSERT INTO ZTAB_CPM_LOG(
+        CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
+    ) VALUES (
+        'CPM_SP_D2M_ARP_M_PHASE2', 'END 执行完成', SYSDATE, SESSION_USER,
+        V_SCENARIO, V_PERIODO, V_AZIENDA
+    );
+    COMMIT;
+  END;
 /*
 EXCEPTION
   WHEN OTHERS THEN
