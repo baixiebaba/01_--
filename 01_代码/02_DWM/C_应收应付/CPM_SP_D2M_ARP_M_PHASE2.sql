@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE TGK_FIMA_HISENSE.CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261104 12:10
-   * 本次修改：ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
-   * 上次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
+   * 最后更新时间：20261104 14:05
+   * 本次修改：ALTER BY 20261104 14:05 SHIQINGFENG.EX 调整副本SRC_DETAIL改按D_ADJ_TYPE映射
+   * 上次修改：ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2 
    * 功能描述  ：DWD->DWM往来账龄数据抽取
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE TGK_FIMA_HISENSE.CPM_SP_D2M_ARP_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM01_000001
    * 
    * 修改历史：
+   *   ALTER BY 20261104 14:05 SHIQINGFENG.EX 调整副本SRC_DETAIL改按D_ADJ_TYPE映射
    *   ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
    *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换；签名行恢复TGK_FIMA_HISENSE前缀与线上一致。
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数：M01列清单、来源映射与出库/退货分支不再取TOV渠道，聚合GROUP BY与最终SELECT同步删除该列。
@@ -981,8 +982,9 @@ BEGIN
        AND COD_CONTO IS NULL;
   END;
 
-  /* 手工插行的底稿调整数据复制为ADJ副本，客商分户优先回退主户；科目只保留COD_CONTO，插行在重分类与默认科目回写之后、不走重分类，副本下轮跑批随当前批次清理。
-     ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载 */
+  /* 手工插行的底稿调整数据复制为调整副本，SRC_DETAIL按D_ADJ_TYPE映射（OVERDUE_ADJ/EPAY_ADJ/UFEE_ADJ/UREB_ADJ，其他兜底ADJ）；客商分户优先回退主户；科目只保留COD_CONTO，插行在重分类与默认科目回写之后、不走重分类，副本下轮跑批随当前批次清理。
+     ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
+     ALTER BY 20261104 14:05 SHIQINGFENG.EX 副本SRC_DETAIL改按D_ADJ_TYPE映射 */
   BEGIN
     INSERT INTO AW_MR9_ARPM01_000001(
         OID
@@ -1068,8 +1070,13 @@ BEGIN
          , A.COD_SCENARIO
          , A.COD_PERIODO
          , A.COD_AZIENDA
-         , A.COD_CATEGORIA
-         , 'ADJ' AS SRC_DETAIL
+         , 'ZAMOUNT' AS COD_CATEGORIA
+         , CASE A.D_ADJ_TYPE
+             WHEN 'ARP_01_001' THEN 'OVERDUE_ADJ'
+             WHEN 'ARP_01_002' THEN 'EPAY_ADJ'
+             WHEN 'ARP_01_003' THEN 'UFEE_ADJ'
+             WHEN 'ARP_01_004' THEN 'UREB_ADJ'
+           END AS SRC_DETAIL
          , NVL(NULLIF(TRIM(A.CUST_BRANCH_CODE), ''), A.CUST_HEAD_CODE) AS CUST_CODE  /* 客商编码：分户优先回退主户 */
          , NVL(NULLIF(TRIM(A.CUST_BRANCH_NAME), ''), A.CUST_HEAD_NAME) AS CUST_NAME  /* 客商名称：分户优先回退主户 */
          , A.CUST_HEAD_CODE
@@ -1096,7 +1103,11 @@ BEGIN
          , NULL AS NATURE_L1_NAME
          , NULL AS NATURE_L2_NAME
          , NULL AS NATURE_L3_NAME
-         , NULL AS UFEE_UREB_FLAG
+         , CASE WHEN D_ADJ_TYPE = 'ARP_01_003' 
+                  THEN 'UFEE_ADJ'
+                WHEN D_ADJ_TYPE = 'ARP_01_004' 
+                  THEN 'UREB_ADJ'
+           END AS UFEE_UREB_FLAG
          , NULL AS ECLS_FLAG
          , NULL AS PAY_TERM_CODE
          , NULL AS PAY_TERM_DESC
@@ -1146,7 +1157,6 @@ BEGIN
      WHERE A.COD_SCENARIO = V_SCENARIO
        AND A.COD_PERIODO = V_PERIODO
        AND A.COD_CATEGORIA = 'ZFAMOUNT'
-       AND NVL(A.PROVENIENZA, 'ZZZZ') <> 'CPM_SP_D2M_ARP_M_PHASE2'  /* 只取手工插行，排除本过程装载行与上次副本 */
        AND A.COD_AZIENDA IN (
              SELECT ELEM
                FROM SESSION_AZIENDA_LIST
