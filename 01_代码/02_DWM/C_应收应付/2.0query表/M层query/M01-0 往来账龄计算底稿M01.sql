@@ -130,4 +130,5 @@ SELECT COD_SCENARIO                                                       /* 场
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
+   AND COD_CATEGORIA = 'ZAMOUNT'
  ORDER BY SRC_DETAIL,COD_AZIENDA,COD_CONTO
