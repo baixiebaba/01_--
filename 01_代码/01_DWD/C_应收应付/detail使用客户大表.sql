@@ -2,12 +2,8 @@
  *                                  脚本说明
  *-----------------------------------------------------------------------------
  * 最后更新时间：20261103 19:10
- * 本次修改：ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4：渠道分组映射上线后余额行有onoffline_code，可按公司+渠道分组匹配利润中心映射规则，优先级由3→5改为3→4→5。
- * 上次修改：ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射：余额无客商与渠道分类，只按公司取应收渠道分组规则 batch 2，未命中或规则为空时按默认零售-传统零售（020_OFF_002）兜底。
- *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射：余额无客商，客商相关批次（1/2/5）不适用，只按公司+科目+利润中心（batch 3）取，未命中回退公司+科目（batch 4）。
- *   ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额（非统驭科目）行补充业务管理单元映射：按系统+映射后利润中心（未命中回退源利润中心）取业务管理单元规则batch 1，未命中再退系统+公司batch 3，最后用利润中心业务管理单元兜底，口径与凭证行一致。
- *   ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果：重映射（batch 1→3→4→5）未命中时回退源利润中心，参与busdept batch1与bmu兜底匹配（修复6800因利润中心batch1停用导致业务管理单元全空）。
- *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
+ * 本次修改：ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
+ * 上次修改：ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射。
  *
  * 脚本名称  ：detail使用客户大表.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -20,12 +16,12 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
- *   ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4：渠道分组映射上线后余额行有onoffline_code，可按公司+渠道分组匹配利润中心映射规则，优先级由3→5改为3→4→5。
- *   ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射：余额无客商与渠道分类，只按公司取应收渠道分组规则 batch 2，未命中或规则为空时按默认零售-传统零售（020_OFF_002）兜底。
- *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射：余额无客商，客商相关批次（1/2/5）不适用，只按公司+科目+利润中心（batch 3）取，未命中回退公司+科目（batch 4）。
- *   ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额（非统驭科目）行补充业务管理单元映射：按系统+映射后利润中心（未命中回退源利润中心）取业务管理单元规则batch 1，未命中再退系统+公司batch 3，最后用利润中心业务管理单元兜底，口径与凭证行一致。
- *   ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果：重映射（batch 1→3→4→5）未命中时回退源利润中心，参与busdept batch1与bmu兜底匹配（修复6800因利润中心batch1停用导致业务管理单元全空）。
- *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
+ *   ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
+ *   ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射。
+ *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射。
+ *   ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额（非统驭科目）行补充业务管理单元映射。
+ *   ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果。
+ *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射。
  *   ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。（20261103 17:45 SHIQINGFENG.EX 同步自生效版）
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *   ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段停用（注释保留）。
