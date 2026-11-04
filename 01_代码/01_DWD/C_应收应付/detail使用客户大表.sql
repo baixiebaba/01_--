@@ -1,10 +1,13 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 17:45
- * 本次修改：ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果：重映射（batch 1→3→4→5）未命中时回退源利润中心，参与busdept batch1与bmu兜底匹配（修复6800因利润中心batch1停用导致业务管理单元全空）。
- * 上次修改：ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
- *   ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段按1030变更停用（注释保留）。
+ * 最后更新时间：20261103 19:10
+ * 本次修改：ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4：渠道分组映射上线后余额行有onoffline_code，可按公司+渠道分组匹配利润中心映射规则，优先级由3→5改为3→4→5。
+ * 上次修改：ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射：余额无客商与渠道分类，只按公司取应收渠道分组规则 batch 2，未命中或规则为空时按默认零售-传统零售（020_OFF_002）兜底。
+ *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射：余额无客商，客商相关批次（1/2/5）不适用，只按公司+科目+利润中心（batch 3）取，未命中回退公司+科目（batch 4）。
+ *   ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额（非统驭科目）行补充业务管理单元映射：按系统+映射后利润中心（未命中回退源利润中心）取业务管理单元规则batch 1，未命中再退系统+公司batch 3，最后用利润中心业务管理单元兜底，口径与凭证行一致。
+ *   ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果：重映射（batch 1→3→4→5）未命中时回退源利润中心，参与busdept batch1与bmu兜底匹配（修复6800因利润中心batch1停用导致业务管理单元全空）。
+ *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
  *
  * 脚本名称  ：detail使用客户大表.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -17,6 +20,10 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4：渠道分组映射上线后余额行有onoffline_code，可按公司+渠道分组匹配利润中心映射规则，优先级由3→5改为3→4→5。
+ *   ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射：余额无客商与渠道分类，只按公司取应收渠道分组规则 batch 2，未命中或规则为空时按默认零售-传统零售（020_OFF_002）兜底。
+ *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射：余额无客商，客商相关批次（1/2/5）不适用，只按公司+科目+利润中心（batch 3）取，未命中回退公司+科目（batch 4）。
+ *   ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额（非统驭科目）行补充业务管理单元映射：按系统+映射后利润中心（未命中回退源利润中心）取业务管理单元规则batch 1，未命中再退系统+公司batch 3，最后用利润中心业务管理单元兜底，口径与凭证行一致。
  *   ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果：重映射（batch 1→3→4→5）未命中时回退源利润中心，参与busdept batch1与bmu兜底匹配（修复6800因利润中心batch1停用导致业务管理单元全空）。
  *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库dim_rule_fi_mr_ar_cust_type（cust_type=电商零售类客户）的渠道BU编码判定，命中后按应收利润中心映射表batch_id=1将旧利润中心映射为新利润中心，优先级仍为1→3→4→5。
  *   ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。（20261103 17:45 SHIQINGFENG.EX 同步自生效版）
@@ -2458,11 +2465,25 @@ profitcenter_dim AS (
      GROUP BY system_src
             , NULLIF(LTRIM(TRIM(prctr), '0'), '')
 ),
--- 读取第二段可用的利润中心规则；非统驭余额仅支持batch 3和batch 5。
+-- 渠道分组按公司取（batch 2）；科目余额无客商与渠道分类，batch 1/3/4 不适用。定义在此处供利润中心batch 4 与最终输出列共用。
+gl_nf_by_company AS (
+    SELECT b.cod_azienda AS company_code
+         , MAX(a.onoffline_code) AS onoffline_code
+         , MAX(a.onoffline_name) AS onoffline_name
+      FROM dim.dim_rule_fi_mr_ar_nf_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(a.company_code)
+     WHERE CAST(a.batch_id AS INT) = 2
+       AND NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+     GROUP BY b.cod_azienda
+),
+-- 读取第二段可用的利润中心规则；非统驭余额无客商，支持batch 3（公司+科目）、batch 4（公司+渠道分组）、batch 5（公司）。
 ar_profitcenter_balance_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
          , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '') AS acct_src_code
+         , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '') AS onoffline_code
          , MAX(a.profitcenter_code) AS profitcenter_code
          , MAX(a.profitcenter_name) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping a
@@ -2470,12 +2491,13 @@ ar_profitcenter_balance_rule AS (
         ON b.cod_azienda LIKE TRIM(a.company_code)
      WHERE NVL(a.valid_fr, '202401') <= @dt_month
        AND NVL(a.valid_to, '999999') >= @dt_month
-       AND CAST(a.batch_id AS INT) IN (3, 5)
+       AND CAST(a.batch_id AS INT) IN (3, 4, 5)
      GROUP BY CAST(a.batch_id AS INT)
             , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '')
             , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
+            , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '')
 ),
--- 按公司+科目匹配batch 3，未命中时按公司匹配batch 5。
+-- 按公司+科目匹配batch 3，未命中时按公司+渠道分组匹配batch 4，再未命中按公司匹配batch 5。
 profitcenter_balance_candidate AS (
     SELECT b.system_src
          , b.company_code
@@ -2493,6 +2515,25 @@ profitcenter_balance_candidate AS (
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
        AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
     UNION ALL
+    -- ALTER BY 20261103 19:10 SHIQINGFENG.EX 新增batch 4：公司+渠道分组映射利润中心，渠道分组未命中规则时按默认零售渠道兜底，与输出列同口径。
+    SELECT b.system_src
+         , b.company_code
+         , b.acct_src_code
+         , b.src_profitcenter_code
+         , b.bus_range_code
+         , b.qcy_code
+         , b.ods_src
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM balance_agg b
+      LEFT JOIN gl_nf_by_company nf2
+        ON nf2.company_code = b.company_code
+     INNER JOIN ar_profitcenter_balance_rule r
+        ON r.batch_id = 4
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+       AND r.onoffline_code = COALESCE(NULLIF(NULLIF(TRIM(nf2.onoffline_code), ''), 'NULL'), '020_OFF_002')
+    UNION ALL
     SELECT b.system_src
          , b.company_code
          , b.acct_src_code
@@ -2508,7 +2549,7 @@ profitcenter_balance_candidate AS (
         ON r.batch_id = 5
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
 ),
--- 按余额粒度唯一选取利润中心，batch 3优先于batch 5且不复制余额事实。
+-- 按余额粒度唯一选取利润中心，batch 3优先于batch 4、batch 4优先于batch 5，且不复制余额事实。
 profitcenter_balance_pick AS (
     SELECT c.system_src
          , c.company_code
@@ -2553,6 +2594,70 @@ profitcenter_balance_pick AS (
             , c.bus_range_code
             , c.qcy_code
             , c.ods_src
+),
+-- ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额行业务管理单元规则：系统+利润中心（batch 1）优先，系统+公司（batch 3）兜底；余额无客商与三级性质，batch 2 不适用。
+gl_busdept_by_prctr AS (
+    SELECT system_src
+         , profitcenter_code
+         , MAX(marketing_dept_code) AS marketing_dept_code
+         , MAX(marketing_dept_name) AS marketing_dept_name
+      FROM dim.dim_rule_fi_mr_ar_busdept_mapping
+     WHERE CAST(batch_id AS INT) = 1
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY system_src
+            , profitcenter_code
+),
+gl_busdept_by_company AS (
+    SELECT system_src
+         , company_code
+         , MAX(marketing_dept_code) AS marketing_dept_code
+         , MAX(marketing_dept_name) AS marketing_dept_name
+      FROM dim.dim_rule_fi_mr_ar_busdept_mapping
+     WHERE CAST(batch_id AS INT) = 3
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY system_src
+            , company_code
+),
+-- 利润中心到业务管理单元的兜底映射，仅取启用记录。
+gl_bmu_profitcenter AS (
+    SELECT NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '') AS profitcenter_code
+         , MAX(bmu_code) AS bmu_code
+         , MAX(bmu_name) AS bmu_name
+      FROM dim.dim_rule_fi_mr_bmu_to_profitcenter
+     WHERE TRIM(dim_flag) = '01'
+     GROUP BY NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
+),
+-- 三级性质按公司+科目+利润中心取（batch 3）；科目余额无客商，客商批次 1/2/5 不适用。
+gl_nature_by_prctr AS (
+    SELECT company_code
+         , acct_src_code
+         , profitcenter_code
+         , MAX(nature_l1_name) AS nature_l1_name
+         , MAX(nature_l2_name) AS nature_l2_name
+         , MAX(nature_l3_name) AS nature_l3_name
+      FROM dim.dim_rule_fi_mr_ar_nature
+     WHERE CAST(batch_id AS INT) = 3
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY company_code
+            , acct_src_code
+            , profitcenter_code
+),
+-- 三级性质按公司+科目兜底（batch 4）。
+gl_nature_by_company AS (
+    SELECT company_code
+         , acct_src_code
+         , MAX(nature_l1_name) AS nature_l1_name
+         , MAX(nature_l2_name) AS nature_l2_name
+         , MAX(nature_l3_name) AS nature_l3_name
+      FROM dim.dim_rule_fi_mr_ar_nature
+     WHERE CAST(batch_id AS INT) = 4
+       AND NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+     GROUP BY company_code
+            , acct_src_code
 )
 SELECT @dt_month
      , LEFT(@dt_month, 4) AS `year`
@@ -2592,19 +2697,32 @@ SELECT @dt_month
 --   , NULL AS tov_channel_name
      , NULL AS cc_cust_group_code
      , NULL AS cc_cust_group_name
-     , NULL AS onoffline_code
-     , NULL AS onoffline_name
+     -- ALTER BY 20261103 19:05 SHIQINGFENG.EX 渠道分组按公司取规则表，未命中或规则为空按默认零售渠道兜底，与凭证行 nf_final 同口径。
+     , CASE
+           WHEN NULLIF(TRIM(nf2.onoffline_code), '') IS NULL
+             OR nf2.onoffline_code = 'NULL'
+               THEN '020_OFF_002'
+           ELSE nf2.onoffline_code
+       END AS onoffline_code
+     , CASE
+           WHEN NULLIF(TRIM(nf2.onoffline_name), '') IS NULL
+             OR nf2.onoffline_name = 'NULL'
+               THEN '零售-传统零售'
+           ELSE nf2.onoffline_name
+       END AS onoffline_name
      , b.src_profitcenter_code
      , COALESCE(pc.ktext, '') AS src_profitcenter_name
      , COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code) AS profitcenter_code
      , COALESCE(NULLIF(TRIM(bp.profitcenter_name), ''), COALESCE(pc.ktext, '')) AS profitcenter_name
      , br.bus_range_code
      , br.bus_range_name
-     , NULL AS marketing_dept_code
-     , NULL AS marketing_dept_name
-     , NULL AS nature_l1_name
-     , NULL AS nature_l2_name
-     , NULL AS nature_l3_name
+     -- ALTER BY 20261103 18:45 SHIQINGFENG.EX 业务管理单元按映射后利润中心取规则表，未命中依次回退系统+公司规则与利润中心业务管理单元。
+     , COALESCE(NULLIF(TRIM(bd1.marketing_dept_code), ''), NULLIF(TRIM(bd3.marketing_dept_code), ''), bg.bmu_code) AS marketing_dept_code
+     , COALESCE(NULLIF(TRIM(bd1.marketing_dept_name), ''), NULLIF(TRIM(bd3.marketing_dept_name), ''), bg.bmu_name) AS marketing_dept_name
+     -- ALTER BY 20261103 18:58 SHIQINGFENG.EX 三级性质按公司+科目+利润中心取规则表，未命中回退公司+科目。
+     , COALESCE(NULLIF(TRIM(nt3.nature_l1_name), ''), NULLIF(TRIM(nt4.nature_l1_name), '')) AS nature_l1_name
+     , COALESCE(NULLIF(TRIM(nt3.nature_l2_name), ''), NULLIF(TRIM(nt4.nature_l2_name), '')) AS nature_l2_name
+     , COALESCE(NULLIF(TRIM(nt3.nature_l3_name), ''), NULLIF(TRIM(nt4.nature_l3_name), '')) AS nature_l3_name
      , NULL AS pay_method
      , NULL AS pay_reason_code
      , co.waers AS bcy_code
@@ -2649,6 +2767,26 @@ SELECT @dt_month
   LEFT JOIN acct_mapping am
     ON am.racct_src_code = b.acct_src_code
    AND am.system_src = b.system_src
+  -- ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额行业务管理单元按利润中心映射，与凭证行同口径。
+  LEFT JOIN gl_busdept_by_prctr bd1
+    ON bd1.system_src = b.system_src
+   AND bd1.profitcenter_code = COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)
+  LEFT JOIN gl_busdept_by_company bd3
+    ON bd3.system_src = b.system_src
+   AND bd3.company_code = b.company_code
+  LEFT JOIN gl_bmu_profitcenter bg
+    ON bg.profitcenter_code = NULLIF(LTRIM(TRIM(COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)), '0'), '')
+  -- ALTER BY 20261103 18:58 SHIQINGFENG.EX 三级性质按映射后利润中心（未命中回退源利润中心）取规则，再退公司+科目。
+  LEFT JOIN gl_nature_by_prctr nt3
+    ON nt3.company_code = b.company_code
+   AND nt3.acct_src_code = b.acct_src_code
+   AND nt3.profitcenter_code = COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)
+  LEFT JOIN gl_nature_by_company nt4
+    ON nt4.company_code = b.company_code
+   AND nt4.acct_src_code = b.acct_src_code
+  -- ALTER BY 20261103 19:05 SHIQINGFENG.EX 渠道分组按公司取规则，未命中走默认零售渠道。
+  LEFT JOIN gl_nf_by_company nf2
+    ON nf2.company_code = b.company_code
   LEFT JOIN company_dim co
     ON co.system_src = b.system_src
    AND co.bukrs = b.company_code

@@ -2,30 +2,30 @@
  *                                  查询说明
  *-----------------------------------------------------------------------------
  * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法等格式，未改业务逻辑。
+ * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按规范统一右对齐等格式，未改业务逻辑。
  *
  * 查询名称  ：往来账龄结果表M02-明细校验表
  * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.FORM_DATI 等，详见正文。
  *
  * 修改历史：
- *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
- *   ALTER BY 20261102 18:20 SHIQINGFENG.EX 字段列表统一为逗号前置逐行排版并对齐注释；修复 FROM 处 TGK_GB_HISENSE 与 FORM_DATI 之间缺失的 schema 点号。
- *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
+ *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法等格式，未改业务逻辑。
+ *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按规范统一右对齐等格式，未改业务逻辑。
+ *   ALTER BY 20261102 18:20 SHIQINGFENG.EX 字段列表逐行排版；修复 FROM 缺失 schema 点号。
+ *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 补查询说明文件头。
  *******************************************************************************/
 WITH PARAMS AS (
     SELECT ${$Scenario.code} AS P_SCENARIO    /* 场景（年份+场景码） */
          , ${$Period.code}   AS P_PERIODO     /* 期间，两位月份码 */
       FROM DUAL
 ),
-/* 公司限制清单: 从公司维度表取, IN 里填要查的公司编码; 查全部公司则去掉各取数段的 IN 限制 */
+/* 公司限制：${$Entity.code} 传公司编码清单 */
 AZI AS (
     SELECT A.COD_AZIENDA
       FROM TGK_FIMA_HISENSE.AZIENDA A
      WHERE A.COD_AZIENDA IN (${$Entity.code})
 ),
-/* 往来项目 ? 科目映射 (2.0 / 1.0 账龄表均为精确科目号) */
+/* 往来项目与科目映射，2.0/1.0 科目号一致 */
 ITM AS (
     SELECT '应收账款' AS ITEM_NAME, 1 AS SEQ, '1122000000' AS CONTO20, '1122000000' AS CONTO10 FROM DUAL UNION ALL
     SELECT '其他应收款' AS ITEM_NAME, 2 AS SEQ, '122101F' AS CONTO20, '122101F' AS CONTO10 FROM DUAL UNION ALL
@@ -38,17 +38,17 @@ ITM AS (
     SELECT '合同负债' AS ITEM_NAME, 9 AS SEQ, '2204000000' AS CONTO20, '2204000000' AS CONTO10 FROM DUAL UNION ALL
     SELECT '长期应收款' AS ITEM_NAME, 10 AS SEQ, '1531000000' AS CONTO20, '1531000000' AS CONTO10 FROM DUAL
 ),
-/* 2.0 账龄表: 公司 + 项目 + 客商 聚合 */
+/* 2.0 账龄表：公司+项目+客商 聚合 */
 T20C AS (
     SELECT A.COD_AZIENDA AS COMPANY_CODE
          , I.SEQ AS SEQ
          , I.ITEM_NAME AS ITEM_NAME
-         /* 去前导零; LTRIM 对全零编码会返回空串(Oracle 空串=NULL), 统一置为 '(NO_CUST)' 以便配对 */
+         /* 全零编码 LTRIM 后为空串(=NULL)，统一置 (NO_CUST) 才能与 1.0 侧配对 */
          , NVL(LTRIM(A.CUST_HEAD_CODE, '0'), '(NO_CUST)') AS CUST_CODE
          , MAX(A.CUST_HEAD_NAME) AS CUST_NAME
-         , COUNT(*) AS ROW_CNT          /* 行数标记, 用于判断该侧是否有数据 */
-         , SUM(A.BY_BCY_0_AMT) AS BY_AMT/* 年初 */
-         , SUM(A.LM_BCY_0_AMT) AS LM_AMT/* 上月 */
+         , COUNT(*) AS ROW_CNT          /* 判断该侧是否有数据 */
+         , SUM(A.BY_BCY_0_AMT) AS BY_AMT/* 年初，AG 过程未赋值，当前恒为 0 */
+         , SUM(A.LM_BCY_0_AMT) AS LM_AMT/* 上月，同上 */
          , SUM(A.BCY_0_AMT) AS CUR_AMT  /* 本月 */
       FROM AW_MR9_ARPM02_000001 A
      CROSS JOIN PARAMS P
@@ -59,23 +59,23 @@ T20C AS (
        AND A.COD_AZIENDA IN (SELECT COD_AZIENDA FROM AZI)   /* 公司限制 */
      GROUP BY A.COD_AZIENDA, I.SEQ, I.ITEM_NAME, NVL(LTRIM(A.CUST_HEAD_CODE, '0'), '(NO_CUST)')
 ),
-/* 1.0 账龄表: 公司 + 项目 + 客商 聚合 (客商编码/名称按科目开头取不同字段) */
+/* 1.0 账龄表：1开头科目取 TESTO_14/15，2开头取 TESTO_5/6 */
 T10C AS (
     SELECT F.COD_AZIENDA AS COMPANY_CODE
          , I.SEQ AS SEQ
          , I.ITEM_NAME AS ITEM_NAME
          , NVL(LTRIM(CASE
                        WHEN SUBSTR(F.COD_CONTO, 1, 1) = '1'
-                         THEN F.TESTO_14                   /* 1开头科目: 客商编码 */
-                       ELSE F.TESTO_5                      /* 2开头科目: 客商编码 */
+                         THEN F.TESTO_14                   /* 客商编码 */
+                       ELSE F.TESTO_5                      /* 客商编码 */
                      END, '0'), '(NO_CUST)')                CUST_CODE
          , MAX(CASE
                  WHEN SUBSTR(F.COD_CONTO, 1, 1) = '1'
-                   THEN F.TESTO_15                         /* 1开头科目: 客商名称 */
-                 ELSE F.TESTO_6                            /* 2开头科目: 客商名称 */
+                   THEN F.TESTO_15                         /* 客商名称 */
+                 ELSE F.TESTO_6                            /* 客商名称 */
                END) AS CUST_NAME
-         , MAX(F.IMPORTO_36)                                ADJ_FLAG  /* 是否调整 (1.0 FORM_DATI.IMPORTO_36) */
-         , COUNT(*)                                         ROW_CNT   /* 行数标记, 用于判断该侧是否有数据 */
+         , MAX(F.IMPORTO_36)                                ADJ_FLAG  /* 1.0 手工调整标识 */
+         , COUNT(*)                                         ROW_CNT   /* 判断该侧是否有数据 */
          , SUM(F.IMPORTO_1)                                 BY_AMT    /* 年初 */
          , SUM(F.IMPORTO_2)                                 LM_AMT    /* 上月 */
          , SUM(F.IMPORTO_3)                                 CUR_AMT   /* 本月 */
@@ -98,28 +98,27 @@ SELECT NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE)            AS COMPANY_CODE   /*
      , NVL(T20C.ITEM_NAME, T10C.ITEM_NAME)                  AS ITEM_NAME      /* 往来项目 */
      , NVL(T20C.CUST_CODE, T10C.CUST_CODE)                  AS CUST_CODE      /* 客商编码 */
      , NVL(T20C.CUST_NAME, T10C.CUST_NAME)                  AS CUST_NAME      /* 客商名称 */
-       /* ===== 2.0账龄 (年初 / 上月 / 本月) ===== */
-     , NVL(T20C.BY_AMT, 0)                                  AS BY_AMT_20      /* 2.0账龄-年初余额 */
-     , NVL(T20C.LM_AMT, 0)                                  AS LM_AMT_20      /* 2.0账龄-上月余额 */
-     , NVL(T20C.CUR_AMT, 0)                                 AS CUR_AMT_20     /* 2.0账龄-本月余额 */
-       /* ===== 1.0账龄 (年初 / 上月 / 本月) ===== */
-     , NVL(T10C.BY_AMT, 0)                                  AS BY_AMT_10      /* 1.0账龄-年初余额 */
-     , NVL(T10C.LM_AMT, 0)                                  AS LM_AMT_10      /* 1.0账龄-上月余额 */
-     , NVL(T10C.CUR_AMT, 0)                                 AS CUR_AMT_10     /* 1.0账龄-本月余额 */
-       /* ===== 差异 (2.0 - 1.0) ===== */
-     , NVL(T20C.BY_AMT, 0)  - NVL(T10C.BY_AMT, 0)           AS BY_AMT_DIFF    /* 差异-年初（2.0减1.0） */
-     , NVL(T20C.LM_AMT, 0)  - NVL(T10C.LM_AMT, 0)           AS LM_AMT_DIFF    /* 差异-上月（2.0减1.0） */
-     , NVL(T20C.CUR_AMT, 0) - NVL(T10C.CUR_AMT, 0)          AS CUR_AMT_DIFF   /* 差异-本期（2.0减1.0） */
-       /* ===== 来源标记(用行数标记判断, 避免客商编码为空导致的误判) ===== */
+       /* 2.0 账龄 */
+     , NVL(T20C.BY_AMT, 0)                                  AS BY_AMT_20      /* 年初 */
+     , NVL(T20C.LM_AMT, 0)                                  AS LM_AMT_20      /* 上月 */
+     , NVL(T20C.CUR_AMT, 0)                                 AS CUR_AMT_20     /* 本月 */
+       /* 1.0 账龄 */
+     , NVL(T10C.BY_AMT, 0)                                  AS BY_AMT_10      /* 年初 */
+     , NVL(T10C.LM_AMT, 0)                                  AS LM_AMT_10      /* 上月 */
+     , NVL(T10C.CUR_AMT, 0)                                 AS CUR_AMT_10     /* 本月 */
+       /* 差异 = 2.0 - 1.0 */
+     , NVL(T20C.BY_AMT, 0)  - NVL(T10C.BY_AMT, 0)           AS BY_AMT_DIFF    /* 年初 */
+     , NVL(T20C.LM_AMT, 0)  - NVL(T10C.LM_AMT, 0)           AS LM_AMT_DIFF    /* 上月 */
+     , NVL(T20C.CUR_AMT, 0) - NVL(T10C.CUR_AMT, 0)          AS CUR_AMT_DIFF   /* 本期 */
+       /* 用行数判断来源，避免客商编码为空时误判 */
      , CASE
          WHEN NVL(T20C.ROW_CNT, 0) = 0
            THEN '仅1.0有'
          WHEN NVL(T10C.ROW_CNT, 0) = 0
            THEN '仅2.0有'
          ELSE '两边都有'
-       END AS MATCH_FLAG     /* 来源标记：仅1.0有/仅2.0有/两边都有 */
-       /* ===== 是否调整 (取自 1.0 FORM_DATI.IMPORTO_36) ===== */
-     , NVL(T10C.ADJ_FLAG, 0)                                AS ADJ_FLAG       /* 是否调整（1.0手工调整标识） */
+       END AS MATCH_FLAG
+     , NVL(T10C.ADJ_FLAG, 0)                                AS ADJ_FLAG       /* 1.0 手工调整标识 */
   FROM T20C
   FULL OUTER JOIN T10C
     ON T20C.COMPANY_CODE = T10C.COMPANY_CODE
