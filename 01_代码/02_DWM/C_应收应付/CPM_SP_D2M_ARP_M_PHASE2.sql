@@ -1076,6 +1076,7 @@ BEGIN
              WHEN 'ARP_01_002' THEN 'EPAY_ADJ'
              WHEN 'ARP_01_003' THEN 'UFEE_ADJ'
              WHEN 'ARP_01_004' THEN 'UREB_ADJ'
+             WHEN 'ARP_03_003' THEN 'INV_SAMPLE_ADJ'
            END AS SRC_DETAIL
          , NVL(NULLIF(TRIM(A.CUST_BRANCH_CODE), ''), A.CUST_HEAD_CODE) AS CUST_CODE  /* 客商编码：分户优先回退主户 */
          , NVL(NULLIF(TRIM(A.CUST_BRANCH_NAME), ''), A.CUST_HEAD_NAME) AS CUST_NAME  /* 客商名称：分户优先回退主户 */
