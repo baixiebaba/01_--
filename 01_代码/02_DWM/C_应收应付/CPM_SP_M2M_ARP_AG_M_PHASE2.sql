@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261102 16:10
-   * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
-   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度：ARPM01透传、CURRENT_DIM/BY_HISTORY/LM_HISTORY列清单、MERGE更新列与目标列同步删除该维度。
+   * 最后更新时间：20261102 15:49
+   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
+   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
    *
    * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
    * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,11 +17,8 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM02_000001
    *
    * 修改历史：
-   *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
-   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度：ARPM01透传、CURRENT_DIM/BY_HISTORY/LM_HISTORY列清单、MERGE更新列与目标列同步删除该维度。
-   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX ARPM01至ARPM02装载增加D_CHANNEL_BU透传：CURRENT_DIM、BY_HISTORY及目标列清单同步增加，MERGE列与值一一对齐。
-   *   ALTER BY 20261027 18:36 SHIQINGFENG.EX 美化存储过程头部注释，移除创建日期。
-   *   ALTER BY 20261027 18:28 SHIQINGFENG.EX 统一Oracle过程头格式，未修改业务主体。
+   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
+   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
    *   ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录
    *   20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
    *   20261010 撤销交易币折算本位币结果保留两位小数调整并恢复原精度
@@ -49,7 +46,7 @@ BEGIN
 
   V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
 
-  -- 删除本session的参数公司，防止同一窗口中止后继续执行时公司范围扩大。
+  /* 删除本session的参数公司，防止同一窗口中止后继续执行时公司范围扩大。 */
   DELETE FROM SESSION_AZIENDA_LIST
    WHERE SESSION_ID = V_SESSION_ID;
   DELETE FROM SESSION_V_REF_AZIENDA
@@ -59,7 +56,7 @@ BEGIN
   SELECT V_SESSION_ID, HIE, NODE, ELEM
     FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
 
-  -- 时间参数初始化。
+  /* 时间参数初始化。 */
   V_SCENARIO := P_SCENARIO;
   V_PERIODO := LPAD(P_PERIODO, 2, '0');
   V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
@@ -71,14 +68,14 @@ BEGIN
                          , 'YYYYMM'
                        );
 
-  -- 历史期间规则：年初使用上年12月；上月使用自然月上月。
+  /* 历史期间规则：年初使用上年12月；上月使用自然月上月。 */
   V_BY_SCENARIO := TO_CHAR(TO_NUMBER(SUBSTR(V_SCENARIO, 1, 4)) - 1)
                    || SUBSTR(V_SCENARIO, 5);
   V_BY_PERIODO := '12';
   V_LM_SCENARIO := SUBSTR(V_PREV_YEARMONTH, 1, 4) || SUBSTR(V_SCENARIO, 5);
   V_LM_PERIODO := SUBSTR(V_PREV_YEARMONTH, 5, 2);
 
-  -- 组织参数初始化：仅抽取AR规则范围内且未锁定的公司。
+  /* 组织参数初始化：仅抽取AR规则范围内且未锁定的公司。 */
   INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
   SELECT DISTINCT V_SESSION_ID
        , ELEM
@@ -106,7 +103,7 @@ BEGIN
               AND T.COD_CONTO = 'ZAW_D2M_LOCK'
      );
 
-  -- 获取本批次公司列表，供日志记录使用。
+  /* 获取本批次公司列表，供日志记录使用。 */
   SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
     INTO V_AZIENDA
     FROM (
@@ -115,16 +112,12 @@ BEGIN
        WHERE SESSION_ID = V_SESSION_ID
     );
 
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_M2M_ARP_AG_M_PHASE2' , 'BEGIN 开始执行' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA
-  );
+  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'BEGIN 开始执行' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
   COMMIT;
 
 
-  -- 仅删除本过程上次生成的自动行，保留界面修改后的 INPUT_DEFORM 行。
-  -- INPUT_DEFORM 行通过后续 MERGE 按业务键复用 OID 并更新过程负责的字段。
+  /* 仅删除本过程上次生成的自动行，界面维护的INPUT_DEFORM行保留，后续MERGE按业务键复用其OID。 */
   DELETE FROM AW_MR9_ARPM02_000001
    WHERE COD_SCENARIO = V_SCENARIO
      AND COD_PERIODO = V_PERIODO
@@ -135,20 +128,14 @@ BEGIN
      )
      AND PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2';
 
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_M2M_ARP_AG_M_PHASE2' , '当前批次删除完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA
-  );
+  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '当前批次删除完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
 
-  -- ==========================================================================
-  -- 当前期间来源标准化、聚合及ARPM02字段平铺。
-  -- ARPM01的ACCT_REC_CODE兼容映射为设计字段COD_CONTO。
-  -- ==========================================================================
+  /* 当前期间来源标准化、聚合及ARPM02字段平铺；ARPM01的ACCT_REC_CODE兼容映射为设计字段COD_CONTO。 */
   MERGE INTO AW_MR9_ARPM02_000001 T
   USING (
   WITH
-  -- 汇率换算表：汇率以人民币为基准，非空汇率评估标识的记录沿用来源BCY金额。
+  /* 汇率换算表：汇率以人民币为基准，非空汇率评估标识的记录沿用来源BCY金额。 */
   CONVERSION_RATE AS (
     SELECT COD_VALUTA
          , MAX(CAMBIO_FINALE) AS RATE
@@ -157,8 +144,8 @@ BEGIN
        AND COD_PERIODO = V_PERIODO
      GROUP BY COD_VALUTA
   ),
-  -- 2023公司沿用SAP TCURR汇率；测试环境使用SQF_TEST，其他公司使用DATI_CAMBIO人民币基准汇率。
-  -- 上线前将SQF_TEST替换为DWD_FI_MR_SAP_TCURR_DD，并增加 MANDT = '600' 条件以区分S600。
+  /* 2023公司沿用SAP TCURR汇率；测试环境使用SQF_TEST，其他公司使用DATI_CAMBIO人民币基准汇率。 */
+  /* 上线前将SQF_TEST替换为DWD_FI_MR_SAP_TCURR_DD，并增加 MANDT = '600' 条件以区分S600。 */
   TCURR_CONVERSION_RATE AS (
     SELECT TRIM(B.TCURR) AS TCURR
          , TRIM(B.FCURR) AS FCURR
@@ -179,7 +166,7 @@ BEGIN
            , 'YYYYMMDD'
        )
   ),
-  -- 当前ARPM01来源：保留原始BCY/QCY，汇率和法人税率在AG中计算。
+  /* 当前ARPM01来源：保留原始BCY/QCY，汇率和法人税率在AG中计算。 */
   CURRENT_SOURCE_BASE AS (
     SELECT A.OID
          , A.COD_AZIENDA
@@ -211,7 +198,7 @@ BEGIN
          , A.NATURE_L2_NAME
          , A.NATURE_L3_NAME
          , A.D_CHANNEL
-         -- ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU由ARPM01透传（列清单、目标列与MERGE值同步增加D_CHANNEL_BU）。
+         /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU由ARPM01透传（列清单、目标列与MERGE值同步增加D_CHANNEL_BU）。 */
          , A.D_CHANNEL_BU
          , A.D_CC_CUSTGRP
          , A.D_ONOFFLINE
@@ -308,7 +295,7 @@ BEGIN
        AND NVL(A.LE_AGE_FLAG,'|') <> '|'
        AND SRC_DETAIL LIKE 'ORG%'
   ),
-  -- 按用户口径计算ORG来源本位币账龄金额；非ORG来源保留原始BCY供补充金额使用。
+  /* 按用户口径计算ORG来源本位币账龄金额；非ORG来源保留原始BCY供补充金额使用。 */
   CURRENT_SOURCE AS (
     SELECT S.*
          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
@@ -484,9 +471,8 @@ BEGIN
             END AS CALC_POSTING_RATE_BCY_AMT
       FROM CURRENT_SOURCE_BASE S
   ),
-  -- 无账龄标识补充来源：按业务键聚合补充金额，不输出非匹配维度字段。
-  -- 直接使用ARPM01本位币金额；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。
-  -- NULL业务键保留，并由结果关联时按当前NVL语义匹配；EPAY空科目固定为1122000000。
+  /* 无账龄标识补充来源：按业务键聚合ARPM01本位币金额，NULL业务键保留并按NVL语义关联。 */
+  /* EPAY空科目固定为1122000000；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。 */
   SUPPLEMENT_AGG AS (
     SELECT S.COD_AZIENDA
          , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
@@ -531,7 +517,7 @@ BEGIN
             , S.CUST_CODE
             , S.COD_DEST2
   ),
-  -- 取当前期间每个业务键的维度基准行，ORG来源优先，其他来源作为兜底。
+  /* 取当前期间每个业务键的维度基准行，ORG来源优先，其他来源作为兜底。 */
   CURRENT_DIM AS (
     SELECT COD_AZIENDA
          , COD_CONTO
@@ -583,8 +569,8 @@ BEGIN
       ) S
      WHERE S.RN = 1
   ),
-  -- 当前期间按来源类别汇总，用于生成结果表的横向金额字段。
-  -- 先按业务键聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。
+  /* 当前期间按来源类别汇总，用于生成结果表的横向金额字段。 */
+  /* 先按业务键聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。 */
   CURRENT_SOURCE_AGG AS (
     SELECT S.COD_AZIENDA
          , S.COD_CONTO
@@ -734,7 +720,7 @@ BEGIN
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_13_AMT ELSE 0 END) AS ORG_QCY_13_AMT
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_14_AMT ELSE 0 END) AS ORG_QCY_14_AMT
          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_15_AMT ELSE 0 END) AS ORG_QCY_15_AMT
-         -- 补充金额在CURRENT_AGG中统一关联SUPPLEMENT_AGG，不在明细层重复汇总。
+         /* 补充金额在CURRENT_AGG中统一关联SUPPLEMENT_AGG，不在明细层重复汇总。 */
          , SUM(NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0)) AS CLOSING_RATE_BCY_AMT
          , SUM(NVL(S.CALC_POSTING_RATE_BCY_AMT, 0)) AS POSTING_RATE_BCY_AMT
          , LISTAGG(
@@ -753,7 +739,7 @@ BEGIN
             , S.CUST_CODE
             , S.COD_DEST2
   ),
-  -- 当前主来源已按业务键聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。
+  /* 当前主来源已按业务键聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。 */
   CURRENT_AGG AS (
     SELECT A.*
          , NVL(B.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
@@ -771,7 +757,7 @@ BEGIN
        AND NVL(B.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
        AND NVL(B.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
   ),
-  -- 年初历史结果：按设计业务键读取上年12期ARPM02本月余额。
+  /* 年初历史结果：按设计业务键读取上年12期ARPM02本月余额。 */
   BY_HISTORY AS (
     SELECT T.COD_AZIENDA
          , T.COD_CONTO
@@ -820,7 +806,7 @@ BEGIN
        )
        AND NVL(T.LE_AGE_FLAG,'|') <> '|'
   ),
-  -- 上月历史结果：按设计业务键读取上月ARPM02本月余额。
+  /* 上月历史结果：按设计业务键读取上月ARPM02本月余额。 */
   LM_HISTORY AS (
     SELECT T.COD_AZIENDA
          , T.COD_CONTO
@@ -869,7 +855,7 @@ BEGIN
        )
        AND NVL(T.LE_AGE_FLAG,'|') <> '|'
   ),
-  -- 当前、年初、上月的业务键并集，支持当前月无数据但历史有余额的记录保留。
+  /* 当前、年初、上月的业务键并集，支持当前月无数据但历史有余额的记录保留。 */
   ALL_KEYS AS (
     SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM CURRENT_DIM
     UNION
@@ -879,7 +865,7 @@ BEGIN
     UNION
     SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM LM_HISTORY
   ),
-  -- 当前维度优先，当前缺失时依次回退到年初和上月维度。
+  /* 当前维度优先，当前缺失时依次回退到年初和上月维度。 */
   DIM_CANDIDATE AS (
     SELECT 1 AS PRIORITY
          , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
@@ -914,7 +900,7 @@ BEGIN
          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
       FROM LM_HISTORY
   ),
-  -- 当前金额按来源平铺，历史字段仅作为BY/LM回接值，不参与本月金额计算。
+  /* 当前金额按来源平铺，历史字段仅作为BY/LM回接值，不参与本月金额计算。 */
   RESULT_BASE AS (
     SELECT V_SCENARIO AS COD_SCENARIO
          , V_PERIODO AS COD_PERIODO
@@ -1050,7 +1036,7 @@ BEGIN
        AND NVL(L.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
        AND NVL(L.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
   ),
-  -- 生成最终字段：CL重分类税额按法人/管理单体标识分别处理。
+  /* 生成最终字段：CL重分类税额按法人/管理单体标识分别处理。 */
   RESULT_FACT AS (
     SELECT R.COD_SCENARIO
          , R.COD_PERIODO
@@ -1223,8 +1209,8 @@ BEGIN
          , LEAST(R.ORG_BCY_0_AMT, R.RET_NTRF_AMT) AS ADJ_RET_AMT
       FROM RESULT_BASE R
   )
-  -- 结果集按当前批次业务键查找已被界面修改的 INPUT_DEFORM 行。
-  -- 由于本过程生成的 OID 使用 NEWID()，重跑时必须从目标表复用人工行原有 OID。
+  /* 结果集按当前批次业务键查找已被界面修改的 INPUT_DEFORM 行。 */
+  /* 由于本过程生成的 OID 使用 NEWID()，重跑时必须从目标表复用人工行原有 OID。 */
   SELECT NVL(M.OID, NEWID()) AS OID
        , R.*
        , CASE WHEN M.OID IS NOT NULL THEN 'INPUT_DEFORM'
@@ -1302,7 +1288,7 @@ BEGIN
        , T.GRP_SCOPE = S.GRP_SCOPE
        , T.NATURE_L1_NAME = S.NATURE_L1_NAME
        , T.NATURE_L2_NAME = S.NATURE_L2_NAME
-       --, T.NATURE_L3_NAME = S.NATURE_L3_NAME
+       /* , T.NATURE_L3_NAME = S.NATURE_L3_NAME */
        , T.D_CHANNEL = S.D_CHANNEL
        , T.D_CHANNEL_BU = S.D_CHANNEL_BU
        , T.D_CC_CUSTGRP = S.D_CC_CUSTGRP
@@ -1626,8 +1612,8 @@ BEGIN
     , S.USERUPD
   );
 
-  -- ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录。
-  -- 不删除 INPUT_DEFORM 人工行，避免清理自动结果时误删界面维护的数据。
+  /* ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录。 */
+  /* 不删除 INPUT_DEFORM 人工行，避免清理自动结果时误删界面维护的数据。 */
   DELETE FROM AW_MR9_ARPM02_000001 T
    WHERE T.COD_SCENARIO = V_SCENARIO
      AND T.COD_PERIODO = V_PERIODO
@@ -1711,26 +1697,20 @@ BEGIN
      AND NVL(T.ADJ_REB_AMT, 0) = 0
      AND NVL(T.ADJ_RET_AMT, 0) = 0;
 
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_M2M_ARP_AG_M_PHASE2' , '目标表装载完成并清理全零金额记录' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA
-  );
+  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '目标表装载完成并清理全零金额记录' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
   COMMIT;
   /* 20261105 新增是否存续字段更新 */
   CPM_SP_D2M_ARP_EXS_PHASE2(P_SCENARIO , P_PERIODO , P_AZIENDA , SESSION_USER);
 
-  -- 清理当前会话数据。
+  /* 清理当前会话数据。 */
   DELETE FROM SESSION_AZIENDA_LIST
    WHERE SESSION_ID = V_SESSION_ID;
   DELETE FROM SESSION_V_REF_AZIENDA
    WHERE SESSION_ID = V_SESSION_ID;
 
-  INSERT INTO ZTAB_CPM_LOG(
-      CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA
-  ) VALUES (
-      'CPM_SP_M2M_ARP_AG_M_PHASE2' , 'END 执行完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA
-  );
+  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'END 执行完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
   COMMIT;
 
 EXCEPTION
@@ -1742,11 +1722,8 @@ EXCEPTION
      WHERE SESSION_ID = V_SESSION_ID;
     V_ERROR_COD := SQLCODE;
     V_ERROR_MSG := SUBSTR(SQLERRM, 1, 4000);
-    INSERT INTO ZTAB_CPM_LOG(
-        CPM , STEP , REMARK , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO, COD_AZIENDA
-    ) VALUES (
-        'CPM_SP_M2M_ARP_AG_M_PHASE2' , 'ERROR 执行报错' , V_ERROR_COD || ':' || V_ERROR_MSG , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , NVL(V_AZIENDA, P_AZIENDA)
-    );
+    INSERT INTO ZTAB_CPM_LOG(CPM , STEP , REMARK , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'ERROR 执行报错' , V_ERROR_COD || ':' || V_ERROR_MSG , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , NVL(V_AZIENDA, P_AZIENDA));
     COMMIT;
     RAISE;
 END CPM_SP_M2M_ARP_AG_M_PHASE2;
