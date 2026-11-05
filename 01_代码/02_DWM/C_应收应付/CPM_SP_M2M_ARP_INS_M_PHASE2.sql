@@ -66,16 +66,7 @@ BEGIN
                      AND VALID_FR <= V_YEARMONTH
                      AND NVL(VALID_TO, '999999') >= V_YEARMONTH
                      AND COD_CONTO = 'ZAW_D2M_IN'
-                  )
-    /* 排除锁定公司 */
-     AND ELEM NOT IN (
-           SELECT COD_AZIENDA
-             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
-            WHERE ARP_FLAG = 'Y'
-              AND T.COD_SCENARIO = V_SCENARIO
-              AND T.COD_PERIODO = V_PERIODO
-              AND T.COD_CONTO = 'ZAW_D2M_LOCK'
-     );
+                  );
 
   /* 获取所有跑的公司列表，供日志插入使用 */
   SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)

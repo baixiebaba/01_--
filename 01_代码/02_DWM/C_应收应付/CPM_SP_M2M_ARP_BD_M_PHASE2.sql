@@ -85,14 +85,6 @@
                 AND VALID_FR <= V_YEARMONTH
                 AND NVL(VALID_TO, '999999') >= V_YEARMONTH
                 AND COD_CONTO = 'ZAW_D2M_IN'
-      )
-      AND ELEM NOT IN (
-            SELECT COD_AZIENDA
-              FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
-              WHERE ARP_FLAG = 'Y'
-                AND COD_SCENARIO = V_SCENARIO
-                AND COD_PERIODO = V_PERIODO
-                AND COD_CONTO = 'ZAW_D2M_LOCK'
       );
 
     SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
