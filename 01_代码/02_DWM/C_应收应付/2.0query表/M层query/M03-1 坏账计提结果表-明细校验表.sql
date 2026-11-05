@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 最后更新时间：20261105 17:08
+ * 本次修改：ALTER BY 20261105 17:08 SHIQINGFENG.EX 修正明细校验客商金额汇总。
+ * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *
  * 查询名称  ：坏账计提结果表-明细校验表
  * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.ZTAB_AG_TF_OC。
  *
  * 修改历史：
+ *   ALTER BY 20261105 17:08 SHIQINGFENG.EX 修正明细校验客商金额汇总。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
@@ -38,13 +39,14 @@ ITM AS (
          , '1460000000' AS CONTO10
       FROM DUAL
 ),
-/* 2.0原始业务范围内的公司/客商键，空客商统一为占位值 */
+/* 2.0按公司、客商和科目汇总，避免相同金额的不同明细被折叠。 */
+/* ALTER BY 20261105 17:08 SHIQINGFENG.EX 修正明细校验客商金额汇总。 */
 T20_BASE AS (
     SELECT A.COD_AZIENDA AS COMPANY_CODE
          , NVL(LTRIM(A.CUST_CODE, '0'), '(NO_CUST)') AS CUST_CODE
          , MAX(A.CUST_NAME) AS CUST_NAME
          , A.COD_CONTO
-         , A.BD_0_AMT
+         , SUM(A.BD_0_AMT) AS BD_0_AMT
       FROM AW_MR9_ARPM02_000001 A
      WHERE A.COD_SCENARIO = ${$Scenario.code}
        AND A.COD_PERIODO = ${$Period.code}
@@ -54,15 +56,15 @@ T20_BASE AS (
      GROUP BY A.COD_AZIENDA
             , NVL(LTRIM(A.CUST_CODE, '0'), '(NO_CUST)')
             , A.COD_CONTO
-            , A.BD_0_AMT
 ),
-/* 1.0原始业务范围内的公司/客商键，空客商统一为占位值 */
+/* 1.0按公司、客商和科目汇总，与2.0保持相同校验粒度。 */
+/* ALTER BY 20261105 17:08 SHIQINGFENG.EX 修正明细校验客商金额汇总。 */
 T10_BASE AS (
     SELECT T.BUKRS AS COMPANY_CODE
          , NVL(LTRIM(T.CVCODE, '0'), '(NO_CUST)') AS CUST_CODE
          , MAX(T.CVNAME) AS CUST_NAME
          , T.HKONT
-         , T.HZYE
+         , SUM(T.HZYE) AS HZYE
       FROM TGK_GB_HISENSE.ZTAB_AG_TF_OC T
      WHERE T.YEARMONTH = SUBSTR(${$Scenario.code}, 1, 4) || ${$Period.code}
        AND T.BUKRS IN (${$Entity.code})
@@ -70,7 +72,6 @@ T10_BASE AS (
      GROUP BY T.BUKRS
             , NVL(LTRIM(T.CVCODE, '0'), '(NO_CUST)')
             , T.HKONT
-            , T.HZYE
 ),
 /* 两套业务数据中的公司/客商并集；ITM无公司/客商字段，不能脱离此范围生成行 */
 CUST_DIM AS (
@@ -203,6 +204,7 @@ SELECT COMPANY_CODE                         AS COMPANY_CODE/* 公司 */
      , AMT_10                             AS AMT_10        /* 1.0坏账余额 */
      , AMT_20 - AMT_10                     AS AMT_DIFF     /* 差异（2.0减1.0） */
   FROM T20_T10
+ WHERE AMT_20 <> 0 OR AMT_10 <> 0 OR AMT_20 - AMT_10 <> 0
  ORDER BY COMPANY_CODE
         , ITEM_SEQ
         , CUST_CODE
