@@ -114,24 +114,24 @@ BEGIN
            , C.MTD_END_RATE
            , C.QCY_INS_AMT * C.MTD_END_RATE AS BCY_INS_AMT
            , C.QCY_INS_DDBL_AMT * C.MTD_END_RATE AS BCY_INS_DDBL_AMT
-           , NVL(C.BCY_0_AMT, 0) AS BCY_0_AMT
            , NVL(C.BCY_1_AMT, 0) AS BCY_1_AMT
            , NVL(C.BCY_2_AMT, 0) AS BCY_2_AMT
            , NVL(C.BCY_3_AMT, 0) AS BCY_3_AMT
+           , NVL(C.BCY_4_AMT, 0) AS BCY_4_AMT
            , CASE C.INS_COV_DAYS
-                 WHEN 30 THEN NVL(C.BCY_0_AMT, 0)
-                 WHEN 360 THEN NVL(C.BCY_0_AMT, 0)
-                             + NVL(C.BCY_1_AMT, 0)
+                 WHEN 30 THEN NVL(C.BCY_1_AMT, 0)
+                 WHEN 360 THEN NVL(C.BCY_1_AMT, 0)
                              + NVL(C.BCY_2_AMT, 0)
                              + NVL(C.BCY_3_AMT, 0)
+                             + NVL(C.BCY_4_AMT, 0)
                  ELSE CASE
                           WHEN C.INS_COV_DAYS BETWEEN 60 AND 90
-                           THEN NVL(C.BCY_0_AMT, 0)
-                              + NVL(C.BCY_1_AMT, 0)
-                          WHEN C.INS_COV_DAYS BETWEEN 120 AND 180
-                           THEN NVL(C.BCY_0_AMT, 0)
-                              + NVL(C.BCY_1_AMT, 0)
+                           THEN NVL(C.BCY_1_AMT, 0)
                               + NVL(C.BCY_2_AMT, 0)
+                          WHEN C.INS_COV_DAYS BETWEEN 120 AND 180
+                           THEN NVL(C.BCY_1_AMT, 0)
+                              + NVL(C.BCY_2_AMT, 0)
+                              + NVL(C.BCY_3_AMT, 0)
                         END
              END AS AGE_BALANCE
            , C.INS_CLM_RATIO
@@ -141,10 +141,10 @@ BEGIN
                , I.QCY_INS_DDBL_AMT
                , I.INS_COV_DAYS
                , I.INS_CLM_RATIO
-               , A.BCY_0_AMT
                , A.BCY_1_AMT
                , A.BCY_2_AMT
                , A.BCY_3_AMT
+               , A.BCY_4_AMT
                , CASE
                      WHEN I.QCY_INS_CODE IS NOT NULL
                       AND AZ.COD_VALUTA IS NOT NULL
@@ -159,10 +159,10 @@ BEGIN
             LEFT JOIN (
               SELECT A.COD_AZIENDA
                    , A.CUST_CODE
-                   , SUM(NVL(A.BCY_0_AMT, 0)) AS BCY_0_AMT
                    , SUM(NVL(A.BCY_1_AMT, 0)) AS BCY_1_AMT
                    , SUM(NVL(A.BCY_2_AMT, 0)) AS BCY_2_AMT
                    , SUM(NVL(A.BCY_3_AMT, 0)) AS BCY_3_AMT
+                   , SUM(NVL(A.BCY_4_AMT, 0)) AS BCY_4_AMT
                 FROM AW_MR9_ARPM02_000001 A
                WHERE A.COD_SCENARIO = V_SCENARIO
                  AND A.COD_PERIODO = V_PERIODO
@@ -196,10 +196,10 @@ BEGIN
          , C.MTD_END_RATE
          , C.BCY_INS_AMT
          , C.BCY_INS_DDBL_AMT
-         , C.BCY_0_AMT
          , C.BCY_1_AMT
          , C.BCY_2_AMT
          , C.BCY_3_AMT
+         , C.BCY_4_AMT
          , CASE
                /* 汇率或投保基础参数缺失时不套用B=0公式，避免误算为未覆盖比例1 */
                WHEN C.BCY_INS_AMT IS NULL
@@ -231,10 +231,10 @@ BEGIN
          T.BCY_INS_AMT = S.BCY_INS_AMT
        , T.BCY_INS_DDBL_AMT = S.BCY_INS_DDBL_AMT
        , T.MTD_END_RATE = S.MTD_END_RATE
-       , T.BCY_0_AMT = S.BCY_0_AMT
        , T.BCY_1_AMT = S.BCY_1_AMT
        , T.BCY_2_AMT = S.BCY_2_AMT
        , T.BCY_3_AMT = S.BCY_3_AMT
+       , T.BCY_4_AMT = S.BCY_4_AMT
        , T.INS_UNCOV_RATIO = S.INS_UNCOV_RATIO
        , T.COD_CONTO = '1122000000'
        , T.PROVENIENZA = 'CPM_SP_M2M_ARP_INS_M_PHASE2'
