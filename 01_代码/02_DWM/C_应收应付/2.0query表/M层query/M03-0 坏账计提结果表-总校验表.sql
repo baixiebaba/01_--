@@ -1,16 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 最后更新时间：20261106 14:55
+ * 本次修改：ALTER BY 20261106 14:55 SHIQINGFENG.EX 排除2.0与1.0金额全为0的维度组合行，与明细校验表口径一致。
+ * 上次修改：ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
  *
  * 查询名称  ：坏账计提结果表-总校验表
  * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.ZTAB_AG_TF_OC。
  *
  * 修改历史：
- *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ *   ALTER BY 20261106 14:55 SHIQINGFENG.EX 排除2.0与1.0金额全为0的维度组合行，与明细校验表口径一致。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
  *   2026-03-12  在T20/T10内部以ITM三科目FULL JOIN补齐缺失科目（原版本记录）。
  *   2026-03-11  简化为T20/T10 FULL JOIN后按ITM补齐三科目（原版本记录）。
@@ -159,5 +158,7 @@ SELECT COMPANY_CODE                         AS COMPANY_CODE/* 公司 */
      , AMT_10                             AS AMT_10        /* 1.0坏账余额 */
      , AMT_20 - AMT_10                     AS AMT_DIFF     /* 差异（2.0减1.0） */
   FROM T20_T10
+ /* 2.0 与 1.0 金额全为 0 的组合不展示 */
+ WHERE GREATEST(ABS(AMT_20), ABS(AMT_10)) > 0.005
  ORDER BY COMPANY_CODE
         , ITEM_SEQ
