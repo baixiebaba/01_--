@@ -56,6 +56,7 @@ SELECT COD_SCENARIO                                                       /* 场
        - BD_BASE_4_AMT - BD_BASE_5_AMT - BD_BASE_6_AMT - BD_BASE_7_AMT
        - BD_BASE_8_AMT - BD_BASE_9_AMT - BD_BASE_10_AMT - BD_BASE_11_AMT
        - BD_BASE_12_AMT - BD_BASE_13_AMT - BD_BASE_14_AMT - BD_BASE_15_AMT AS CHECK1  /* 校验：坏账基数总额减各分段合计 */
+     , SPID_0_AMT                                                 /* 个别认定 */
      , BD_0_AMT                                   /* 坏账计提金额 */
      , BD_1_AMT                                   /* 坏账计提金额-1个月 */
      , BD_2_AMT                                   /* 坏账计提金额-2-3个月 */
@@ -76,7 +77,6 @@ SELECT COD_SCENARIO                                                       /* 场
        - BD_4_AMT - BD_5_AMT - BD_6_AMT - BD_7_AMT
        - BD_8_AMT - BD_9_AMT - BD_10_AMT - BD_11_AMT
        - BD_12_AMT - BD_13_AMT - BD_14_AMT - BD_15_AMT AS CHECK2  /* 校验：坏账计提总额减各分段合计 */
-     , SPID_0_AMT                                                 /* 个别认定 */
      , BD_ALLOC_RATIO                                             /* 坏账分摊比例 */
      , AGE_ALLOC_0_AMT                                            /* 负账龄分摊金额 */
      , AGE_ALLOC_1_AMT                                            /* 负账龄分摊金额-1个月 */
