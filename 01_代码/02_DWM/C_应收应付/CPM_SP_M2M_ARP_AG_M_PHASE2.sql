@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261102 15:49
-   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
+   * 最后更新时间：20261105 18:26
+   * 本次修改：ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
+   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
    *
    * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
    * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM02_000001
    *
    * 修改历史：
+   *   ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
    *   ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录
@@ -1108,14 +1109,11 @@ BEGIN
          , R.CALC_BCY_15_AMT AS QCY_15_AMT
          , R.SHP_NINV_AMT
          , R.RET_NTRF_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_0_AMT * (1 + NVL(R.TAX_RATE, 0))
-                        + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-                ELSE R.ORG_BCY_0_AMT + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-            END AS BCY_ADJ_INCL_0_AMT
+         /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
                      THEN R.ORG_BCY_1_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_1_AMT
+                       + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                ELSE R.ORG_BCY_1_AMT + R.SHP_NINV_AMT - R.RET_NTRF_AMT
             END AS BCY_ADJ_INCL_1_AMT
          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
                      THEN R.ORG_BCY_2_AMT * (1 + NVL(R.TAX_RATE, 0))
@@ -1213,6 +1211,22 @@ BEGIN
   /* 由于本过程生成的 OID 使用 NEWID()，重跑时必须从目标表复用人工行原有 OID。 */
   SELECT NVL(M.OID, NEWID()) AS OID
        , R.*
+       /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
+       , R.BCY_ADJ_INCL_1_AMT
+         + R.BCY_ADJ_INCL_2_AMT
+         + R.BCY_ADJ_INCL_3_AMT
+         + R.BCY_ADJ_INCL_4_AMT
+         + R.BCY_ADJ_INCL_5_AMT
+         + R.BCY_ADJ_INCL_6_AMT
+         + R.BCY_ADJ_INCL_7_AMT
+         + R.BCY_ADJ_INCL_8_AMT
+         + R.BCY_ADJ_INCL_9_AMT
+         + R.BCY_ADJ_INCL_10_AMT
+         + R.BCY_ADJ_INCL_11_AMT
+         + R.BCY_ADJ_INCL_12_AMT
+         + R.BCY_ADJ_INCL_13_AMT
+         + R.BCY_ADJ_INCL_14_AMT
+         + R.BCY_ADJ_INCL_15_AMT AS BCY_ADJ_INCL_0_AMT
        , CASE WHEN M.OID IS NOT NULL THEN 'INPUT_DEFORM'
               ELSE 'CPM_SP_M2M_ARP_AG_M_PHASE2'
           END AS PROVENIENZA

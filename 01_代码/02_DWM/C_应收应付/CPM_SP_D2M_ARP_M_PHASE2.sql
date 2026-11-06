@@ -353,8 +353,8 @@ BEGIN
            END AS SRC_DETAIL
          , T.CUST_CODE
          , T.CUST_NAME
-         , NULL AS CUST_HEAD_CODE
-         , NULL AS CUST_HEAD_NAME
+         , T.CUST_CODE AS CUST_HEAD_CODE
+         , T.CUST_NAME AS CUST_HEAD_NAME
          , NULL AS CUST_BRANCH_CODE
          , NULL AS CUST_BRANCH_NAME
          , T.COD_AZI_CTP
@@ -387,15 +387,15 @@ BEGIN
          , NULL AS TAX_RATE
          , T.COD_VALUTA
          , T.COD_VALUTA_ORIGINARIA
-         , T.BCY_REV AS BCY_0_AMT
-         , T.BCY_REV AS BCY_1_AMT
+         , 0-T.BCY_REV AS BCY_0_AMT
+         , 0-T.BCY_REV AS BCY_1_AMT
          , 0 AS BCY_2_AMT, 0 AS BCY_3_AMT, 0 AS BCY_4_AMT
          , 0 AS BCY_5_AMT, 0 AS BCY_6_AMT, 0 AS BCY_7_AMT
          , 0 AS BCY_8_AMT, 0 AS BCY_9_AMT, 0 AS BCY_10_AMT
          , 0 AS BCY_11_AMT, 0 AS BCY_12_AMT, 0 AS BCY_13_AMT
          , 0 AS BCY_14_AMT, 0 AS BCY_15_AMT
-         , T.ORG_REV AS QCY_0_AMT
-         , T.ORG_REV AS QCY_1_AMT
+         , 0-T.ORG_REV AS QCY_0_AMT
+         , 0-T.ORG_REV AS QCY_1_AMT
          , 0 AS QCY_2_AMT, 0 AS QCY_3_AMT, 0 AS QCY_4_AMT
          , 0 AS QCY_5_AMT, 0 AS QCY_6_AMT, 0 AS QCY_7_AMT
          , 0 AS QCY_8_AMT, 0 AS QCY_9_AMT, 0 AS QCY_10_AMT
@@ -647,8 +647,7 @@ BEGIN
                           ELSE 0
                     END
                   ) OVER (
-                    PARTITION BY A.SYSTEM_SRC
-                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                    PARTITION BY  CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
                                             AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
                                         THEN '6000'
                                         ELSE A.COD_AZIENDA
@@ -663,8 +662,7 @@ BEGIN
                           ELSE 0
                     END
                   ) OVER (
-                    PARTITION BY A.SYSTEM_SRC
-                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                    PARTITION BY  CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
                                             AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
                                         THEN '6000'
                                         ELSE A.COD_AZIENDA
@@ -679,8 +677,7 @@ BEGIN
                           ELSE 0
                     END
                   ) OVER (
-                    PARTITION BY A.SYSTEM_SRC
-                                , CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                    PARTITION BY  CASE WHEN A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
                                             AND A.ACCT_REC_CODE IN ('1131002000', '1133001003', '2181001005', '2121001000')
                                         THEN '6000'
                                         ELSE A.COD_AZIENDA
