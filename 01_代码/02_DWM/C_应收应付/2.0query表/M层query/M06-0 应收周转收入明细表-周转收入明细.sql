@@ -71,8 +71,6 @@ SELECT
      , G.DESC_ELEGER6                   AS DESC_ELEGER6                        /* 公司一级分类描述 */
      , G.COD_ELEGER5                     AS COD_ELEGER5                          /* 公司二级分类编码 */
      , G.DESC_ELEGER5                   AS DESC_ELEGER5                        /* 公司二级分类描述 */
-     , G.COD_ELEGER7                     AS COD_ELEGER7                          /* 渠道7级编码 */
-     , G.DESC_ELEGER7                   AS DESC_ELEGER7                        /* 渠道7级名称 */
  /* 渠道 */
      , B.D_CHANNEL                                                               /* 三级公司分类编码 */
      , F_TGK_GET_DIMNAME('D_CHANNEL', B.D_CHANNEL)      AS D_CHANNEL_DESC        /* 三级公司分类名称 */
@@ -139,6 +137,5 @@ SELECT
         , B.D_CHANNEL, B.D_ONOFFLINE, B.COD_DEST2, B.COD_DEST3, B.D_SALE_DEPT
         , B.D_CHANNEL_BU, B.D_CC_CUSTGRP, B.COD_VALUTA
         , G.COD_ELEGER6, G.DESC_ELEGER6, G.COD_ELEGER5, G.DESC_ELEGER5
-        , G.COD_ELEGER7, G.DESC_ELEGER7
         , DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER4, DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5
 
