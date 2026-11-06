@@ -25,6 +25,9 @@ SELECT COD_SCENARIO                                                       /* 场
      , CUST_BRANCH_CODE                                                   /* 分户编码 */
      , CUST_BRANCH_NAME                                                   /* 分户名称 */
      , GRP_SCOPE                                                          /* 集团归属范围（子公司/集团内/集团外） */
+     , NATURE_L1_NAME                                                     /* 一级性质 */
+     , NATURE_L2_NAME                                                     /* 二级性质 */
+     , NATURE_L3_NAME                                                     /* 三级性质 */
      , D_ONOFFLINE                                                        /* 渠道分组 */
      , F_TGK_GET_DIMNAME('D_ONOFFLINE', D_ONOFFLINE) AS D_ONOFFLINE_DESC  /* 渠道分组名称 */
      , COD_DEST2                                                          /* 利润中心 */
@@ -73,6 +76,7 @@ SELECT COD_SCENARIO                                                       /* 场
        - BD_4_AMT - BD_5_AMT - BD_6_AMT - BD_7_AMT
        - BD_8_AMT - BD_9_AMT - BD_10_AMT - BD_11_AMT
        - BD_12_AMT - BD_13_AMT - BD_14_AMT - BD_15_AMT AS CHECK2  /* 校验：坏账计提总额减各分段合计 */
+     , SPID_0_AMT                                                 /* 个别认定 */
      , BD_ALLOC_RATIO                                             /* 坏账分摊比例 */
      , AGE_ALLOC_0_AMT                                            /* 负账龄分摊金额 */
      , AGE_ALLOC_1_AMT                                            /* 负账龄分摊金额-1个月 */
