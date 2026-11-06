@@ -148,21 +148,13 @@ SELECT
  /* ================================================================
   第二组: 本年累计金额
   与第一组一一对应
-  YTD_AR_AMT = 上年12月/2 + 本年01~当月 SUM - 当月/2
+  YTD_AR_AMT = 本年01~当月 SUM
   YTD_其余  = 本年01~当月 SUM
   ================================================================ */
      , NVL(SUM(CASE
-                 WHEN B.IS_PRIOR = 'Y' AND B.COD_PERIODO = '12'
-                   THEN B.AR_AMT
-               END), 0) / 2
- + NVL(SUM(CASE
              WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO BETWEEN '01' AND ${$Period.code}
                THEN B.AR_AMT
-           END), 0)
- - NVL(SUM(CASE
-             WHEN B.IS_PRIOR = 'N' AND B.COD_PERIODO = ${$Period.code}
-               THEN B.AR_AMT
-           END), 0) / 2          AS YTD_AR_AMT                                   /* 本年累计期末应收占用 */
+           END), 0)              AS YTD_AR_AMT                                   /* 本年累计期末应收占用 */
      , NVL(SUM(CASE
                  WHEN B.IS_PRIOR = 'Y' AND B.COD_PERIODO BETWEEN '01' AND ${$Period.code}
                    THEN B.AR_AMT
