@@ -33,7 +33,7 @@ BASE AS (
       ELSE 'N'
     END AS IS_PRIOR
    FROM AW_MR9_ARPM03_000001  T
-  WHERE T.D_BG = ${$ANL_D_BG.code}
+  WHERE T.D_BG IN (${$ANL_D_BG.code})
     AND T.COD_CATEGORIA = 'ZAMOUNT'
     AND (
           (T.COD_SCENARIO = ${$Scenario.code}
