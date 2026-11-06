@@ -1,16 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法等格式，未改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按规范统一右对齐等格式，未改业务逻辑。
+ * 最后更新时间：20261106 14:25
+ * 本次修改：ALTER BY 20261106 14:25 SHIQINGFENG.EX 匹配情况改为按金额判断，并排除两侧金额全为0的空壳行。
+ * 上次修改：ALTER BY 20261102 18:20 SHIQINGFENG.EX 字段列表逐行排版；修复 FROM 缺失 schema 点号。
  *
  * 查询名称  ：往来账龄结果表M02-明细校验表
  * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_GB_HISENSE.FORM_DATI 等，详见正文。
  *
  * 修改历史：
- *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法等格式，未改业务逻辑。
- *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按规范统一右对齐等格式，未改业务逻辑。
+ *   ALTER BY 20261106 14:25 SHIQINGFENG.EX 匹配情况改为按金额判断，并排除两侧金额全为0的空壳行。
  *   ALTER BY 20261102 18:20 SHIQINGFENG.EX 字段列表逐行排版；修复 FROM 缺失 schema 点号。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 补查询说明文件头。
  *******************************************************************************/
@@ -46,7 +45,6 @@ T20C AS (
          /* 全零编码 LTRIM 后为空串(=NULL)，统一置 (NO_CUST) 才能与 1.0 侧配对 */
          , NVL(LTRIM(A.CUST_HEAD_CODE, '0'), '(NO_CUST)') AS CUST_CODE
          , MAX(A.CUST_HEAD_NAME) AS CUST_NAME
-         , COUNT(*) AS ROW_CNT          /* 判断该侧是否有数据 */
          , SUM(A.BY_BCY_0_AMT) AS BY_AMT/* 年初，AG 过程未赋值，当前恒为 0 */
          , SUM(A.LM_BCY_0_AMT) AS LM_AMT/* 上月，同上 */
          , SUM(A.BCY_0_AMT) AS CUR_AMT  /* 本月 */
@@ -75,7 +73,6 @@ T10C AS (
                  ELSE F.TESTO_6                            /* 客商名称 */
                END) AS CUST_NAME
          , MAX(F.IMPORTO_36)                                ADJ_FLAG  /* 1.0 手工调整标识 */
-         , COUNT(*)                                         ROW_CNT   /* 判断该侧是否有数据 */
          , SUM(F.IMPORTO_1)                                 BY_AMT    /* 年初 */
          , SUM(F.IMPORTO_2)                                 LM_AMT    /* 上月 */
          , SUM(F.IMPORTO_3)                                 CUR_AMT   /* 本月 */
@@ -110,11 +107,11 @@ SELECT NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE)            AS COMPANY_CODE   /*
      , NVL(T20C.BY_AMT, 0)  - NVL(T10C.BY_AMT, 0)           AS BY_AMT_DIFF    /* 年初 */
      , NVL(T20C.LM_AMT, 0)  - NVL(T10C.LM_AMT, 0)           AS LM_AMT_DIFF    /* 上月 */
      , NVL(T20C.CUR_AMT, 0) - NVL(T10C.CUR_AMT, 0)          AS CUR_AMT_DIFF   /* 本期 */
-       /* 用行数判断来源，避免客商编码为空时误判 */
+       /* 按金额判断该侧是否有数，两侧金额全为 0 的行已在 WHERE 排除 */
      , CASE
-         WHEN NVL(T20C.ROW_CNT, 0) = 0
+         WHEN GREATEST(ABS(NVL(T20C.BY_AMT, 0)), ABS(NVL(T20C.LM_AMT, 0)), ABS(NVL(T20C.CUR_AMT, 0))) <= 0.005
            THEN '仅1.0有'
-         WHEN NVL(T10C.ROW_CNT, 0) = 0
+         WHEN GREATEST(ABS(NVL(T10C.BY_AMT, 0)), ABS(NVL(T10C.LM_AMT, 0)), ABS(NVL(T10C.CUR_AMT, 0))) <= 0.005
            THEN '仅2.0有'
          ELSE '两边都有'
        END AS MATCH_FLAG
@@ -124,4 +121,7 @@ SELECT NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE)            AS COMPANY_CODE   /*
     ON T20C.COMPANY_CODE = T10C.COMPANY_CODE
    AND T20C.SEQ = T10C.SEQ
    AND T20C.CUST_CODE = T10C.CUST_CODE
+ /* 两侧金额全为 0 的空壳行不展示 */
+ WHERE GREATEST(ABS(NVL(T20C.BY_AMT, 0)), ABS(NVL(T20C.LM_AMT, 0)), ABS(NVL(T20C.CUR_AMT, 0))) > 0.005
+    OR GREATEST(ABS(NVL(T10C.BY_AMT, 0)), ABS(NVL(T10C.LM_AMT, 0)), ABS(NVL(T10C.CUR_AMT, 0))) > 0.005
  ORDER BY NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE), NVL(T20C.SEQ, T10C.SEQ), NVL(T20C.CUST_CODE, T10C.CUST_CODE)
