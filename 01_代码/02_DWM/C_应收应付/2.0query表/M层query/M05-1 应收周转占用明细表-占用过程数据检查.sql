@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 11:12
- * 本次修改：ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
- * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
+ * 最后更新时间：20261109 16:05
+ * 本次修改：ALTER BY 20261109 16:05 SHIQINGFENG.EX 集团范围过滤条件改用解码函数比较。
+ * 上次修改：ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 16:05 SHIQINGFENG.EX 集团范围过滤条件改用解码函数比较。
  *   ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
@@ -110,7 +111,7 @@ TURNOVER_SOURCE AS (
        AND ADJ.COD_DEST2 = TRIM(A.COD_DEST2)
      WHERE A.COD_SCENARIO = ${$Scenario.code}
        AND A.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
-       AND A.GRP_SCOPE = 'GEX-集团外'
+       AND A.GRP_SCOPE = F_TGK_UNICODE_AS('decode', 'GEX-集团外')
        AND A.COD_DEST2 IS NOT NULL
        AND A.COD_DEST2 <> 'ZZZZ'
        /* 保留TOV要求的两类账龄标识范围，单条ARPM02记录只生成一个类别。 */
@@ -292,8 +293,8 @@ BG_TURNOVER_NET AS (
          , SUM(M.TURNOVER_AMT) AS TURNOVER_AMT
       FROM MAPPED_TURNOVER M
      WHERE M.ARPTOV_FLAG = 'Y'
-       AND M.GRP_SCOPE = 'GEX-集团外'
-       AND M.BUSINESS_UNIT_MAP_STATUS = '已映射同一事业部'
+       AND M.GRP_SCOPE = F_TGK_UNICODE_AS('decode', 'GEX-集团外')
+       AND M.BUSINESS_UNIT_MAP_STATUS = F_TGK_UNICODE_AS('decode','已映射同一事业部')
        AND M.CUST_MATCH_CODE IS NOT NULL
      GROUP BY M.COD_SCENARIO
             , M.COD_PERIODO
