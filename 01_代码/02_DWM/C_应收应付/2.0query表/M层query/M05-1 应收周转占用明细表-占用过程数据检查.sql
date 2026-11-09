@@ -1,14 +1,17 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 16:05
- * 本次修改：ALTER BY 20261109 16:05 SHIQINGFENG.EX 集团范围过滤条件改用解码函数比较。
- * 上次修改：ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
+ * 最后更新时间：20261109 17:35
+ * 本次修改：ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
+ * 上次修改：ALTER BY 20261109 16:25 SHIQINGFENG.EX 最终展示只保留参数事业部，无事业部的记录不再展示。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
+ *   ALTER BY 20261109 16:25 SHIQINGFENG.EX 最终展示只保留参数事业部，无事业部的记录不再展示。
+ *   ALTER BY 20261109 16:15 SHIQINGFENG.EX 最终展示按事业部参数过滤，其他事业部整批排除。
  *   ALTER BY 20261109 16:05 SHIQINGFENG.EX 集团范围过滤条件改用解码函数比较。
  *   ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
@@ -371,7 +374,7 @@ FILTERED_TURNOVER AS (
          , M.F8_ADJ_AMT
       FROM MAPPED_TURNOVER M
 ),
-/* 事业部最终展示层：负净额标记完成后才执行参数事业部范围处理，参数外记录留空留痕。 */
+/* 事业部展示层：保留原始事业部编码，参数范围统一在最终层筛选。 */
 DISPLAY_TURNOVER AS (
     SELECT F.COD_SCENARIO
          , F.COD_PERIODO
@@ -387,11 +390,7 @@ DISPLAY_TURNOVER AS (
          , F.GRP_SCOPE
          , F.CP_COMPANY_CODE
          , F.TURNOVER_PROFITCENTER_CODE
-         , CASE
-             WHEN F.BUSINESS_UNIT_CODE IS NULL
-             OR F.BUSINESS_UNIT_CODE IN (${$ANL_D_BG.code})
-               THEN F.BUSINESS_UNIT_CODE
-           END AS BUSINESS_UNIT_CODE
+         , F.BUSINESS_UNIT_CODE
          , F.ARPTOV_FLAG
          , F.AR_AMT_FLAG
          , CASE
@@ -411,7 +410,7 @@ DISPLAY_TURNOVER AS (
          , F.F8_ADJ_AMT
       FROM FILTERED_TURNOVER F
 ),
-/* 最终事业部筛选：仅保留事业部为空或命中参数的展示记录；参数外记录已在上一层置空。 */
+/* 参数事业部只用于圈定公司范围，展示不再按事业部裁剪；事业部列原样输出，由使用者自行筛选。 */
 FINAL_TURNOVER AS (
     SELECT D.COD_SCENARIO
          , D.COD_PERIODO
@@ -441,8 +440,11 @@ FINAL_TURNOVER AS (
          , D.F7_GSUB_AMT
          , D.F8_ADJ_AMT
       FROM DISPLAY_TURNOVER D
-     WHERE D.BUSINESS_UNIT_CODE IS NULL
-        OR D.BUSINESS_UNIT_CODE IN (${$ANL_D_BG.code})
+     WHERE D.COD_AZIENDA IN (
+           SELECT M.COD_AZIENDA
+             FROM ATS_BG_MAP M
+            WHERE M.COD_BG IN (${$ANL_D_BG.code})
+     )
 )
 SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
      , F.COD_PERIODO AS PERIODO                 /* 期间 */
