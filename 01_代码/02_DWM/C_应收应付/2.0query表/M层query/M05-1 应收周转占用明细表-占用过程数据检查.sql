@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 20:30
- * 本次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 最后更新时间：20261109 11:12
+ * 本次修改：ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
+ * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
- * 源表      ：TGK_FIMA_DEV.AW_MR9_ARPM02_000001、TGK_FIMA_DEV.DWD_FI_MR_AR_IMOCC_MI、AW_RUL_ARPTOV_000001 等，详见正文。
+ * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
@@ -45,19 +46,6 @@ PCR_BG_MAP AS (
        AND NVL(P.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
        AND P.COD_BG IN (SELECT COD_BG FROM TOV_BG_SCOPE_ALL)
        AND P.COD_BG NOT LIKE 'CXC%'
-),
-/* ARPM02特殊取数配置：读取当前期间有效的规则；批次1至4为剔除规则，批次6为取数规则。 */
-/* 规则明细先去重，来源层通过EXISTS按业务记录判断，避免规则多行关联放大金额。 */
-ARPTOV_RULE AS (
-    SELECT DISTINCT R.BATCH_ID
-         , TRIM(R.COD_AZIENDA) AS COD_AZIENDA
-         , TRIM(R.CUST_CODE) AS CUST_CODE
-         , TRIM(R.NATURE_L2_NAME) AS NATURE_L2_NAME
-         , TRIM(R.D_SALE_DEPT) AS D_SALE_DEPT
-      FROM AW_RUL_ARPTOV_000001 R
-     WHERE R.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
-       AND NVL(R.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
-       AND R.BATCH_ID IN ('1', '2', '3', '4', '6')
 ),
 /* ARPM01调整汇总：完全复用TOV按场景、期间、公司、客商和利润中心汇总因素7、因素8的逻辑。 */
 ARPM01_ADJ_SUM AS (
@@ -101,58 +89,9 @@ TURNOVER_SOURCE AS (
          , A.GRP_SCOPE
          , A.COD_AZI_CTP AS CP_COMPANY_CODE
          , A.COD_DEST2 AS SRC_PROFITCENTER_CODE
-         , CASE
-/* TOV实际优先级：1至4命中即不取数，优先于后续取数规则。 */
-             WHEN EXISTS (
-                      SELECT 1
-                        FROM ARPTOV_RULE R1
-                       WHERE R1.BATCH_ID = '1'
-              AND R1.CUST_CODE IS NOT NULL
-              AND TRIM(A.CUST_CODE) LIKE '%' || R1.CUST_CODE || '%'
-                    )
-             OR EXISTS (
-                      SELECT 1
-                        FROM ARPTOV_RULE R2
-                       WHERE R2.BATCH_ID = '2'
-              AND R2.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-              AND R2.CUST_CODE IS NOT NULL
-              AND R2.CUST_CODE = TRIM(A.CUST_CODE)
-                    )
-             OR EXISTS (
-                      SELECT 1
-                        FROM ARPTOV_RULE R3
-                       WHERE R3.BATCH_ID = '3'
-              AND R3.NATURE_L2_NAME IS NOT NULL
-              AND R3.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
-                    )
-             OR EXISTS (
-                      SELECT 1
-                        FROM ARPTOV_RULE R4
-                       WHERE R4.BATCH_ID = '4'
-              AND R4.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-              AND R4.D_SALE_DEPT IS NOT NULL
-              AND R4.D_SALE_DEPT = TRIM(A.D_SALE_DEPT)
-                    )
-               THEN 'N'
-               /* 批次6沿用TOV：公司未维护二级性质时默认取数，维护时仅取配置性质。 */
-             WHEN NOT EXISTS (
-                      SELECT 1
-                        FROM ARPTOV_RULE R6
-                       WHERE R6.BATCH_ID = '6'
-              AND R6.COD_AZIENDA IS NOT NULL
-              AND R6.NATURE_L2_NAME IS NOT NULL
-              AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-                    )
-             OR EXISTS (
-                      SELECT 1
-                        FROM ARPTOV_RULE R6
-                       WHERE R6.BATCH_ID = '6'
-              AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-              AND R6.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
-                    )
-               THEN 'Y'
-             ELSE 'N'
-           END AS ARPTOV_FLAG
+         /* TOV_FLAG由AG过程统一打标，涵盖利润中心、账龄标识及特殊取数剔除规则；N行保留用于过程留痕。
+            ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列 */
+         , A.TOV_FLAG AS ARPTOV_FLAG
          , NVL(A.BCY_ADJ_INCL_0_AMT, 0) AS TURNOVER_AMT
          , NVL(A.OVERDUE_0_AMT, 0) AS F1_ODUE_AMT
          , NVL(A.EPAY_AMT, 0) AS F2_EPAY_AMT

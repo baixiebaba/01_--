@@ -8,9 +8,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261102 15:49
-   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度
+   * 最后更新时间：20261109 11:10
+   * 本次修改：ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为AG过程维护的TOV_FLAG标识列
+   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -18,6 +18,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为AG过程维护的TOV_FLAG标识列
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度
    *   ALTER BY 20261029 18:20 SHIQINGFENG.EX 收入利润中心映射新增BATCH_ID=6，优先级BATCH_ID=2>6>收入原利润中心。
@@ -325,18 +326,6 @@ BEGIN
     WHERE N.COD_SCENARIO = V_SCENARIO
       AND N.COD_PERIODO = V_PERIODO
   ),
-  /* 应收周转特殊取数配置：仅读取当前期间有效的取数及剔除规则。 */
-  ARPTOV_RULE AS (
-    SELECT R.BATCH_ID
-        , TRIM(R.COD_AZIENDA) AS COD_AZIENDA
-        , TRIM(R.CUST_CODE) AS CUST_CODE
-        , TRIM(R.NATURE_L2_NAME) AS NATURE_L2_NAME
-        , TRIM(R.D_SALE_DEPT) AS D_SALE_DEPT
-      FROM AW_RUL_ARPTOV_000001 R
-    WHERE R.VALID_FR <= V_YEARMONTH
-      AND NVL(R.VALID_TO, '999999') >= V_YEARMONTH
-      AND R.BATCH_ID IN ('1', '2', '3', '4', '6')
-  ),
   /* ARPM01调整汇总：按场景、期间、公司、客商和利润中心聚合因素7、因素8，避免原表多行导致ARPM02重复。 */
   ARPM01_ADJ_SUM AS (
     SELECT A.COD_SCENARIO
@@ -427,62 +416,9 @@ BEGIN
       AND A.COD_AZIENDA IN (
           SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
       )
-      AND A.COD_DEST2 IS NOT NULL
-      AND A.COD_DEST2 <> 'ZZZZ'
-      /* 至少有一类账龄标识满足周转取数范围。 */
-      AND (
-            A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
-          OR A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
-      )
-      /* BATCH_ID=6：公司有维护时仅保留配置的二级性质，公司无维护时默认全部取数。 */
-      AND (
-            NOT EXISTS (
-                SELECT 1
-                  FROM ARPTOV_RULE R6
-                  WHERE R6.BATCH_ID = '6'
-                    AND R6.COD_AZIENDA IS NOT NULL
-                    AND R6.NATURE_L2_NAME IS NOT NULL
-                    AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-            )
-          OR EXISTS (
-                SELECT 1
-                  FROM ARPTOV_RULE R6
-                  WHERE R6.BATCH_ID = '6'
-                    AND R6.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-                    AND R6.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
-            )
-      )
-      /* BATCH_ID=1至4：在取数范围确定后，统一执行特殊剔除规则。 */
-      AND NOT EXISTS (
-          SELECT 1
-            FROM ARPTOV_RULE R1
-            WHERE R1.BATCH_ID = '1'
-              AND R1.CUST_CODE IS NOT NULL
-              AND TRIM(A.CUST_CODE) LIKE '%' || R1.CUST_CODE || '%'
-      )
-      AND NOT EXISTS (
-          SELECT 1
-            FROM ARPTOV_RULE R2
-            WHERE R2.BATCH_ID = '2'
-              AND R2.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-              AND R2.CUST_CODE IS NOT NULL
-              AND R2.CUST_CODE = TRIM(A.CUST_CODE)
-      )
-      AND NOT EXISTS (
-          SELECT 1
-            FROM ARPTOV_RULE R3
-            WHERE R3.BATCH_ID = '3'
-              AND R3.NATURE_L2_NAME IS NOT NULL
-              AND R3.NATURE_L2_NAME = TRIM(A.NATURE_L2_NAME)
-      )
-      AND NOT EXISTS (
-          SELECT 1
-            FROM ARPTOV_RULE R4
-            WHERE R4.BATCH_ID = '4'
-              AND R4.COD_AZIENDA = TRIM(A.COD_AZIENDA)
-              AND R4.D_SALE_DEPT IS NOT NULL
-              AND R4.D_SALE_DEPT = TRIM(A.D_SALE_DEPT)
-      )
+      /* TOV_FLAG由AG过程统一打标，涵盖利润中心、账龄标识及BATCH_ID=1/2/3/4/6特殊取数剔除规则。
+         ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为TOV_FLAG标识列 */
+      AND A.TOV_FLAG = 'Y'
   ),
   /* IMOCC来源：不提前映射D_BG，科目固定1122000000，保留来源国家名称和利润中心口径。 */
   IMOCC_SOURCE AS (

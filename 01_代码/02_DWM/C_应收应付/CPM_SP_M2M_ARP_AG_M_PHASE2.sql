@@ -1,1743 +1,1837 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
-    P_SCENARIO  IN VARCHAR2
-  , P_PERIODO   IN VARCHAR2
-  , P_AZIENDA   IN VARCHAR2
-  , SESSION_USER IN VARCHAR2
-) AS
-  /*******************************************************************************
-   *                              存储过程说明
-   *-----------------------------------------------------------------------------
-   * 最后更新时间：20261105 18:26
-   * 本次修改：ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
-   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-   *
-   * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
-   * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
-   * 源表      ：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、DATI_CAMBIO、SQF_TEST
-   * 目标表    ：AW_MR9_ARPM02_000001
-   *
-   * 修改历史：
-   *   ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
-   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
-   *   ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录
-   *   20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
-   *   20261010 撤销交易币折算本位币结果保留两位小数调整并恢复原精度
-   *   20261010 交易币折算本位币金额保留两位小数
-   *   20261010 RESULT_FACT最终将交易币字段映射为本位币字段
-   *   20261010 新增周转分析渠道和商冷客户群字段，直接对应ARPM01来源字段
-   *   20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
-   *   20260923 SHIQINGFENG.EX 汇率评估标识为空时，交易币金额先换算人民币再换算成本位币
-   *   20260923 SHIQINGFENG.EX 重构ARPM02装载逻辑，保留INPUT_DEFORM并按OID MERGE更新
-   *   20260922 SHIQINGFENG.EX 新增ARPM02账龄结果表过程
-   ******************************************************************************/
-  V_SCENARIO       VARCHAR2(30);
-  V_PERIODO        VARCHAR2(30);
-  V_YEARMONTH      VARCHAR2(10);
-  V_PREV_YEARMONTH VARCHAR2(10);
-  V_BY_SCENARIO    VARCHAR2(30);
-  V_BY_PERIODO     VARCHAR2(2);
-  V_LM_SCENARIO    VARCHAR2(30);
-  V_LM_PERIODO     VARCHAR2(2);
-  V_AZIENDA        VARCHAR2(4000);
-  V_SESSION_ID     NUMBER;
-  V_ERROR_COD      NUMBER;
-  V_ERROR_MSG      VARCHAR2(4000);
-BEGIN
+  CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
+      P_SCENARIO  IN VARCHAR2
+    , P_PERIODO   IN VARCHAR2
+    , P_AZIENDA   IN VARCHAR2
+    , SESSION_USER IN VARCHAR2
+  ) AS
+    /*******************************************************************************
+    *                              存储过程说明
+    *-----------------------------------------------------------------------------
+    * 最后更新时间：20261109 11:05
+    * 本次修改：ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
+    * 上次修改：ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
+    *
+    * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
+    * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
+    * 源表      ：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、AW_RUL_ARPTOV_000001、DATI_CAMBIO、SQF_TEST
+    * 目标表    ：AW_MR9_ARPM02_000001
+    *
+    * 修改历史：
+    *   ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
+    *   ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
+    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
+    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
+    *   ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录
+    *   20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
+    *   20261010 撤销交易币折算本位币结果保留两位小数调整并恢复原精度
+    *   20261010 交易币折算本位币金额保留两位小数
+    *   20261010 RESULT_FACT最终将交易币字段映射为本位币字段
+    *   20261010 新增周转分析渠道和商冷客户群字段，直接对应ARPM01来源字段
+    *   20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
+    *   20260923 SHIQINGFENG.EX 汇率评估标识为空时，交易币金额先换算人民币再换算成本位币
+    *   20260923 SHIQINGFENG.EX 重构ARPM02装载逻辑，保留INPUT_DEFORM并按OID MERGE更新
+    *   20260922 SHIQINGFENG.EX 新增ARPM02账龄结果表过程
+    ******************************************************************************/
+    V_SCENARIO       VARCHAR2(30);
+    V_PERIODO        VARCHAR2(30);
+    V_YEARMONTH      VARCHAR2(10);
+    V_PREV_YEARMONTH VARCHAR2(10);
+    V_BY_SCENARIO    VARCHAR2(30);
+    V_BY_PERIODO     VARCHAR2(2);
+    V_LM_SCENARIO    VARCHAR2(30);
+    V_LM_PERIODO     VARCHAR2(2);
+    V_AZIENDA        VARCHAR2(4000);
+    V_SESSION_ID     NUMBER;
+    V_ERROR_COD      NUMBER;
+    V_ERROR_MSG      VARCHAR2(4000);
+  BEGIN
 
-  V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
+    V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
 
-  /* 删除本session的参数公司，防止同一窗口中止后继续执行时公司范围扩大。 */
-  DELETE FROM SESSION_AZIENDA_LIST
-   WHERE SESSION_ID = V_SESSION_ID;
-  DELETE FROM SESSION_V_REF_AZIENDA
-   WHERE SESSION_ID = V_SESSION_ID;
+    /* 删除本session的参数公司，防止同一窗口中止后继续执行时公司范围扩大。 */
+    DELETE FROM SESSION_AZIENDA_LIST
+    WHERE SESSION_ID = V_SESSION_ID;
+    DELETE FROM SESSION_V_REF_AZIENDA
+    WHERE SESSION_ID = V_SESSION_ID;
 
-  INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
-  SELECT V_SESSION_ID, HIE, NODE, ELEM
-    FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
+    INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
+    SELECT V_SESSION_ID, HIE, NODE, ELEM
+      FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
 
-  /* 时间参数初始化。 */
-  V_SCENARIO := P_SCENARIO;
-  V_PERIODO := LPAD(P_PERIODO, 2, '0');
-  V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
-  V_PREV_YEARMONTH := TO_CHAR(
-                           ADD_MONTHS(
-                             TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD')
-                           , -1
-                           )
-                         , 'YYYYMM'
-                       );
+    /* 时间参数初始化。 */
+    V_SCENARIO := P_SCENARIO;
+    V_PERIODO := LPAD(P_PERIODO, 2, '0');
+    V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
+    V_PREV_YEARMONTH := TO_CHAR(
+                            ADD_MONTHS(
+                              TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD')
+                            , -1
+                            )
+                          , 'YYYYMM'
+                        );
 
-  /* 历史期间规则：年初使用上年12月；上月使用自然月上月。 */
-  V_BY_SCENARIO := TO_CHAR(TO_NUMBER(SUBSTR(V_SCENARIO, 1, 4)) - 1)
-                   || SUBSTR(V_SCENARIO, 5);
-  V_BY_PERIODO := '12';
-  V_LM_SCENARIO := SUBSTR(V_PREV_YEARMONTH, 1, 4) || SUBSTR(V_SCENARIO, 5);
-  V_LM_PERIODO := SUBSTR(V_PREV_YEARMONTH, 5, 2);
+    /* 历史期间规则：年初使用上年12月；上月使用自然月上月。 */
+    V_BY_SCENARIO := TO_CHAR(TO_NUMBER(SUBSTR(V_SCENARIO, 1, 4)) - 1)
+                    || SUBSTR(V_SCENARIO, 5);
+    V_BY_PERIODO := '12';
+    V_LM_SCENARIO := SUBSTR(V_PREV_YEARMONTH, 1, 4) || SUBSTR(V_SCENARIO, 5);
+    V_LM_PERIODO := SUBSTR(V_PREV_YEARMONTH, 5, 2);
 
-  /* 组织参数初始化：仅抽取AR规则范围内且未锁定的公司。 */
-  INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
-  SELECT DISTINCT V_SESSION_ID
-       , ELEM
-    FROM SESSION_V_REF_AZIENDA
-   WHERE HIE = '10'
-     AND (
-           INSTR(',' || P_AZIENDA || ',', ',' || ELEM || ',') > 0
-        OR INSTR(',' || P_AZIENDA || ',', ',' || NODE || ',') > 0
-        OR P_AZIENDA = 'ALL'
-     )
-     AND ELEM IN (
-           SELECT COD_AZIENDA
-             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
-            WHERE ARP_FLAG = 'Y'
-              AND VALID_FR <= V_YEARMONTH
-              AND NVL(VALID_TO, '999999') >= V_YEARMONTH
-              AND COD_CONTO = 'ZAW_D2M_IN'
-     )
-     AND ELEM NOT IN (
-           SELECT COD_AZIENDA
-             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
-            WHERE ARP_FLAG = 'Y'
-              AND T.COD_SCENARIO = V_SCENARIO
-              AND T.COD_PERIODO = V_PERIODO
-              AND T.COD_CONTO = 'ZAW_D2M_LOCK'
-     );
+    /* 组织参数初始化：仅抽取AR规则范围内且未锁定的公司。 */
+    INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
+    SELECT DISTINCT V_SESSION_ID
+        , ELEM
+      FROM SESSION_V_REF_AZIENDA
+    WHERE HIE = '10'
+      AND (
+            INSTR(',' || P_AZIENDA || ',', ',' || ELEM || ',') > 0
+          OR INSTR(',' || P_AZIENDA || ',', ',' || NODE || ',') > 0
+          OR P_AZIENDA = 'ALL'
+      )
+      AND ELEM IN (
+            SELECT COD_AZIENDA
+              FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
+              WHERE ARP_FLAG = 'Y'
+                AND VALID_FR <= V_YEARMONTH
+                AND NVL(VALID_TO, '999999') >= V_YEARMONTH
+                AND COD_CONTO = 'ZAW_D2M_IN'
+      )
+      AND ELEM NOT IN (
+            SELECT COD_AZIENDA
+              FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
+              WHERE ARP_FLAG = 'Y'
+                AND T.COD_SCENARIO = V_SCENARIO
+                AND T.COD_PERIODO = V_PERIODO
+                AND T.COD_CONTO = 'ZAW_D2M_LOCK'
+      );
 
-  /* 获取本批次公司列表，供日志记录使用。 */
-  SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
-    INTO V_AZIENDA
-    FROM (
-      SELECT DISTINCT ELEM
-        FROM SESSION_AZIENDA_LIST
-       WHERE SESSION_ID = V_SESSION_ID
-    );
+    /* 获取本批次公司列表，供日志记录使用。 */
+    SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
+      INTO V_AZIENDA
+      FROM (
+        SELECT DISTINCT ELEM
+          FROM SESSION_AZIENDA_LIST
+        WHERE SESSION_ID = V_SESSION_ID
+      );
 
-  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'BEGIN 开始执行' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
-  COMMIT;
+    INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'BEGIN 开始执行' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    COMMIT;
 
 
-  /* 仅删除本过程上次生成的自动行，界面维护的INPUT_DEFORM行保留，后续MERGE按业务键复用其OID。 */
-  DELETE FROM AW_MR9_ARPM02_000001
-   WHERE COD_SCENARIO = V_SCENARIO
-     AND COD_PERIODO = V_PERIODO
-     AND COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
-     )
-     AND PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2';
-
-  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '当前批次删除完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
-
-  /* 当前期间来源标准化、聚合及ARPM02字段平铺；ARPM01的ACCT_REC_CODE兼容映射为设计字段COD_CONTO。 */
-  MERGE INTO AW_MR9_ARPM02_000001 T
-  USING (
-  WITH
-  /* 汇率换算表：汇率以人民币为基准，非空汇率评估标识的记录沿用来源BCY金额。 */
-  CONVERSION_RATE AS (
-    SELECT COD_VALUTA
-         , MAX(CAMBIO_FINALE) AS RATE
-      FROM TGK_FIMA_HISENSE.DATI_CAMBIO
-     WHERE COD_SCENARIO = SUBSTR(V_SCENARIO, 1, 4) || 'ACT'
-       AND COD_PERIODO = V_PERIODO
-     GROUP BY COD_VALUTA
-  ),
-  /* 2023公司沿用SAP TCURR汇率；测试环境使用SQF_TEST，其他公司使用DATI_CAMBIO人民币基准汇率。 */
-  /* 上线前将SQF_TEST替换为DWD_FI_MR_SAP_TCURR_DD，并增加 MANDT = '600' 条件以区分S600。 */
-  TCURR_CONVERSION_RATE AS (
-    SELECT TRIM(B.TCURR) AS TCURR
-         , TRIM(B.FCURR) AS FCURR
-         , B.UKURS * CASE
-                           WHEN B.TCURR = 'VND' AND B.FCURR IN ('USD') THEN 1000
-                           WHEN B.TCURR = 'VND' THEN 100
-                           ELSE 1
-                       END AS RATE
-      FROM SQF_TEST B
-     WHERE B.KURST = 'M'
-       AND TO_CHAR(99999999 - B.GDATU) = TO_CHAR(
-             TRUNC(
-               ADD_MONTHS(
-                 LAST_DAY(TO_DATE(V_YEARMONTH, 'YYYYMM'))
-               , -1
-               ) + 1
-             )
-           , 'YYYYMMDD'
-       )
-  ),
-  /* 当前ARPM01来源：保留原始BCY/QCY，汇率和法人税率在AG中计算。 */
-  CURRENT_SOURCE_BASE AS (
-    SELECT A.OID
-         , A.COD_AZIENDA
-         , CASE WHEN A.SRC_DETAIL LIKE 'EPAY%'
-                       AND NVL(TRIM(A.COD_CONTO), '|') = '|'
-                     THEN '1122000000'
-                ELSE A.COD_CONTO
-            END AS COD_CONTO
-         , A.COD_CATEGORIA
-         , A.SRC_DETAIL
-         , A.CUST_CODE
-         , A.CUST_NAME
-         , A.CUST_HEAD_CODE
-         , A.CUST_HEAD_NAME
-         , A.CUST_BRANCH_CODE
-         , A.CUST_BRANCH_NAME
-         , A.COD_AZI_CTP
-         , A.COUNTRY_CODE
-         , A.COUNTRY_NAME
-         , A.ACCT_SRC_CODE
-         , A.LE_AGE_FLAG
-         , A.IS_REC_LG
-         , A.ME_AGE_FLAG
-         , A.IS_REC_ME
-         , A.MB_AGE_FLAG
-         , A.IS_REC_MB
-         , A.GRP_SCOPE
-         , A.NATURE_L1_NAME
-         , A.NATURE_L2_NAME
-         , A.NATURE_L3_NAME
-         , A.D_CHANNEL
-         /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU由ARPM01透传（列清单、目标列与MERGE值同步增加D_CHANNEL_BU）。 */
-         , A.D_CHANNEL_BU
-         , A.D_CC_CUSTGRP
-         , A.D_ONOFFLINE
-         , A.COD_DEST2
-         , A.COD_DEST3
-         , A.D_SALE_DEPT
-         , A.UFEE_UREB_FLAG
-         , A.ECLS_FLAG
-         , A.PAY_TERM_CODE
-         , A.PAY_TERM_DESC
-         , A.EXCHANGE_RATE_EVAL_FLAG
-         , A.TAX_RATE
-         , A.COD_VALUTA
-         , A.COD_VALUTA_ORIGINARIA
-         , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
-         , NVL(A.BCY_1_AMT, 0) AS BCY_1_AMT
-         , NVL(A.BCY_2_AMT, 0) AS BCY_2_AMT
-         , NVL(A.BCY_3_AMT, 0) AS BCY_3_AMT
-         , NVL(A.BCY_4_AMT, 0) AS BCY_4_AMT
-         , NVL(A.BCY_5_AMT, 0) AS BCY_5_AMT
-         , NVL(A.BCY_6_AMT, 0) AS BCY_6_AMT
-         , NVL(A.BCY_7_AMT, 0) AS BCY_7_AMT
-         , NVL(A.BCY_8_AMT, 0) AS BCY_8_AMT
-         , NVL(A.BCY_9_AMT, 0) AS BCY_9_AMT
-         , NVL(A.BCY_10_AMT, 0) AS BCY_10_AMT
-         , NVL(A.BCY_11_AMT, 0) AS BCY_11_AMT
-         , NVL(A.BCY_12_AMT, 0) AS BCY_12_AMT
-         , NVL(A.BCY_13_AMT, 0) AS BCY_13_AMT
-         , NVL(A.BCY_14_AMT, 0) AS BCY_14_AMT
-         , NVL(A.BCY_15_AMT, 0) AS BCY_15_AMT
-         , NVL(A.QCY_0_AMT, 0) AS QCY_0_AMT
-         , NVL(A.QCY_1_AMT, 0) AS QCY_1_AMT
-         , NVL(A.QCY_2_AMT, 0) AS QCY_2_AMT
-         , NVL(A.QCY_3_AMT, 0) AS QCY_3_AMT
-         , NVL(A.QCY_4_AMT, 0) AS QCY_4_AMT
-         , NVL(A.QCY_5_AMT, 0) AS QCY_5_AMT
-         , NVL(A.QCY_6_AMT, 0) AS QCY_6_AMT
-         , NVL(A.QCY_7_AMT, 0) AS QCY_7_AMT
-         , NVL(A.QCY_8_AMT, 0) AS QCY_8_AMT
-         , NVL(A.QCY_9_AMT, 0) AS QCY_9_AMT
-         , NVL(A.QCY_10_AMT, 0) AS QCY_10_AMT
-         , NVL(A.QCY_11_AMT, 0) AS QCY_11_AMT
-         , NVL(A.QCY_12_AMT, 0) AS QCY_12_AMT
-         , NVL(A.QCY_13_AMT, 0) AS QCY_13_AMT
-         , NVL(A.QCY_14_AMT, 0) AS QCY_14_AMT
-         , NVL(A.QCY_15_AMT, 0) AS QCY_15_AMT
-         , CASE WHEN A.LE_AGE_FLAG = 'CL' AND A.IS_REC_LG = 'Y'
-                    THEN 1 / NULLIF(1 + NVL(A.TAX_RATE, 0), 0)
-                ELSE 1
-            END AS TAX_FACTOR
-         , CASE
-               WHEN TRIM(A.EXCHANGE_RATE_EVAL_FLAG) IS NULL
-                AND TRIM(A.COD_VALUTA_ORIGINARIA) IS NOT NULL
-                AND TRIM(A.COD_VALUTA) IS NOT NULL
-                AND (
-                      (A.COD_AZIENDA = '2023'
-                       AND TCURR_CONV.RATE IS NOT NULL
-                       AND TCURR_CONV.RATE <> 0)
-                   OR (NVL(A.COD_AZIENDA, '#') <> '2023'
-                       AND (
-                             TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY'
-                          OR (QCY_RATE.RATE IS NOT NULL AND QCY_RATE.RATE <> 0)
-                       )
-                       AND (
-                             TRIM(A.COD_VALUTA) = 'CNY'
-                          OR (BCY_RATE.RATE IS NOT NULL AND BCY_RATE.RATE <> 0)
-                       ))
-                )
-                THEN CASE
-                         WHEN A.COD_AZIENDA = '2023'
-                          THEN TCURR_CONV.RATE
-                         ELSE ROUND(
-                                (CASE WHEN TRIM(A.COD_VALUTA) = 'CNY' THEN 1 ELSE BCY_RATE.RATE END)
-                                / (CASE WHEN TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY' THEN 1 ELSE QCY_RATE.RATE END)
-                              , 5
-                              )
-                     END
-           END AS CONVERSION_FACTOR
-      FROM AW_MR9_ARPM01_000001 A
-      LEFT JOIN CONVERSION_RATE QCY_RATE
-        ON QCY_RATE.COD_VALUTA = TRIM(A.COD_VALUTA_ORIGINARIA)
-      LEFT JOIN CONVERSION_RATE BCY_RATE
-        ON BCY_RATE.COD_VALUTA = TRIM(A.COD_VALUTA)
-      LEFT JOIN TCURR_CONVERSION_RATE TCURR_CONV
-        ON TCURR_CONV.TCURR = TRIM(A.COD_VALUTA)
-       AND TCURR_CONV.FCURR = TRIM(A.COD_VALUTA_ORIGINARIA)
-     WHERE A.COD_SCENARIO = V_SCENARIO
-       AND A.COD_PERIODO = V_PERIODO
-       AND A.COD_AZIENDA IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
+    /* 仅删除本过程上次生成的自动行，界面维护的INPUT_DEFORM行保留，后续MERGE按业务键复用其OID。 */
+    DELETE FROM AW_MR9_ARPM02_000001
+    WHERE COD_SCENARIO = V_SCENARIO
+      AND COD_PERIODO = V_PERIODO
+      AND COD_AZIENDA IN (
+            SELECT ELEM
+              FROM SESSION_AZIENDA_LIST
               WHERE SESSION_ID = V_SESSION_ID
-       )
-       AND NVL(A.LE_AGE_FLAG,'|') <> '|'
-       AND SRC_DETAIL LIKE 'ORG%'
-  ),
-  /* 按用户口径计算ORG来源本位币账龄金额；非ORG来源保留原始BCY供补充金额使用。 */
-  CURRENT_SOURCE AS (
-    SELECT S.*
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_0_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_0_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_0_AMT
-            END AS CALC_BCY_0_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_1_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_1_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_1_AMT
-            END AS CALC_BCY_1_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_2_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_2_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_2_AMT
-            END AS CALC_BCY_2_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_3_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_3_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_3_AMT
-            END AS CALC_BCY_3_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_4_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_4_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_4_AMT
-            END AS CALC_BCY_4_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_5_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_5_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_5_AMT
-            END AS CALC_BCY_5_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_6_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_6_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_6_AMT
-            END AS CALC_BCY_6_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_7_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_7_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_7_AMT
-            END AS CALC_BCY_7_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_8_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_8_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_8_AMT
-            END AS CALC_BCY_8_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_9_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_9_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_9_AMT
-            END AS CALC_BCY_9_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_10_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_10_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_10_AMT
-            END AS CALC_BCY_10_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_11_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_11_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_11_AMT
-            END AS CALC_BCY_11_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_12_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_12_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_12_AMT
-            END AS CALC_BCY_12_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_13_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_13_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_13_AMT
-            END AS CALC_BCY_13_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_14_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_14_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_14_AMT
-            END AS CALC_BCY_14_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     AND S.LE_AGE_FLAG = 'CL'
-                     AND S.IS_REC_LG = 'Y'
-                     THEN S.BCY_15_AMT * S.TAX_FACTOR
-                WHEN S.SRC_DETAIL LIKE 'ORG%'
-                 AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
-                 AND S.CONVERSION_FACTOR IS NOT NULL
-                     THEN S.QCY_15_AMT * S.CONVERSION_FACTOR
-                ELSE S.BCY_15_AMT
-            END AS CALC_BCY_15_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN (CASE WHEN S.CONVERSION_FACTOR IS NULL
+      )
+      AND PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2';
+
+    INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '当前批次删除完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+
+    /* 当前期间来源标准化、聚合及ARPM02字段平铺；ARPM01的ACCT_REC_CODE兼容映射为设计字段COD_CONTO。 */
+    
+  BEGIN
+    MERGE INTO AW_MR9_ARPM02_000001 T
+    USING (
+    WITH
+    /* 汇率换算表：汇率以人民币为基准，非空汇率评估标识的记录沿用来源BCY金额。 */
+    CONVERSION_RATE AS (
+      SELECT COD_VALUTA
+          , MAX(CAMBIO_FINALE) AS RATE
+        FROM TGK_FIMA_HISENSE.DATI_CAMBIO
+      WHERE COD_SCENARIO = SUBSTR(V_SCENARIO, 1, 4) || 'ACT'
+        AND COD_PERIODO = V_PERIODO
+      GROUP BY COD_VALUTA
+    ),
+    /* 2023公司沿用SAP TCURR汇率；测试环境使用SQF_TEST，其他公司使用DATI_CAMBIO人民币基准汇率。 */
+    /* 上线前将SQF_TEST替换为DWD_FI_MR_SAP_TCURR_DD，并增加 MANDT = '600' 条件以区分S600。 */
+    TCURR_CONVERSION_RATE AS (
+      SELECT TRIM(B.TCURR) AS TCURR
+          , TRIM(B.FCURR) AS FCURR
+          , B.UKURS * CASE
+                            WHEN B.TCURR = 'VND' AND B.FCURR IN ('USD') THEN 1000
+                            WHEN B.TCURR = 'VND' THEN 100
+                            ELSE 1
+                        END AS RATE
+        FROM SQF_TEST B
+      WHERE B.KURST = 'M'
+        AND TO_CHAR(99999999 - B.GDATU) = TO_CHAR(
+              TRUNC(
+                ADD_MONTHS(
+                  LAST_DAY(TO_DATE(V_YEARMONTH, 'YYYYMM'))
+                , -1
+                ) + 1
+              )
+            , 'YYYYMMDD'
+        )
+    ),
+    /* 当前ARPM01来源：保留原始BCY/QCY，汇率和法人税率在AG中计算。 */
+    CURRENT_SOURCE_BASE AS (
+      SELECT A.OID
+          , A.COD_AZIENDA
+          , CASE WHEN A.SRC_DETAIL LIKE 'EPAY%'
+                        AND NVL(TRIM(A.COD_CONTO), '|') = '|'
+                      THEN '1122000000'
+                  ELSE A.COD_CONTO
+              END AS COD_CONTO
+          , A.COD_CATEGORIA
+          , A.SRC_DETAIL
+          , A.CUST_CODE
+          , A.CUST_NAME
+          , A.CUST_HEAD_CODE
+          , A.CUST_HEAD_NAME
+          , A.CUST_BRANCH_CODE
+          , A.CUST_BRANCH_NAME
+          , A.COD_AZI_CTP
+          , A.COUNTRY_CODE
+          , A.COUNTRY_NAME
+          , A.ACCT_SRC_CODE
+          , A.LE_AGE_FLAG
+          , A.IS_REC_LG
+          , A.ME_AGE_FLAG
+          , A.IS_REC_ME
+          , A.MB_AGE_FLAG
+          , A.IS_REC_MB
+          , A.GRP_SCOPE
+          , A.NATURE_L1_NAME
+          , A.NATURE_L2_NAME
+          , A.NATURE_L3_NAME
+          , A.D_CHANNEL
+          /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU由ARPM01透传（列清单、目标列与MERGE值同步增加D_CHANNEL_BU）。 */
+          , A.D_CHANNEL_BU
+          , A.D_CC_CUSTGRP
+          , A.D_ONOFFLINE
+          , A.COD_DEST2
+          , A.COD_DEST3
+          , A.D_SALE_DEPT
+          , A.UFEE_UREB_FLAG
+          , A.ECLS_FLAG
+          , A.PAY_TERM_CODE
+          , A.PAY_TERM_DESC
+          , A.EXCHANGE_RATE_EVAL_FLAG
+          , A.TAX_RATE
+          , A.COD_VALUTA
+          , A.COD_VALUTA_ORIGINARIA
+          , NVL(A.BCY_0_AMT, 0) AS BCY_0_AMT
+          , NVL(A.BCY_1_AMT, 0) AS BCY_1_AMT
+          , NVL(A.BCY_2_AMT, 0) AS BCY_2_AMT
+          , NVL(A.BCY_3_AMT, 0) AS BCY_3_AMT
+          , NVL(A.BCY_4_AMT, 0) AS BCY_4_AMT
+          , NVL(A.BCY_5_AMT, 0) AS BCY_5_AMT
+          , NVL(A.BCY_6_AMT, 0) AS BCY_6_AMT
+          , NVL(A.BCY_7_AMT, 0) AS BCY_7_AMT
+          , NVL(A.BCY_8_AMT, 0) AS BCY_8_AMT
+          , NVL(A.BCY_9_AMT, 0) AS BCY_9_AMT
+          , NVL(A.BCY_10_AMT, 0) AS BCY_10_AMT
+          , NVL(A.BCY_11_AMT, 0) AS BCY_11_AMT
+          , NVL(A.BCY_12_AMT, 0) AS BCY_12_AMT
+          , NVL(A.BCY_13_AMT, 0) AS BCY_13_AMT
+          , NVL(A.BCY_14_AMT, 0) AS BCY_14_AMT
+          , NVL(A.BCY_15_AMT, 0) AS BCY_15_AMT
+          , NVL(A.QCY_0_AMT, 0) AS QCY_0_AMT
+          , NVL(A.QCY_1_AMT, 0) AS QCY_1_AMT
+          , NVL(A.QCY_2_AMT, 0) AS QCY_2_AMT
+          , NVL(A.QCY_3_AMT, 0) AS QCY_3_AMT
+          , NVL(A.QCY_4_AMT, 0) AS QCY_4_AMT
+          , NVL(A.QCY_5_AMT, 0) AS QCY_5_AMT
+          , NVL(A.QCY_6_AMT, 0) AS QCY_6_AMT
+          , NVL(A.QCY_7_AMT, 0) AS QCY_7_AMT
+          , NVL(A.QCY_8_AMT, 0) AS QCY_8_AMT
+          , NVL(A.QCY_9_AMT, 0) AS QCY_9_AMT
+          , NVL(A.QCY_10_AMT, 0) AS QCY_10_AMT
+          , NVL(A.QCY_11_AMT, 0) AS QCY_11_AMT
+          , NVL(A.QCY_12_AMT, 0) AS QCY_12_AMT
+          , NVL(A.QCY_13_AMT, 0) AS QCY_13_AMT
+          , NVL(A.QCY_14_AMT, 0) AS QCY_14_AMT
+          , NVL(A.QCY_15_AMT, 0) AS QCY_15_AMT
+          , CASE WHEN A.LE_AGE_FLAG = 'CL' AND A.IS_REC_LG = 'Y'
+                      THEN 1 / NULLIF(1 + NVL(A.TAX_RATE, 0), 0)
+                  ELSE 1
+              END AS TAX_FACTOR
+          , CASE
+                WHEN TRIM(A.EXCHANGE_RATE_EVAL_FLAG) IS NULL
+                  AND TRIM(A.COD_VALUTA_ORIGINARIA) IS NOT NULL
+                  AND TRIM(A.COD_VALUTA) IS NOT NULL
+                  AND (
+                        (A.COD_AZIENDA = '2023'
+                        AND TCURR_CONV.RATE IS NOT NULL
+                        AND TCURR_CONV.RATE <> 0)
+                    OR (NVL(A.COD_AZIENDA, '#') <> '2023'
+                        AND (
+                              TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY'
+                            OR (QCY_RATE.RATE IS NOT NULL AND QCY_RATE.RATE <> 0)
+                        )
+                        AND (
+                              TRIM(A.COD_VALUTA) = 'CNY'
+                            OR (BCY_RATE.RATE IS NOT NULL AND BCY_RATE.RATE <> 0)
+                        ))
+                  )
+                  THEN CASE
+                          WHEN A.COD_AZIENDA = '2023'
+                            THEN TCURR_CONV.RATE
+                          ELSE ROUND(
+                                  (CASE WHEN TRIM(A.COD_VALUTA) = 'CNY' THEN 1 ELSE BCY_RATE.RATE END)
+                                  / (CASE WHEN TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY' THEN 1 ELSE QCY_RATE.RATE END)
+                                , 5
+                                )
+                      END
+            END AS CONVERSION_FACTOR
+        FROM AW_MR9_ARPM01_000001 A
+        LEFT JOIN CONVERSION_RATE QCY_RATE
+          ON QCY_RATE.COD_VALUTA = TRIM(A.COD_VALUTA_ORIGINARIA)
+        LEFT JOIN CONVERSION_RATE BCY_RATE
+          ON BCY_RATE.COD_VALUTA = TRIM(A.COD_VALUTA)
+        LEFT JOIN TCURR_CONVERSION_RATE TCURR_CONV
+          ON TCURR_CONV.TCURR = TRIM(A.COD_VALUTA)
+        AND TCURR_CONV.FCURR = TRIM(A.COD_VALUTA_ORIGINARIA)
+      WHERE A.COD_SCENARIO = V_SCENARIO
+        AND A.COD_PERIODO = V_PERIODO
+        AND A.COD_AZIENDA IN (
+              SELECT ELEM
+                FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+        )
+        AND NVL(A.LE_AGE_FLAG,'|') <> '|'
+        AND SRC_DETAIL LIKE 'ORG%'
+    ),
+    /* 按用户口径计算ORG来源本位币账龄金额；非ORG来源保留原始BCY供补充金额使用。 */
+    CURRENT_SOURCE AS (
+      SELECT S.*
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_0_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_0_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_0_AMT
+              END AS CALC_BCY_0_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_1_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_1_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_1_AMT
+              END AS CALC_BCY_1_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_2_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_2_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_2_AMT
+              END AS CALC_BCY_2_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_3_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_3_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_3_AMT
+              END AS CALC_BCY_3_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_4_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_4_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_4_AMT
+              END AS CALC_BCY_4_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_5_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_5_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_5_AMT
+              END AS CALC_BCY_5_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_6_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_6_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_6_AMT
+              END AS CALC_BCY_6_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_7_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_7_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_7_AMT
+              END AS CALC_BCY_7_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_8_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_8_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_8_AMT
+              END AS CALC_BCY_8_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_9_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_9_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_9_AMT
+              END AS CALC_BCY_9_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_10_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_10_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_10_AMT
+              END AS CALC_BCY_10_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_11_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_11_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_11_AMT
+              END AS CALC_BCY_11_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_12_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_12_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_12_AMT
+              END AS CALC_BCY_12_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_13_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_13_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_13_AMT
+              END AS CALC_BCY_13_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_14_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_14_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_14_AMT
+              END AS CALC_BCY_14_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      AND S.LE_AGE_FLAG = 'CL'
+                      AND S.IS_REC_LG = 'Y'
+                      THEN S.BCY_15_AMT * S.TAX_FACTOR
+                  WHEN S.SRC_DETAIL LIKE 'ORG%'
+                  AND S.LE_AGE_FLAG NOT IN ('AC','AS','CL')
+                  AND S.CONVERSION_FACTOR IS NOT NULL
+                      THEN S.QCY_15_AMT * S.CONVERSION_FACTOR
+                  ELSE S.BCY_15_AMT
+              END AS CALC_BCY_15_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN (CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                        THEN S.BCY_0_AMT
+                                  ELSE S.QCY_0_AMT * S.CONVERSION_FACTOR
+                              END) * S.TAX_FACTOR
+                  ELSE 0
+              END AS CALC_CLOSING_RATE_BCY_AMT
+          , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN S.BCY_0_AMT * S.TAX_FACTOR
+                  ELSE 0
+              END AS CALC_POSTING_RATE_BCY_AMT
+        FROM CURRENT_SOURCE_BASE S
+    ),
+    /* 无账龄标识补充来源：按业务键聚合ARPM01本位币金额，NULL业务键保留并按NVL语义关联。 */
+    /* EPAY空科目固定为1122000000；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。 */
+    SUPPLEMENT_AGG AS (
+      SELECT S.COD_AZIENDA
+          , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
+                      AND NVL(TRIM(S.COD_CONTO), '|') = '|'
+                    THEN '1122000000'
+                  ELSE S.COD_CONTO
+              END AS COD_CONTO
+          , S.CUST_CODE
+          , S.COD_DEST2
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_CK%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS SHP_NINV_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_TH%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS RET_NTRF_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'OVERDUE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS OVERDUE_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'INV_SAMPLE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS INV_SAMPLE_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'EPAY%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS EPAY_AMT
+          , SUM(CASE WHEN S.ECLS_FLAG = 'Y' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS ECLS_AMT
+          , SUM(CASE WHEN S.UFEE_UREB_FLAG LIKE 'UREB%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS UREB_AMT
+          , SUM(CASE WHEN S.UFEE_UREB_FLAG LIKE 'UFEE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS UFEE_AMT
+        FROM AW_MR9_ARPM01_000001 S
+      WHERE S.COD_SCENARIO = V_SCENARIO
+        AND S.COD_PERIODO = V_PERIODO
+        AND S.COD_AZIENDA IN (
+              SELECT ELEM
+                FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+        )
+        AND (
+              S.SRC_DETAIL LIKE 'ZTSO04_CK%'
+            OR S.SRC_DETAIL LIKE 'ZTSO04_TH%'
+            OR S.SRC_DETAIL LIKE 'OVERDUE%'
+            OR S.SRC_DETAIL LIKE 'INV_SAMPLE%'
+            OR S.SRC_DETAIL LIKE 'EPAY%'
+            OR S.ECLS_FLAG = 'Y'
+            OR S.UFEE_UREB_FLAG LIKE 'UREB%'
+            OR S.UFEE_UREB_FLAG LIKE 'UFEE%'
+        )
+      GROUP BY S.COD_AZIENDA
+              , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
+                          AND NVL(TRIM(S.COD_CONTO), '|') = '|'
+                      THEN '1122000000'
+                    ELSE S.COD_CONTO
+                END
+              , S.CUST_CODE
+              , S.COD_DEST2
+    ),
+    /* 取当前期间每个业务键的维度基准行，ORG来源优先，其他来源作为兜底。 */
+    CURRENT_DIM AS (
+      SELECT COD_AZIENDA
+          , COD_CONTO
+          , COD_CATEGORIA
+          , CUST_CODE
+          , CUST_NAME
+          , CUST_HEAD_CODE
+          , CUST_HEAD_NAME
+          , CUST_BRANCH_CODE
+          , CUST_BRANCH_NAME
+          , COD_AZI_CTP
+          , COUNTRY_CODE
+          , COUNTRY_NAME
+          , ACCT_SRC_CODE
+          , LE_AGE_FLAG
+          , IS_REC_LG
+          , ME_AGE_FLAG
+          , IS_REC_ME
+          , MB_AGE_FLAG
+          , IS_REC_MB
+          , GRP_SCOPE
+          , NATURE_L1_NAME
+          , NATURE_L2_NAME
+          , NATURE_L3_NAME
+          , D_CHANNEL
+          , D_CHANNEL_BU
+          , D_CC_CUSTGRP
+          , D_ONOFFLINE
+          , COD_DEST2
+          , COD_DEST3
+          , D_SALE_DEPT
+          , TAX_RATE
+          , COD_VALUTA
+          , COD_VALUTA_ORIGINARIA
+          , PAY_TERM_CODE
+          , PAY_TERM_DESC
+          , EXCHANGE_RATE_EVAL_FLAG
+        FROM (
+          SELECT S.*
+              , ROW_NUMBER() OVER (
+                    PARTITION BY S.COD_AZIENDA
+                                , S.COD_CONTO
+                                , S.CUST_CODE
+                                , S.COD_DEST2
+                    ORDER BY CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN 1 ELSE 2 END
+                            , S.OID
+                ) AS RN
+            FROM CURRENT_SOURCE S
+        ) S
+      WHERE S.RN = 1
+    ),
+    /* 当前期间按来源类别汇总，用于生成结果表的横向金额字段。 */
+    /* 先按业务键聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。 */
+    CURRENT_SOURCE_AGG AS (
+      SELECT S.COD_AZIENDA
+          , S.COD_CONTO
+          , S.CUST_CODE
+          , S.COD_DEST2
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_0_AMT
                                 ELSE S.QCY_0_AMT * S.CONVERSION_FACTOR
-                            END) * S.TAX_FACTOR
-                ELSE 0
-            END AS CALC_CLOSING_RATE_BCY_AMT
-         , CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN S.BCY_0_AMT * S.TAX_FACTOR
-                ELSE 0
-            END AS CALC_POSTING_RATE_BCY_AMT
-      FROM CURRENT_SOURCE_BASE S
-  ),
-  /* 无账龄标识补充来源：按业务键聚合ARPM01本位币金额，NULL业务键保留并按NVL语义关联。 */
-  /* EPAY空科目固定为1122000000；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。 */
-  SUPPLEMENT_AGG AS (
-    SELECT S.COD_AZIENDA
-         , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
-                     AND NVL(TRIM(S.COD_CONTO), '|') = '|'
-                  THEN '1122000000'
-                ELSE S.COD_CONTO
-            END AS COD_CONTO
-         , S.CUST_CODE
-         , S.COD_DEST2
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_CK%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS SHP_NINV_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_TH%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS RET_NTRF_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'OVERDUE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS OVERDUE_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'INV_SAMPLE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS INV_SAMPLE_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'EPAY%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS EPAY_AMT
-         , SUM(CASE WHEN S.ECLS_FLAG = 'Y' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS ECLS_AMT
-         , SUM(CASE WHEN S.UFEE_UREB_FLAG LIKE 'UREB%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS UREB_AMT
-         , SUM(CASE WHEN S.UFEE_UREB_FLAG LIKE 'UFEE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS UFEE_AMT
-      FROM AW_MR9_ARPM01_000001 S
-     WHERE S.COD_SCENARIO = V_SCENARIO
-       AND S.COD_PERIODO = V_PERIODO
-       AND S.COD_AZIENDA IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
-              WHERE SESSION_ID = V_SESSION_ID
-       )
-       AND (
-             S.SRC_DETAIL LIKE 'ZTSO04_CK%'
-          OR S.SRC_DETAIL LIKE 'ZTSO04_TH%'
-          OR S.SRC_DETAIL LIKE 'OVERDUE%'
-          OR S.SRC_DETAIL LIKE 'INV_SAMPLE%'
-          OR S.SRC_DETAIL LIKE 'EPAY%'
-          OR S.ECLS_FLAG = 'Y'
-          OR S.UFEE_UREB_FLAG LIKE 'UREB%'
-          OR S.UFEE_UREB_FLAG LIKE 'UFEE%'
-       )
-     GROUP BY S.COD_AZIENDA
-            , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
-                        AND NVL(TRIM(S.COD_CONTO), '|') = '|'
-                     THEN '1122000000'
-                   ELSE S.COD_CONTO
-              END
-            , S.CUST_CODE
-            , S.COD_DEST2
-  ),
-  /* 取当前期间每个业务键的维度基准行，ORG来源优先，其他来源作为兜底。 */
-  CURRENT_DIM AS (
-    SELECT COD_AZIENDA
-         , COD_CONTO
-         , COD_CATEGORIA
-         , CUST_CODE
-         , CUST_NAME
-         , CUST_HEAD_CODE
-         , CUST_HEAD_NAME
-         , CUST_BRANCH_CODE
-         , CUST_BRANCH_NAME
-         , COD_AZI_CTP
-         , COUNTRY_CODE
-         , COUNTRY_NAME
-         , ACCT_SRC_CODE
-         , LE_AGE_FLAG
-         , IS_REC_LG
-         , ME_AGE_FLAG
-         , IS_REC_ME
-         , MB_AGE_FLAG
-         , IS_REC_MB
-         , GRP_SCOPE
-         , NATURE_L1_NAME
-         , NATURE_L2_NAME
-         , NATURE_L3_NAME
-         , D_CHANNEL
-         , D_CHANNEL_BU
-         , D_CC_CUSTGRP
-         , D_ONOFFLINE
-         , COD_DEST2
-         , COD_DEST3
-         , D_SALE_DEPT
-         , TAX_RATE
-         , COD_VALUTA
-         , COD_VALUTA_ORIGINARIA
-         , PAY_TERM_CODE
-         , PAY_TERM_DESC
-         , EXCHANGE_RATE_EVAL_FLAG
-      FROM (
-        SELECT S.*
-             , ROW_NUMBER() OVER (
-                   PARTITION BY S.COD_AZIENDA
-                              , S.COD_CONTO
-                              , S.CUST_CODE
-                              , S.COD_DEST2
-                   ORDER BY CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN 1 ELSE 2 END
-                          , S.OID
-               ) AS RN
-          FROM CURRENT_SOURCE S
-      ) S
-     WHERE S.RN = 1
-  ),
-  /* 当前期间按来源类别汇总，用于生成结果表的横向金额字段。 */
-  /* 先按业务键聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。 */
-  CURRENT_SOURCE_AGG AS (
-    SELECT S.COD_AZIENDA
-         , S.COD_CONTO
-         , S.CUST_CODE
-         , S.COD_DEST2
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_0_AMT
-                               ELSE S.QCY_0_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_0_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_0_AMT ELSE 0 END) AS CALC_BCY_0_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_1_AMT
-                               ELSE S.QCY_1_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_1_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_1_AMT ELSE 0 END) AS CALC_BCY_1_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_2_AMT
-                               ELSE S.QCY_2_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_2_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_2_AMT ELSE 0 END) AS CALC_BCY_2_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_3_AMT
-                               ELSE S.QCY_3_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_3_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_3_AMT ELSE 0 END) AS CALC_BCY_3_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_4_AMT
-                               ELSE S.QCY_4_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_4_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_4_AMT ELSE 0 END) AS CALC_BCY_4_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_5_AMT
-                               ELSE S.QCY_5_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_5_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_5_AMT ELSE 0 END) AS CALC_BCY_5_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_6_AMT
-                               ELSE S.QCY_6_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_6_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_6_AMT ELSE 0 END) AS CALC_BCY_6_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_7_AMT
-                               ELSE S.QCY_7_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_7_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_7_AMT ELSE 0 END) AS CALC_BCY_7_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_8_AMT
-                               ELSE S.QCY_8_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_8_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_8_AMT ELSE 0 END) AS CALC_BCY_8_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_9_AMT
-                               ELSE S.QCY_9_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_9_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_9_AMT ELSE 0 END) AS CALC_BCY_9_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_10_AMT
-                               ELSE S.QCY_10_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_10_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_10_AMT ELSE 0 END) AS CALC_BCY_10_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_11_AMT
-                               ELSE S.QCY_11_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_11_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_11_AMT ELSE 0 END) AS CALC_BCY_11_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_12_AMT
-                               ELSE S.QCY_12_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_12_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_12_AMT ELSE 0 END) AS CALC_BCY_12_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_13_AMT
-                               ELSE S.QCY_13_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_13_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_13_AMT ELSE 0 END) AS CALC_BCY_13_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_14_AMT
-                               ELSE S.QCY_14_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_14_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_14_AMT ELSE 0 END) AS CALC_BCY_14_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                     THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
-                                     THEN S.BCY_15_AMT
-                               ELSE S.QCY_15_AMT * S.CONVERSION_FACTOR
-                           END
-                     ELSE 0
-                 END) AS ORG_BCY_15_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_15_AMT ELSE 0 END) AS CALC_BCY_15_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_0_AMT ELSE 0 END) AS ORG_QCY_0_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_1_AMT ELSE 0 END) AS ORG_QCY_1_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_2_AMT ELSE 0 END) AS ORG_QCY_2_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_3_AMT ELSE 0 END) AS ORG_QCY_3_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_4_AMT ELSE 0 END) AS ORG_QCY_4_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_5_AMT ELSE 0 END) AS ORG_QCY_5_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_6_AMT ELSE 0 END) AS ORG_QCY_6_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_7_AMT ELSE 0 END) AS ORG_QCY_7_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_8_AMT ELSE 0 END) AS ORG_QCY_8_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_9_AMT ELSE 0 END) AS ORG_QCY_9_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_10_AMT ELSE 0 END) AS ORG_QCY_10_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_11_AMT ELSE 0 END) AS ORG_QCY_11_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_12_AMT ELSE 0 END) AS ORG_QCY_12_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_13_AMT ELSE 0 END) AS ORG_QCY_13_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_14_AMT ELSE 0 END) AS ORG_QCY_14_AMT
-         , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_15_AMT ELSE 0 END) AS ORG_QCY_15_AMT
-         /* 补充金额在CURRENT_AGG中统一关联SUPPLEMENT_AGG，不在明细层重复汇总。 */
-         , SUM(NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0)) AS CLOSING_RATE_BCY_AMT
-         , SUM(NVL(S.CALC_POSTING_RATE_BCY_AMT, 0)) AS POSTING_RATE_BCY_AMT
-         , LISTAGG(
-               NVL(S.ACCT_SRC_CODE, '') || ':'
-               || TO_CHAR(NVL(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                                      THEN ROUND(S.CALC_BCY_0_AMT,2)
-                                      ELSE ROUND(S.BCY_0_AMT,2)
-                                  END, 0)) || '\'
-               || NVL(S.COD_VALUTA_ORIGINARIA, '') || ':'
-               || TO_CHAR(NVL(ROUND(S.QCY_0_AMT,2), 0))
-             , ';'
-           ) WITHIN GROUP (ORDER BY S.ACCT_SRC_CODE, S.BCY_0_AMT) AS CURRENCY_ACCT_DETAIL
-      FROM CURRENT_SOURCE S
-     GROUP BY S.COD_AZIENDA
-            , S.COD_CONTO
-            , S.CUST_CODE
-            , S.COD_DEST2
-  ),
-  /* 当前主来源已按业务键聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。 */
-  CURRENT_AGG AS (
-    SELECT A.*
-         , NVL(B.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
-         , NVL(B.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
-         , NVL(B.OVERDUE_AMT, 0) AS OVERDUE_AMT
-         , NVL(B.INV_SAMPLE_AMT, 0) AS INV_SAMPLE_AMT
-         , NVL(B.EPAY_AMT, 0) AS EPAY_AMT
-         , NVL(B.ECLS_AMT, 0) AS ECLS_AMT
-         , NVL(B.UREB_AMT, 0) AS UREB_AMT
-         , NVL(B.UFEE_AMT, 0) AS UFEE_AMT
-      FROM CURRENT_SOURCE_AGG A
-      LEFT JOIN SUPPLEMENT_AGG B
-        ON B.COD_AZIENDA = A.COD_AZIENDA
-       AND NVL(B.COD_CONTO, '#') = NVL(A.COD_CONTO, '#')
-       AND NVL(B.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
-       AND NVL(B.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
-  ),
-  /* 年初历史结果：按设计业务键读取上年12期ARPM02本月余额。 */
-  BY_HISTORY AS (
-    SELECT T.COD_AZIENDA
-         , T.COD_CONTO
-         , T.CUST_CODE
-         , T.COD_DEST2
-         , T.BCY_0_AMT
-         , T.COD_CATEGORIA
-         , T.CUST_NAME
-         , T.CUST_HEAD_CODE
-         , T.CUST_HEAD_NAME
-         , T.CUST_BRANCH_CODE
-         , T.CUST_BRANCH_NAME
-         , T.COD_AZI_CTP
-         , T.COUNTRY_CODE
-         , T.COUNTRY_NAME
-         , T.LE_AGE_FLAG
-         , T.IS_REC_LG
-         , T.ME_AGE_FLAG
-         , T.IS_REC_ME
-         , T.MB_AGE_FLAG
-         , T.IS_REC_MB
-         , T.GRP_SCOPE
-         , T.NATURE_L1_NAME
-         , T.NATURE_L2_NAME
-         , T.NATURE_L3_NAME
-         , T.D_CHANNEL
-         , T.D_CHANNEL_BU
-         , T.D_CC_CUSTGRP
-         , T.D_ONOFFLINE
-         , T.COD_DEST3
-         , T.D_SALE_DEPT
-         , T.TAX_RATE
-         , T.COD_VALUTA
-         , T.COD_VALUTA_ORIGINARIA
-         , T.CURRENCY_ACCT_DETAIL
-         , T.PAY_TERM_CODE
-         , T.PAY_TERM_DESC
-         , T.EXCHANGE_RATE_EVAL_FLAG
-      FROM AW_MR9_ARPM02_000001 T
-     WHERE T.COD_SCENARIO = V_BY_SCENARIO
-       AND T.COD_PERIODO = V_BY_PERIODO
-       AND T.COD_AZIENDA IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
-              WHERE SESSION_ID = V_SESSION_ID
-       )
-       AND NVL(T.LE_AGE_FLAG,'|') <> '|'
-  ),
-  /* 上月历史结果：按设计业务键读取上月ARPM02本月余额。 */
-  LM_HISTORY AS (
-    SELECT T.COD_AZIENDA
-         , T.COD_CONTO
-         , T.CUST_CODE
-         , T.COD_DEST2
-         , T.BCY_0_AMT
-         , T.COD_CATEGORIA
-         , T.CUST_NAME
-         , T.CUST_HEAD_CODE
-         , T.CUST_HEAD_NAME
-         , T.CUST_BRANCH_CODE
-         , T.CUST_BRANCH_NAME
-         , T.COD_AZI_CTP
-         , T.COUNTRY_CODE
-         , T.COUNTRY_NAME
-         , T.LE_AGE_FLAG
-         , T.IS_REC_LG
-         , T.ME_AGE_FLAG
-         , T.IS_REC_ME
-         , T.MB_AGE_FLAG
-         , T.IS_REC_MB
-         , T.GRP_SCOPE
-         , T.NATURE_L1_NAME
-         , T.NATURE_L2_NAME
-         , T.NATURE_L3_NAME
-         , T.D_CHANNEL
-         , T.D_CHANNEL_BU
-         , T.D_CC_CUSTGRP
-         , T.D_ONOFFLINE
-         , T.COD_DEST3
-         , T.D_SALE_DEPT
-         , T.TAX_RATE
-         , T.COD_VALUTA
-         , T.COD_VALUTA_ORIGINARIA
-         , T.CURRENCY_ACCT_DETAIL
-         , T.PAY_TERM_CODE
-         , T.PAY_TERM_DESC
-         , T.EXCHANGE_RATE_EVAL_FLAG
-      FROM AW_MR9_ARPM02_000001 T
-     WHERE T.COD_SCENARIO = V_LM_SCENARIO
-       AND T.COD_PERIODO = V_LM_PERIODO
-       AND T.COD_AZIENDA IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
-              WHERE SESSION_ID = V_SESSION_ID
-       )
-       AND NVL(T.LE_AGE_FLAG,'|') <> '|'
-  ),
-  /* 当前、年初、上月的业务键并集，支持当前月无数据但历史有余额的记录保留。 */
-  ALL_KEYS AS (
-    SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM CURRENT_DIM
-    UNION
-    SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM SUPPLEMENT_AGG
-    UNION
-    SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM BY_HISTORY
-    UNION
-    SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM LM_HISTORY
-  ),
-  /* 当前维度优先，当前缺失时依次回退到年初和上月维度。 */
-  DIM_CANDIDATE AS (
-    SELECT 1 AS PRIORITY
-         , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
-         , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
-         , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
-         , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
-         , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-         , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
-         , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
-         , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
-      FROM CURRENT_DIM
-    UNION ALL
-    SELECT 2 AS PRIORITY
-         , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
-         , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
-         , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
-         , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
-         , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-         , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
-         , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
-         , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
-      FROM BY_HISTORY
-    UNION ALL
-    SELECT 3 AS PRIORITY
-         , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
-         , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
-         , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
-         , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
-         , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
-         , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
-         , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
-         , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
-      FROM LM_HISTORY
-  ),
-  /* 当前金额按来源平铺，历史字段仅作为BY/LM回接值，不参与本月金额计算。 */
-  RESULT_BASE AS (
-    SELECT V_SCENARIO AS COD_SCENARIO
-         , V_PERIODO AS COD_PERIODO
-         , K.COD_AZIENDA
-         , D.COD_CONTO
-         , NVL(D.COD_CATEGORIA, 'ZAMOUNT') AS COD_CATEGORIA
-         , D.CUST_CODE
-         , D.CUST_NAME
-         , D.CUST_HEAD_CODE
-         , D.CUST_HEAD_NAME
-         , D.CUST_BRANCH_CODE
-         , D.CUST_BRANCH_NAME
-         , D.COD_AZI_CTP
-         , D.COUNTRY_CODE
-         , D.COUNTRY_NAME
-         , D.LE_AGE_FLAG
-         , D.IS_REC_LG
-         , D.ME_AGE_FLAG
-         , D.IS_REC_ME
-         , D.MB_AGE_FLAG
-         , D.IS_REC_MB
-         , D.GRP_SCOPE
-         , D.NATURE_L1_NAME
-         , D.NATURE_L2_NAME
-         , D.NATURE_L3_NAME
-         , D.D_CHANNEL
-         , D.D_CHANNEL_BU
-         , D.D_CC_CUSTGRP
-         , D.D_ONOFFLINE
-         , K.COD_DEST2
-         , D.COD_DEST3
-         , D.D_SALE_DEPT
-         , D.TAX_RATE
-         , D.COD_VALUTA
-         , D.COD_VALUTA_ORIGINARIA
-         , NVL(B.BCY_0_AMT, 0) AS BY_BCY_0_AMT
-         , NVL(L.BCY_0_AMT, 0) AS LM_BCY_0_AMT
-         , NVL(A.ORG_BCY_0_AMT, 0) AS ORG_BCY_0_AMT
-         , NVL(A.ORG_BCY_1_AMT, 0) AS ORG_BCY_1_AMT
-         , NVL(A.ORG_BCY_2_AMT, 0) AS ORG_BCY_2_AMT
-         , NVL(A.ORG_BCY_3_AMT, 0) AS ORG_BCY_3_AMT
-         , NVL(A.ORG_BCY_4_AMT, 0) AS ORG_BCY_4_AMT
-         , NVL(A.ORG_BCY_5_AMT, 0) AS ORG_BCY_5_AMT
-         , NVL(A.ORG_BCY_6_AMT, 0) AS ORG_BCY_6_AMT
-         , NVL(A.ORG_BCY_7_AMT, 0) AS ORG_BCY_7_AMT
-         , NVL(A.ORG_BCY_8_AMT, 0) AS ORG_BCY_8_AMT
-         , NVL(A.ORG_BCY_9_AMT, 0) AS ORG_BCY_9_AMT
-         , NVL(A.ORG_BCY_10_AMT, 0) AS ORG_BCY_10_AMT
-         , NVL(A.ORG_BCY_11_AMT, 0) AS ORG_BCY_11_AMT
-         , NVL(A.ORG_BCY_12_AMT, 0) AS ORG_BCY_12_AMT
-         , NVL(A.ORG_BCY_13_AMT, 0) AS ORG_BCY_13_AMT
-         , NVL(A.ORG_BCY_14_AMT, 0) AS ORG_BCY_14_AMT
-         , NVL(A.ORG_BCY_15_AMT, 0) AS ORG_BCY_15_AMT
-         , NVL(A.CALC_BCY_0_AMT, 0) AS CALC_BCY_0_AMT
-         , NVL(A.CALC_BCY_1_AMT, 0) AS CALC_BCY_1_AMT
-         , NVL(A.CALC_BCY_2_AMT, 0) AS CALC_BCY_2_AMT
-         , NVL(A.CALC_BCY_3_AMT, 0) AS CALC_BCY_3_AMT
-         , NVL(A.CALC_BCY_4_AMT, 0) AS CALC_BCY_4_AMT
-         , NVL(A.CALC_BCY_5_AMT, 0) AS CALC_BCY_5_AMT
-         , NVL(A.CALC_BCY_6_AMT, 0) AS CALC_BCY_6_AMT
-         , NVL(A.CALC_BCY_7_AMT, 0) AS CALC_BCY_7_AMT
-         , NVL(A.CALC_BCY_8_AMT, 0) AS CALC_BCY_8_AMT
-         , NVL(A.CALC_BCY_9_AMT, 0) AS CALC_BCY_9_AMT
-         , NVL(A.CALC_BCY_10_AMT, 0) AS CALC_BCY_10_AMT
-         , NVL(A.CALC_BCY_11_AMT, 0) AS CALC_BCY_11_AMT
-         , NVL(A.CALC_BCY_12_AMT, 0) AS CALC_BCY_12_AMT
-         , NVL(A.CALC_BCY_13_AMT, 0) AS CALC_BCY_13_AMT
-         , NVL(A.CALC_BCY_14_AMT, 0) AS CALC_BCY_14_AMT
-         , NVL(A.CALC_BCY_15_AMT, 0) AS CALC_BCY_15_AMT
-         , NVL(A.ORG_QCY_0_AMT, 0) AS ORG_QCY_0_AMT
-         , NVL(A.ORG_QCY_1_AMT, 0) AS ORG_QCY_1_AMT
-         , NVL(A.ORG_QCY_2_AMT, 0) AS ORG_QCY_2_AMT
-         , NVL(A.ORG_QCY_3_AMT, 0) AS ORG_QCY_3_AMT
-         , NVL(A.ORG_QCY_4_AMT, 0) AS ORG_QCY_4_AMT
-         , NVL(A.ORG_QCY_5_AMT, 0) AS ORG_QCY_5_AMT
-         , NVL(A.ORG_QCY_6_AMT, 0) AS ORG_QCY_6_AMT
-         , NVL(A.ORG_QCY_7_AMT, 0) AS ORG_QCY_7_AMT
-         , NVL(A.ORG_QCY_8_AMT, 0) AS ORG_QCY_8_AMT
-         , NVL(A.ORG_QCY_9_AMT, 0) AS ORG_QCY_9_AMT
-         , NVL(A.ORG_QCY_10_AMT, 0) AS ORG_QCY_10_AMT
-         , NVL(A.ORG_QCY_11_AMT, 0) AS ORG_QCY_11_AMT
-         , NVL(A.ORG_QCY_12_AMT, 0) AS ORG_QCY_12_AMT
-         , NVL(A.ORG_QCY_13_AMT, 0) AS ORG_QCY_13_AMT
-         , NVL(A.ORG_QCY_14_AMT, 0) AS ORG_QCY_14_AMT
-         , NVL(A.ORG_QCY_15_AMT, 0) AS ORG_QCY_15_AMT
-         , NVL(A.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
-         , NVL(A.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
-         , NVL(A.OVERDUE_AMT, 0) AS OVERDUE_AMT
-         , NVL(A.INV_SAMPLE_AMT, 0) AS INV_SAMPLE_AMT
-         , NVL(A.EPAY_AMT, 0) AS EPAY_AMT
-         , NVL(A.ECLS_AMT, 0) AS ECLS_AMT
-         , NVL(A.UREB_AMT, 0) AS UREB_AMT
-         , NVL(A.UFEE_AMT, 0) AS UFEE_AMT
-         , NVL(A.CURRENCY_ACCT_DETAIL, NVL(B.CURRENCY_ACCT_DETAIL, NVL(L.CURRENCY_ACCT_DETAIL, ''))) AS CURRENCY_ACCT_DETAIL
-         , D.PAY_TERM_CODE
-         , D.PAY_TERM_DESC
-         , D.EXCHANGE_RATE_EVAL_FLAG
-         , NVL(A.CLOSING_RATE_BCY_AMT, 0) AS CLOSING_RATE_BCY_AMT
-         , NVL(A.POSTING_RATE_BCY_AMT, 0) AS POSTING_RATE_BCY_AMT
-      FROM ALL_KEYS K
-      INNER JOIN (
-        SELECT D.*
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_0_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_0_AMT ELSE 0 END) AS CALC_BCY_0_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_1_AMT
+                                ELSE S.QCY_1_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_1_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_1_AMT ELSE 0 END) AS CALC_BCY_1_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_2_AMT
+                                ELSE S.QCY_2_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_2_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_2_AMT ELSE 0 END) AS CALC_BCY_2_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_3_AMT
+                                ELSE S.QCY_3_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_3_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_3_AMT ELSE 0 END) AS CALC_BCY_3_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_4_AMT
+                                ELSE S.QCY_4_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_4_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_4_AMT ELSE 0 END) AS CALC_BCY_4_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_5_AMT
+                                ELSE S.QCY_5_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_5_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_5_AMT ELSE 0 END) AS CALC_BCY_5_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_6_AMT
+                                ELSE S.QCY_6_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_6_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_6_AMT ELSE 0 END) AS CALC_BCY_6_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_7_AMT
+                                ELSE S.QCY_7_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_7_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_7_AMT ELSE 0 END) AS CALC_BCY_7_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_8_AMT
+                                ELSE S.QCY_8_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_8_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_8_AMT ELSE 0 END) AS CALC_BCY_8_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_9_AMT
+                                ELSE S.QCY_9_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_9_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_9_AMT ELSE 0 END) AS CALC_BCY_9_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_10_AMT
+                                ELSE S.QCY_10_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_10_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_10_AMT ELSE 0 END) AS CALC_BCY_10_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_11_AMT
+                                ELSE S.QCY_11_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_11_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_11_AMT ELSE 0 END) AS CALC_BCY_11_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_12_AMT
+                                ELSE S.QCY_12_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_12_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_12_AMT ELSE 0 END) AS CALC_BCY_12_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_13_AMT
+                                ELSE S.QCY_13_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_13_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_13_AMT ELSE 0 END) AS CALC_BCY_13_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_14_AMT
+                                ELSE S.QCY_14_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_14_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_14_AMT ELSE 0 END) AS CALC_BCY_14_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                      THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
+                                      THEN S.BCY_15_AMT
+                                ELSE S.QCY_15_AMT * S.CONVERSION_FACTOR
+                            END
+                      ELSE 0
+                  END) AS ORG_BCY_15_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_15_AMT ELSE 0 END) AS CALC_BCY_15_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_0_AMT ELSE 0 END) AS ORG_QCY_0_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_1_AMT ELSE 0 END) AS ORG_QCY_1_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_2_AMT ELSE 0 END) AS ORG_QCY_2_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_3_AMT ELSE 0 END) AS ORG_QCY_3_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_4_AMT ELSE 0 END) AS ORG_QCY_4_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_5_AMT ELSE 0 END) AS ORG_QCY_5_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_6_AMT ELSE 0 END) AS ORG_QCY_6_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_7_AMT ELSE 0 END) AS ORG_QCY_7_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_8_AMT ELSE 0 END) AS ORG_QCY_8_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_9_AMT ELSE 0 END) AS ORG_QCY_9_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_10_AMT ELSE 0 END) AS ORG_QCY_10_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_11_AMT ELSE 0 END) AS ORG_QCY_11_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_12_AMT ELSE 0 END) AS ORG_QCY_12_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_13_AMT ELSE 0 END) AS ORG_QCY_13_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_14_AMT ELSE 0 END) AS ORG_QCY_14_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_15_AMT ELSE 0 END) AS ORG_QCY_15_AMT
+          /* 补充金额在CURRENT_AGG中统一关联SUPPLEMENT_AGG，不在明细层重复汇总。 */
+          , SUM(NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0)) AS CLOSING_RATE_BCY_AMT
+          , SUM(NVL(S.CALC_POSTING_RATE_BCY_AMT, 0)) AS POSTING_RATE_BCY_AMT
+          , LISTAGG(
+                NVL(S.ACCT_SRC_CODE, '') || ':'
+                || TO_CHAR(NVL(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                                        THEN ROUND(S.CALC_BCY_0_AMT,2)
+                                        ELSE ROUND(S.BCY_0_AMT,2)
+                                    END, 0)) || '\'
+                || NVL(S.COD_VALUTA_ORIGINARIA, '') || ':'
+                || TO_CHAR(NVL(ROUND(S.QCY_0_AMT,2), 0))
+              , ';'
+            ) WITHIN GROUP (ORDER BY S.ACCT_SRC_CODE, S.BCY_0_AMT) AS CURRENCY_ACCT_DETAIL
+        FROM CURRENT_SOURCE S
+      GROUP BY S.COD_AZIENDA
+              , S.COD_CONTO
+              , S.CUST_CODE
+              , S.COD_DEST2
+    ),
+    /* 当前主来源已按业务键聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。 */
+    CURRENT_AGG AS (
+      SELECT A.*
+          , NVL(B.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
+          , NVL(B.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
+          , NVL(B.OVERDUE_AMT, 0) AS OVERDUE_AMT
+          , NVL(B.INV_SAMPLE_AMT, 0) AS INV_SAMPLE_AMT
+          , NVL(B.EPAY_AMT, 0) AS EPAY_AMT
+          , NVL(B.ECLS_AMT, 0) AS ECLS_AMT
+          , NVL(B.UREB_AMT, 0) AS UREB_AMT
+          , NVL(B.UFEE_AMT, 0) AS UFEE_AMT
+        FROM CURRENT_SOURCE_AGG A
+        LEFT JOIN SUPPLEMENT_AGG B
+          ON B.COD_AZIENDA = A.COD_AZIENDA
+        AND NVL(B.COD_CONTO, '#') = NVL(A.COD_CONTO, '#')
+        AND NVL(B.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
+        AND NVL(B.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
+    ),
+    /* 年初历史结果：按设计业务键读取上年12期ARPM02本月余额。 */
+    BY_HISTORY AS (
+      SELECT T.COD_AZIENDA
+          , T.COD_CONTO
+          , T.CUST_CODE
+          , T.COD_DEST2
+          , T.BCY_0_AMT
+          , T.COD_CATEGORIA
+          , T.CUST_NAME
+          , T.CUST_HEAD_CODE
+          , T.CUST_HEAD_NAME
+          , T.CUST_BRANCH_CODE
+          , T.CUST_BRANCH_NAME
+          , T.COD_AZI_CTP
+          , T.COUNTRY_CODE
+          , T.COUNTRY_NAME
+          , T.LE_AGE_FLAG
+          , T.IS_REC_LG
+          , T.ME_AGE_FLAG
+          , T.IS_REC_ME
+          , T.MB_AGE_FLAG
+          , T.IS_REC_MB
+          , T.GRP_SCOPE
+          , T.NATURE_L1_NAME
+          , T.NATURE_L2_NAME
+          , T.NATURE_L3_NAME
+          , T.D_CHANNEL
+          , T.D_CHANNEL_BU
+          , T.D_CC_CUSTGRP
+          , T.D_ONOFFLINE
+          , T.COD_DEST3
+          , T.D_SALE_DEPT
+          , T.TAX_RATE
+          , T.COD_VALUTA
+          , T.COD_VALUTA_ORIGINARIA
+          , T.CURRENCY_ACCT_DETAIL
+          , T.PAY_TERM_CODE
+          , T.PAY_TERM_DESC
+          , T.EXCHANGE_RATE_EVAL_FLAG
+        FROM AW_MR9_ARPM02_000001 T
+      WHERE T.COD_SCENARIO = V_BY_SCENARIO
+        AND T.COD_PERIODO = V_BY_PERIODO
+        AND T.COD_AZIENDA IN (
+              SELECT ELEM
+                FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+        )
+        AND NVL(T.LE_AGE_FLAG,'|') <> '|'
+    ),
+    /* 上月历史结果：按设计业务键读取上月ARPM02本月余额。 */
+    LM_HISTORY AS (
+      SELECT T.COD_AZIENDA
+          , T.COD_CONTO
+          , T.CUST_CODE
+          , T.COD_DEST2
+          , T.BCY_0_AMT
+          , T.COD_CATEGORIA
+          , T.CUST_NAME
+          , T.CUST_HEAD_CODE
+          , T.CUST_HEAD_NAME
+          , T.CUST_BRANCH_CODE
+          , T.CUST_BRANCH_NAME
+          , T.COD_AZI_CTP
+          , T.COUNTRY_CODE
+          , T.COUNTRY_NAME
+          , T.LE_AGE_FLAG
+          , T.IS_REC_LG
+          , T.ME_AGE_FLAG
+          , T.IS_REC_ME
+          , T.MB_AGE_FLAG
+          , T.IS_REC_MB
+          , T.GRP_SCOPE
+          , T.NATURE_L1_NAME
+          , T.NATURE_L2_NAME
+          , T.NATURE_L3_NAME
+          , T.D_CHANNEL
+          , T.D_CHANNEL_BU
+          , T.D_CC_CUSTGRP
+          , T.D_ONOFFLINE
+          , T.COD_DEST3
+          , T.D_SALE_DEPT
+          , T.TAX_RATE
+          , T.COD_VALUTA
+          , T.COD_VALUTA_ORIGINARIA
+          , T.CURRENCY_ACCT_DETAIL
+          , T.PAY_TERM_CODE
+          , T.PAY_TERM_DESC
+          , T.EXCHANGE_RATE_EVAL_FLAG
+        FROM AW_MR9_ARPM02_000001 T
+      WHERE T.COD_SCENARIO = V_LM_SCENARIO
+        AND T.COD_PERIODO = V_LM_PERIODO
+        AND T.COD_AZIENDA IN (
+              SELECT ELEM
+                FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+        )
+        AND NVL(T.LE_AGE_FLAG,'|') <> '|'
+    ),
+    /* 当前、年初、上月的业务键并集，支持当前月无数据但历史有余额的记录保留。 */
+    ALL_KEYS AS (
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM CURRENT_DIM
+      UNION
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM SUPPLEMENT_AGG
+      UNION
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM BY_HISTORY
+      UNION
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM LM_HISTORY
+    ),
+    /* 当前维度优先，当前缺失时依次回退到年初和上月维度。 */
+    DIM_CANDIDATE AS (
+      SELECT 1 AS PRIORITY
+          , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
+          , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
+          , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
+          , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
+          , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
+          , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+          , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
+          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
+        FROM CURRENT_DIM
+      UNION ALL
+      SELECT 2 AS PRIORITY
+          , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
+          , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
+          , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
+          , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
+          , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
+          , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+          , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
+          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
+        FROM BY_HISTORY
+      UNION ALL
+      SELECT 3 AS PRIORITY
+          , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
+          , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
+          , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
+          , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
+          , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
+          , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+          , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
+          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
+        FROM LM_HISTORY
+    ),
+    /* 当前金额按来源平铺，历史字段仅作为BY/LM回接值，不参与本月金额计算。 */
+    RESULT_BASE AS (
+      SELECT V_SCENARIO AS COD_SCENARIO
+          , V_PERIODO AS COD_PERIODO
+          , K.COD_AZIENDA
+          , D.COD_CONTO
+          , NVL(D.COD_CATEGORIA, 'ZAMOUNT') AS COD_CATEGORIA
+          , D.CUST_CODE
+          , D.CUST_NAME
+          , D.CUST_HEAD_CODE
+          , D.CUST_HEAD_NAME
+          , D.CUST_BRANCH_CODE
+          , D.CUST_BRANCH_NAME
+          , D.COD_AZI_CTP
+          , D.COUNTRY_CODE
+          , D.COUNTRY_NAME
+          , D.LE_AGE_FLAG
+          , D.IS_REC_LG
+          , D.ME_AGE_FLAG
+          , D.IS_REC_ME
+          , D.MB_AGE_FLAG
+          , D.IS_REC_MB
+          , D.GRP_SCOPE
+          , D.NATURE_L1_NAME
+          , D.NATURE_L2_NAME
+          , D.NATURE_L3_NAME
+          , D.D_CHANNEL
+          , D.D_CHANNEL_BU
+          , D.D_CC_CUSTGRP
+          , D.D_ONOFFLINE
+          , K.COD_DEST2
+          , D.COD_DEST3
+          , D.D_SALE_DEPT
+          , D.TAX_RATE
+          , D.COD_VALUTA
+          , D.COD_VALUTA_ORIGINARIA
+          , NVL(B.BCY_0_AMT, 0) AS BY_BCY_0_AMT
+          , NVL(L.BCY_0_AMT, 0) AS LM_BCY_0_AMT
+          , NVL(A.ORG_BCY_0_AMT, 0) AS ORG_BCY_0_AMT
+          , NVL(A.ORG_BCY_1_AMT, 0) AS ORG_BCY_1_AMT
+          , NVL(A.ORG_BCY_2_AMT, 0) AS ORG_BCY_2_AMT
+          , NVL(A.ORG_BCY_3_AMT, 0) AS ORG_BCY_3_AMT
+          , NVL(A.ORG_BCY_4_AMT, 0) AS ORG_BCY_4_AMT
+          , NVL(A.ORG_BCY_5_AMT, 0) AS ORG_BCY_5_AMT
+          , NVL(A.ORG_BCY_6_AMT, 0) AS ORG_BCY_6_AMT
+          , NVL(A.ORG_BCY_7_AMT, 0) AS ORG_BCY_7_AMT
+          , NVL(A.ORG_BCY_8_AMT, 0) AS ORG_BCY_8_AMT
+          , NVL(A.ORG_BCY_9_AMT, 0) AS ORG_BCY_9_AMT
+          , NVL(A.ORG_BCY_10_AMT, 0) AS ORG_BCY_10_AMT
+          , NVL(A.ORG_BCY_11_AMT, 0) AS ORG_BCY_11_AMT
+          , NVL(A.ORG_BCY_12_AMT, 0) AS ORG_BCY_12_AMT
+          , NVL(A.ORG_BCY_13_AMT, 0) AS ORG_BCY_13_AMT
+          , NVL(A.ORG_BCY_14_AMT, 0) AS ORG_BCY_14_AMT
+          , NVL(A.ORG_BCY_15_AMT, 0) AS ORG_BCY_15_AMT
+          , NVL(A.CALC_BCY_0_AMT, 0) AS CALC_BCY_0_AMT
+          , NVL(A.CALC_BCY_1_AMT, 0) AS CALC_BCY_1_AMT
+          , NVL(A.CALC_BCY_2_AMT, 0) AS CALC_BCY_2_AMT
+          , NVL(A.CALC_BCY_3_AMT, 0) AS CALC_BCY_3_AMT
+          , NVL(A.CALC_BCY_4_AMT, 0) AS CALC_BCY_4_AMT
+          , NVL(A.CALC_BCY_5_AMT, 0) AS CALC_BCY_5_AMT
+          , NVL(A.CALC_BCY_6_AMT, 0) AS CALC_BCY_6_AMT
+          , NVL(A.CALC_BCY_7_AMT, 0) AS CALC_BCY_7_AMT
+          , NVL(A.CALC_BCY_8_AMT, 0) AS CALC_BCY_8_AMT
+          , NVL(A.CALC_BCY_9_AMT, 0) AS CALC_BCY_9_AMT
+          , NVL(A.CALC_BCY_10_AMT, 0) AS CALC_BCY_10_AMT
+          , NVL(A.CALC_BCY_11_AMT, 0) AS CALC_BCY_11_AMT
+          , NVL(A.CALC_BCY_12_AMT, 0) AS CALC_BCY_12_AMT
+          , NVL(A.CALC_BCY_13_AMT, 0) AS CALC_BCY_13_AMT
+          , NVL(A.CALC_BCY_14_AMT, 0) AS CALC_BCY_14_AMT
+          , NVL(A.CALC_BCY_15_AMT, 0) AS CALC_BCY_15_AMT
+          , NVL(A.ORG_QCY_0_AMT, 0) AS ORG_QCY_0_AMT
+          , NVL(A.ORG_QCY_1_AMT, 0) AS ORG_QCY_1_AMT
+          , NVL(A.ORG_QCY_2_AMT, 0) AS ORG_QCY_2_AMT
+          , NVL(A.ORG_QCY_3_AMT, 0) AS ORG_QCY_3_AMT
+          , NVL(A.ORG_QCY_4_AMT, 0) AS ORG_QCY_4_AMT
+          , NVL(A.ORG_QCY_5_AMT, 0) AS ORG_QCY_5_AMT
+          , NVL(A.ORG_QCY_6_AMT, 0) AS ORG_QCY_6_AMT
+          , NVL(A.ORG_QCY_7_AMT, 0) AS ORG_QCY_7_AMT
+          , NVL(A.ORG_QCY_8_AMT, 0) AS ORG_QCY_8_AMT
+          , NVL(A.ORG_QCY_9_AMT, 0) AS ORG_QCY_9_AMT
+          , NVL(A.ORG_QCY_10_AMT, 0) AS ORG_QCY_10_AMT
+          , NVL(A.ORG_QCY_11_AMT, 0) AS ORG_QCY_11_AMT
+          , NVL(A.ORG_QCY_12_AMT, 0) AS ORG_QCY_12_AMT
+          , NVL(A.ORG_QCY_13_AMT, 0) AS ORG_QCY_13_AMT
+          , NVL(A.ORG_QCY_14_AMT, 0) AS ORG_QCY_14_AMT
+          , NVL(A.ORG_QCY_15_AMT, 0) AS ORG_QCY_15_AMT
+          , NVL(A.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
+          , NVL(A.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
+          , NVL(A.OVERDUE_AMT, 0) AS OVERDUE_AMT
+          , NVL(A.INV_SAMPLE_AMT, 0) AS INV_SAMPLE_AMT
+          , NVL(A.EPAY_AMT, 0) AS EPAY_AMT
+          , NVL(A.ECLS_AMT, 0) AS ECLS_AMT
+          , NVL(A.UREB_AMT, 0) AS UREB_AMT
+          , NVL(A.UFEE_AMT, 0) AS UFEE_AMT
+          , NVL(A.CURRENCY_ACCT_DETAIL, NVL(B.CURRENCY_ACCT_DETAIL, NVL(L.CURRENCY_ACCT_DETAIL, ''))) AS CURRENCY_ACCT_DETAIL
+          , D.PAY_TERM_CODE
+          , D.PAY_TERM_DESC
+          , D.EXCHANGE_RATE_EVAL_FLAG
+          , NVL(A.CLOSING_RATE_BCY_AMT, 0) AS CLOSING_RATE_BCY_AMT
+          , NVL(A.POSTING_RATE_BCY_AMT, 0) AS POSTING_RATE_BCY_AMT
+        FROM ALL_KEYS K
+        INNER JOIN (
+          SELECT D.*
+            FROM (
+              SELECT C.*
+                  , ROW_NUMBER() OVER (
+                        PARTITION BY C.COD_AZIENDA
+                                    , C.COD_CONTO
+                                    , C.CUST_CODE
+                                    , C.COD_DEST2
+                        ORDER BY C.PRIORITY
+                    ) AS RN
+                FROM DIM_CANDIDATE C
+            ) D
+          WHERE D.RN = 1
+        ) D
+          ON D.COD_AZIENDA = K.COD_AZIENDA
+        AND D.COD_CONTO = K.COD_CONTO
+        AND NVL(D.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
+        AND NVL(D.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        LEFT JOIN CURRENT_AGG A
+          ON A.COD_AZIENDA = K.COD_AZIENDA
+        AND A.COD_CONTO = K.COD_CONTO
+        AND NVL(A.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
+        AND NVL(A.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        LEFT JOIN BY_HISTORY B
+          ON B.COD_AZIENDA = K.COD_AZIENDA
+        AND B.COD_CONTO = K.COD_CONTO
+        AND NVL(B.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
+        AND NVL(B.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        LEFT JOIN LM_HISTORY L
+          ON L.COD_AZIENDA = K.COD_AZIENDA
+        AND L.COD_CONTO = K.COD_CONTO
+        AND NVL(L.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
+        AND NVL(L.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+    ),
+    /* 生成最终字段：CL重分类税额按法人/管理单体标识分别处理。 */
+    RESULT_FACT AS (
+      SELECT R.COD_SCENARIO
+          , R.COD_PERIODO
+          , R.COD_AZIENDA
+          , R.COD_CONTO
+          , R.COD_CATEGORIA
+          , R.CUST_CODE
+          , R.CUST_NAME
+          , R.CUST_HEAD_CODE
+          , R.CUST_HEAD_NAME
+          , R.CUST_BRANCH_CODE
+          , R.CUST_BRANCH_NAME
+          , R.COD_AZI_CTP
+          , R.COUNTRY_CODE
+          , R.COUNTRY_NAME
+          , R.LE_AGE_FLAG
+          , R.IS_REC_LG
+          , R.ME_AGE_FLAG
+          , R.IS_REC_ME
+          , R.MB_AGE_FLAG
+          , R.IS_REC_MB
+          , R.GRP_SCOPE
+          , R.NATURE_L1_NAME
+          , R.NATURE_L2_NAME
+          , R.NATURE_L3_NAME
+          , R.D_CHANNEL
+          , R.D_CHANNEL_BU
+          , R.D_CC_CUSTGRP
+          , R.D_ONOFFLINE
+          , R.COD_DEST2
+          , R.COD_DEST3
+          , R.D_SALE_DEPT
+          , R.TAX_RATE
+          , R.COD_VALUTA
+          , R.COD_VALUTA AS COD_VALUTA_ORIGINARIA
+          , R.BY_BCY_0_AMT
+          , R.LM_BCY_0_AMT
+          , R.CALC_BCY_0_AMT AS BCY_0_AMT
+          , R.CALC_BCY_1_AMT AS BCY_1_AMT
+          , R.CALC_BCY_2_AMT AS BCY_2_AMT
+          , R.CALC_BCY_3_AMT AS BCY_3_AMT
+          , R.CALC_BCY_4_AMT AS BCY_4_AMT
+          , R.CALC_BCY_5_AMT AS BCY_5_AMT
+          , R.CALC_BCY_6_AMT AS BCY_6_AMT
+          , R.CALC_BCY_7_AMT AS BCY_7_AMT
+          , R.CALC_BCY_8_AMT AS BCY_8_AMT
+          , R.CALC_BCY_9_AMT AS BCY_9_AMT
+          , R.CALC_BCY_10_AMT AS BCY_10_AMT
+          , R.CALC_BCY_11_AMT AS BCY_11_AMT
+          , R.CALC_BCY_12_AMT AS BCY_12_AMT
+          , R.CALC_BCY_13_AMT AS BCY_13_AMT
+          , R.CALC_BCY_14_AMT AS BCY_14_AMT
+          , R.CALC_BCY_15_AMT AS BCY_15_AMT
+          , R.CALC_BCY_0_AMT AS QCY_0_AMT
+          , R.CALC_BCY_1_AMT AS QCY_1_AMT
+          , R.CALC_BCY_2_AMT AS QCY_2_AMT
+          , R.CALC_BCY_3_AMT AS QCY_3_AMT
+          , R.CALC_BCY_4_AMT AS QCY_4_AMT
+          , R.CALC_BCY_5_AMT AS QCY_5_AMT
+          , R.CALC_BCY_6_AMT AS QCY_6_AMT
+          , R.CALC_BCY_7_AMT AS QCY_7_AMT
+          , R.CALC_BCY_8_AMT AS QCY_8_AMT
+          , R.CALC_BCY_9_AMT AS QCY_9_AMT
+          , R.CALC_BCY_10_AMT AS QCY_10_AMT
+          , R.CALC_BCY_11_AMT AS QCY_11_AMT
+          , R.CALC_BCY_12_AMT AS QCY_12_AMT
+          , R.CALC_BCY_13_AMT AS QCY_13_AMT
+          , R.CALC_BCY_14_AMT AS QCY_14_AMT
+          , R.CALC_BCY_15_AMT AS QCY_15_AMT
+          , R.SHP_NINV_AMT
+          , R.RET_NTRF_AMT
+          /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_1_AMT * (1 + NVL(R.TAX_RATE, 0))
+                        + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                  ELSE R.ORG_BCY_1_AMT + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+              END AS BCY_ADJ_INCL_1_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_2_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_2_AMT
+              END AS BCY_ADJ_INCL_2_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_3_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_3_AMT
+              END AS BCY_ADJ_INCL_3_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_4_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_4_AMT
+              END AS BCY_ADJ_INCL_4_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_5_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_5_AMT
+              END AS BCY_ADJ_INCL_5_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_6_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_6_AMT
+              END AS BCY_ADJ_INCL_6_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_7_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_7_AMT
+              END AS BCY_ADJ_INCL_7_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_8_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_8_AMT
+              END AS BCY_ADJ_INCL_8_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_9_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_9_AMT
+              END AS BCY_ADJ_INCL_9_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_10_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_10_AMT
+              END AS BCY_ADJ_INCL_10_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_11_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_11_AMT
+              END AS BCY_ADJ_INCL_11_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_12_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_12_AMT
+              END AS BCY_ADJ_INCL_12_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_13_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_13_AMT
+              END AS BCY_ADJ_INCL_13_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_14_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_14_AMT
+              END AS BCY_ADJ_INCL_14_AMT
+          , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
+                      THEN R.ORG_BCY_15_AMT * (1 + NVL(R.TAX_RATE, 0))
+                  ELSE R.ORG_BCY_15_AMT
+              END AS BCY_ADJ_INCL_15_AMT
+          , CASE
+                WHEN R.ME_AGE_FLAG = 'CL' AND R.IS_REC_ME = 'Y'
+                  THEN R.ORG_BCY_0_AMT / NULLIF(1 + NVL(R.TAX_RATE, 0), 0)
+                      + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                WHEN R.ME_AGE_FLAG = 'CL' AND R.IS_REC_ME = 'N'
+                  THEN R.ORG_BCY_0_AMT
+                      + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                ELSE R.ORG_BCY_0_AMT
+                      + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+              END AS BCY_ADJ_EXCL_0_AMT
+          , R.OVERDUE_AMT AS OVERDUE_0_AMT
+          , R.OVERDUE_AMT AS OVERDUE_1_AMT
+          , NULL AS OVERDUE_2_AMT
+          , NULL AS OVERDUE_3_AMT
+          , NULL AS OVERDUE_4_AMT
+          , NULL AS OVERDUE_5_AMT
+          , NULL AS OVERDUE_6_AMT
+          , NULL AS OVERDUE_7_AMT
+          , NULL AS OVERDUE_8_AMT
+          , NULL AS OVERDUE_9_AMT
+          , R.INV_SAMPLE_AMT
+          , R.EPAY_AMT
+          , R.ECLS_AMT
+          , R.UREB_AMT
+          , R.UFEE_AMT
+          , R.PAY_TERM_CODE
+          , R.PAY_TERM_DESC
+          , R.CLOSING_RATE_BCY_AMT AS CLOSING_RATE_BCY_AMT
+          , R.POSTING_RATE_BCY_AMT AS POSTING_RATE_BCY_AMT
+          , R.EXCHANGE_RATE_EVAL_FLAG
+          , R.CLOSING_RATE_BCY_AMT - R.POSTING_RATE_BCY_AMT AS TH_FX_EVAL_AMT
+          , R.CURRENCY_ACCT_DETAIL
+          , R.UREB_AMT - LEAST(R.ORG_BCY_0_AMT, R.UREB_AMT) AS ADJ_REB_AMT
+          , LEAST(R.ORG_BCY_0_AMT, R.RET_NTRF_AMT) AS ADJ_RET_AMT
+        FROM RESULT_BASE R
+    )
+    /* 结果集按当前批次业务键查找已被界面修改的 INPUT_DEFORM 行。 */
+    /* 由于本过程生成的 OID 使用 NEWID()，重跑时必须从目标表复用人工行原有 OID。 */
+    SELECT NVL(M.OID, NEWID()) AS OID
+        , R.*
+        /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
+        , R.BCY_ADJ_INCL_1_AMT
+          + R.BCY_ADJ_INCL_2_AMT
+          + R.BCY_ADJ_INCL_3_AMT
+          + R.BCY_ADJ_INCL_4_AMT
+          + R.BCY_ADJ_INCL_5_AMT
+          + R.BCY_ADJ_INCL_6_AMT
+          + R.BCY_ADJ_INCL_7_AMT
+          + R.BCY_ADJ_INCL_8_AMT
+          + R.BCY_ADJ_INCL_9_AMT
+          + R.BCY_ADJ_INCL_10_AMT
+          + R.BCY_ADJ_INCL_11_AMT
+          + R.BCY_ADJ_INCL_12_AMT
+          + R.BCY_ADJ_INCL_13_AMT
+          + R.BCY_ADJ_INCL_14_AMT
+          + R.BCY_ADJ_INCL_15_AMT AS BCY_ADJ_INCL_0_AMT
+        , CASE WHEN M.OID IS NOT NULL THEN 'INPUT_DEFORM'
+                ELSE 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+            END AS PROVENIENZA
+        , SYSDATE AS DATEUPD
+        , SESSION_USER AS USERUPD
+      FROM RESULT_FACT R
+      LEFT JOIN (
+        SELECT OID
+            , COD_SCENARIO
+            , COD_PERIODO
+            , COD_AZIENDA
+            , COD_CONTO
+            , CUST_CODE
+            , COD_DEST2
           FROM (
-            SELECT C.*
-                 , ROW_NUMBER() OVER (
-                       PARTITION BY C.COD_AZIENDA
-                                  , C.COD_CONTO
-                                  , C.CUST_CODE
-                                  , C.COD_DEST2
-                       ORDER BY C.PRIORITY
-                   ) AS RN
-              FROM DIM_CANDIDATE C
-          ) D
-         WHERE D.RN = 1
-      ) D
-        ON D.COD_AZIENDA = K.COD_AZIENDA
-       AND D.COD_CONTO = K.COD_CONTO
-       AND NVL(D.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
-       AND NVL(D.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
-      LEFT JOIN CURRENT_AGG A
-        ON A.COD_AZIENDA = K.COD_AZIENDA
-       AND A.COD_CONTO = K.COD_CONTO
-       AND NVL(A.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
-       AND NVL(A.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
-      LEFT JOIN BY_HISTORY B
-        ON B.COD_AZIENDA = K.COD_AZIENDA
-       AND B.COD_CONTO = K.COD_CONTO
-       AND NVL(B.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
-       AND NVL(B.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
-      LEFT JOIN LM_HISTORY L
-        ON L.COD_AZIENDA = K.COD_AZIENDA
-       AND L.COD_CONTO = K.COD_CONTO
-       AND NVL(L.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
-       AND NVL(L.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
-  ),
-  /* 生成最终字段：CL重分类税额按法人/管理单体标识分别处理。 */
-  RESULT_FACT AS (
-    SELECT R.COD_SCENARIO
-         , R.COD_PERIODO
-         , R.COD_AZIENDA
-         , R.COD_CONTO
-         , R.COD_CATEGORIA
-         , R.CUST_CODE
-         , R.CUST_NAME
-         , R.CUST_HEAD_CODE
-         , R.CUST_HEAD_NAME
-         , R.CUST_BRANCH_CODE
-         , R.CUST_BRANCH_NAME
-         , R.COD_AZI_CTP
-         , R.COUNTRY_CODE
-         , R.COUNTRY_NAME
-         , R.LE_AGE_FLAG
-         , R.IS_REC_LG
-         , R.ME_AGE_FLAG
-         , R.IS_REC_ME
-         , R.MB_AGE_FLAG
-         , R.IS_REC_MB
-         , R.GRP_SCOPE
-         , R.NATURE_L1_NAME
-         , R.NATURE_L2_NAME
-         , R.NATURE_L3_NAME
-         , R.D_CHANNEL
-         , R.D_CHANNEL_BU
-         , R.D_CC_CUSTGRP
-         , R.D_ONOFFLINE
-         , R.COD_DEST2
-         , R.COD_DEST3
-         , R.D_SALE_DEPT
-         , R.TAX_RATE
-         , R.COD_VALUTA
-         , R.COD_VALUTA AS COD_VALUTA_ORIGINARIA
-         , R.BY_BCY_0_AMT
-         , R.LM_BCY_0_AMT
-         , R.CALC_BCY_0_AMT AS BCY_0_AMT
-         , R.CALC_BCY_1_AMT AS BCY_1_AMT
-         , R.CALC_BCY_2_AMT AS BCY_2_AMT
-         , R.CALC_BCY_3_AMT AS BCY_3_AMT
-         , R.CALC_BCY_4_AMT AS BCY_4_AMT
-         , R.CALC_BCY_5_AMT AS BCY_5_AMT
-         , R.CALC_BCY_6_AMT AS BCY_6_AMT
-         , R.CALC_BCY_7_AMT AS BCY_7_AMT
-         , R.CALC_BCY_8_AMT AS BCY_8_AMT
-         , R.CALC_BCY_9_AMT AS BCY_9_AMT
-         , R.CALC_BCY_10_AMT AS BCY_10_AMT
-         , R.CALC_BCY_11_AMT AS BCY_11_AMT
-         , R.CALC_BCY_12_AMT AS BCY_12_AMT
-         , R.CALC_BCY_13_AMT AS BCY_13_AMT
-         , R.CALC_BCY_14_AMT AS BCY_14_AMT
-         , R.CALC_BCY_15_AMT AS BCY_15_AMT
-         , R.CALC_BCY_0_AMT AS QCY_0_AMT
-         , R.CALC_BCY_1_AMT AS QCY_1_AMT
-         , R.CALC_BCY_2_AMT AS QCY_2_AMT
-         , R.CALC_BCY_3_AMT AS QCY_3_AMT
-         , R.CALC_BCY_4_AMT AS QCY_4_AMT
-         , R.CALC_BCY_5_AMT AS QCY_5_AMT
-         , R.CALC_BCY_6_AMT AS QCY_6_AMT
-         , R.CALC_BCY_7_AMT AS QCY_7_AMT
-         , R.CALC_BCY_8_AMT AS QCY_8_AMT
-         , R.CALC_BCY_9_AMT AS QCY_9_AMT
-         , R.CALC_BCY_10_AMT AS QCY_10_AMT
-         , R.CALC_BCY_11_AMT AS QCY_11_AMT
-         , R.CALC_BCY_12_AMT AS QCY_12_AMT
-         , R.CALC_BCY_13_AMT AS QCY_13_AMT
-         , R.CALC_BCY_14_AMT AS QCY_14_AMT
-         , R.CALC_BCY_15_AMT AS QCY_15_AMT
-         , R.SHP_NINV_AMT
-         , R.RET_NTRF_AMT
-         /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_1_AMT * (1 + NVL(R.TAX_RATE, 0))
-                       + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-                ELSE R.ORG_BCY_1_AMT + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-            END AS BCY_ADJ_INCL_1_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_2_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_2_AMT
-            END AS BCY_ADJ_INCL_2_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_3_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_3_AMT
-            END AS BCY_ADJ_INCL_3_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_4_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_4_AMT
-            END AS BCY_ADJ_INCL_4_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_5_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_5_AMT
-            END AS BCY_ADJ_INCL_5_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_6_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_6_AMT
-            END AS BCY_ADJ_INCL_6_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_7_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_7_AMT
-            END AS BCY_ADJ_INCL_7_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_8_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_8_AMT
-            END AS BCY_ADJ_INCL_8_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_9_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_9_AMT
-            END AS BCY_ADJ_INCL_9_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_10_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_10_AMT
-            END AS BCY_ADJ_INCL_10_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_11_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_11_AMT
-            END AS BCY_ADJ_INCL_11_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_12_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_12_AMT
-            END AS BCY_ADJ_INCL_12_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_13_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_13_AMT
-            END AS BCY_ADJ_INCL_13_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_14_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_14_AMT
-            END AS BCY_ADJ_INCL_14_AMT
-         , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
-                     THEN R.ORG_BCY_15_AMT * (1 + NVL(R.TAX_RATE, 0))
-                ELSE R.ORG_BCY_15_AMT
-            END AS BCY_ADJ_INCL_15_AMT
-         , CASE
-               WHEN R.ME_AGE_FLAG = 'CL' AND R.IS_REC_ME = 'Y'
-                 THEN R.ORG_BCY_0_AMT / NULLIF(1 + NVL(R.TAX_RATE, 0), 0)
-                    + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-               WHEN R.ME_AGE_FLAG = 'CL' AND R.IS_REC_ME = 'N'
-                 THEN R.ORG_BCY_0_AMT
-                    + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-               ELSE R.ORG_BCY_0_AMT
-                    + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-            END AS BCY_ADJ_EXCL_0_AMT
-         , R.OVERDUE_AMT AS OVERDUE_0_AMT
-         , R.OVERDUE_AMT AS OVERDUE_1_AMT
-         , NULL AS OVERDUE_2_AMT
-         , NULL AS OVERDUE_3_AMT
-         , NULL AS OVERDUE_4_AMT
-         , NULL AS OVERDUE_5_AMT
-         , NULL AS OVERDUE_6_AMT
-         , NULL AS OVERDUE_7_AMT
-         , NULL AS OVERDUE_8_AMT
-         , NULL AS OVERDUE_9_AMT
-         , R.INV_SAMPLE_AMT
-         , R.EPAY_AMT
-         , R.ECLS_AMT
-         , R.UREB_AMT
-         , R.UFEE_AMT
-         , R.PAY_TERM_CODE
-         , R.PAY_TERM_DESC
-         , R.CLOSING_RATE_BCY_AMT AS CLOSING_RATE_BCY_AMT
-         , R.POSTING_RATE_BCY_AMT AS POSTING_RATE_BCY_AMT
-         , R.EXCHANGE_RATE_EVAL_FLAG
-         , R.CLOSING_RATE_BCY_AMT - R.POSTING_RATE_BCY_AMT AS TH_FX_EVAL_AMT
-         , R.CURRENCY_ACCT_DETAIL
-         , R.UREB_AMT - LEAST(R.ORG_BCY_0_AMT, R.UREB_AMT) AS ADJ_REB_AMT
-         , LEAST(R.ORG_BCY_0_AMT, R.RET_NTRF_AMT) AS ADJ_RET_AMT
-      FROM RESULT_BASE R
-  )
-  /* 结果集按当前批次业务键查找已被界面修改的 INPUT_DEFORM 行。 */
-  /* 由于本过程生成的 OID 使用 NEWID()，重跑时必须从目标表复用人工行原有 OID。 */
-  SELECT NVL(M.OID, NEWID()) AS OID
-       , R.*
-       /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
-       , R.BCY_ADJ_INCL_1_AMT
-         + R.BCY_ADJ_INCL_2_AMT
-         + R.BCY_ADJ_INCL_3_AMT
-         + R.BCY_ADJ_INCL_4_AMT
-         + R.BCY_ADJ_INCL_5_AMT
-         + R.BCY_ADJ_INCL_6_AMT
-         + R.BCY_ADJ_INCL_7_AMT
-         + R.BCY_ADJ_INCL_8_AMT
-         + R.BCY_ADJ_INCL_9_AMT
-         + R.BCY_ADJ_INCL_10_AMT
-         + R.BCY_ADJ_INCL_11_AMT
-         + R.BCY_ADJ_INCL_12_AMT
-         + R.BCY_ADJ_INCL_13_AMT
-         + R.BCY_ADJ_INCL_14_AMT
-         + R.BCY_ADJ_INCL_15_AMT AS BCY_ADJ_INCL_0_AMT
-       , CASE WHEN M.OID IS NOT NULL THEN 'INPUT_DEFORM'
-              ELSE 'CPM_SP_M2M_ARP_AG_M_PHASE2'
-          END AS PROVENIENZA
-       , SYSDATE AS DATEUPD
-       , SESSION_USER AS USERUPD
-    FROM RESULT_FACT R
-    LEFT JOIN (
-      SELECT OID
-           , COD_SCENARIO
-           , COD_PERIODO
-           , COD_AZIENDA
-           , COD_CONTO
-           , CUST_CODE
-           , COD_DEST2
-        FROM (
-          SELECT T.OID
-               , T.COD_SCENARIO
-               , T.COD_PERIODO
-               , T.COD_AZIENDA
-               , T.COD_CONTO
-               , T.CUST_CODE
-               , T.COD_DEST2
-               , ROW_NUMBER() OVER (
-                     PARTITION BY T.COD_SCENARIO
-                                , T.COD_PERIODO
-                                , T.COD_AZIENDA
-                                , T.COD_CONTO
-                                , T.CUST_CODE
-                                , T.COD_DEST2
-                     ORDER BY T.DATEUPD DESC NULLS LAST, T.OID
-                 ) AS RN
-            FROM AW_MR9_ARPM02_000001 T
-           WHERE T.PROVENIENZA = 'INPUT_DEFORM'
-             AND T.COD_SCENARIO = V_SCENARIO
-             AND T.COD_PERIODO = V_PERIODO
-             AND T.COD_AZIENDA IN (
-                   SELECT ELEM
-                     FROM SESSION_AZIENDA_LIST
-                    WHERE SESSION_ID = V_SESSION_ID
-             )
-        ) M0
-       WHERE M0.RN = 1
-    ) M
-      ON M.COD_SCENARIO = R.COD_SCENARIO
-     AND M.COD_PERIODO = R.COD_PERIODO
-     AND M.COD_AZIENDA = R.COD_AZIENDA
-     AND M.COD_CONTO = R.COD_CONTO
-     AND NVL(M.CUST_CODE, '#') = NVL(R.CUST_CODE, '#')
-     AND NVL(M.COD_DEST2, '#') = NVL(R.COD_DEST2, '#')
-  ) S
-    ON (T.OID = S.OID)
-  WHEN MATCHED THEN UPDATE SET
-         T.COD_SCENARIO = S.COD_SCENARIO
-       , T.COD_PERIODO = S.COD_PERIODO
-       , T.COD_AZIENDA = S.COD_AZIENDA
-       , T.COD_CONTO = S.COD_CONTO
-       , T.COD_CATEGORIA = S.COD_CATEGORIA
-       , T.CUST_CODE = S.CUST_CODE
-       , T.CUST_NAME = S.CUST_NAME
-       , T.CUST_HEAD_CODE = S.CUST_HEAD_CODE
-       , T.CUST_HEAD_NAME = S.CUST_HEAD_NAME
-       , T.CUST_BRANCH_CODE = S.CUST_BRANCH_CODE
-       , T.CUST_BRANCH_NAME = S.CUST_BRANCH_NAME
-       , T.COD_AZI_CTP = S.COD_AZI_CTP
-       , T.COUNTRY_CODE = S.COUNTRY_CODE
-       , T.COUNTRY_NAME = S.COUNTRY_NAME
-       , T.LE_AGE_FLAG = S.LE_AGE_FLAG
-       , T.IS_REC_LG = S.IS_REC_LG
-       , T.ME_AGE_FLAG = S.ME_AGE_FLAG
-       , T.IS_REC_ME = S.IS_REC_ME
-       , T.MB_AGE_FLAG = S.MB_AGE_FLAG
-       , T.IS_REC_MB = S.IS_REC_MB
-       , T.GRP_SCOPE = S.GRP_SCOPE
-       , T.NATURE_L1_NAME = S.NATURE_L1_NAME
-       , T.NATURE_L2_NAME = S.NATURE_L2_NAME
-       /* , T.NATURE_L3_NAME = S.NATURE_L3_NAME */
-       , T.D_CHANNEL = S.D_CHANNEL
-       , T.D_CHANNEL_BU = S.D_CHANNEL_BU
-       , T.D_CC_CUSTGRP = S.D_CC_CUSTGRP
-       , T.D_ONOFFLINE = S.D_ONOFFLINE
-       , T.COD_DEST2 = S.COD_DEST2
-       , T.COD_DEST3 = S.COD_DEST3
-       , T.D_SALE_DEPT = S.D_SALE_DEPT
-       , T.TAX_RATE = S.TAX_RATE
-       , T.COD_VALUTA = S.COD_VALUTA
-       , T.COD_VALUTA_ORIGINARIA = S.COD_VALUTA_ORIGINARIA
-       , T.BY_BCY_0_AMT = S.BY_BCY_0_AMT
-       , T.LM_BCY_0_AMT = S.LM_BCY_0_AMT
-       , T.BCY_0_AMT = S.BCY_0_AMT
-       , T.BCY_1_AMT = S.BCY_1_AMT
-       , T.BCY_2_AMT = S.BCY_2_AMT
-       , T.BCY_3_AMT = S.BCY_3_AMT
-       , T.BCY_4_AMT = S.BCY_4_AMT
-       , T.BCY_5_AMT = S.BCY_5_AMT
-       , T.BCY_6_AMT = S.BCY_6_AMT
-       , T.BCY_7_AMT = S.BCY_7_AMT
-       , T.BCY_8_AMT = S.BCY_8_AMT
-       , T.BCY_9_AMT = S.BCY_9_AMT
-       , T.BCY_10_AMT = S.BCY_10_AMT
-       , T.BCY_11_AMT = S.BCY_11_AMT
-       , T.BCY_12_AMT = S.BCY_12_AMT
-       , T.BCY_13_AMT = S.BCY_13_AMT
-       , T.BCY_14_AMT = S.BCY_14_AMT
-       , T.BCY_15_AMT = S.BCY_15_AMT
-       , T.QCY_0_AMT = S.QCY_0_AMT
-       , T.QCY_1_AMT = S.QCY_1_AMT
-       , T.QCY_2_AMT = S.QCY_2_AMT
-       , T.QCY_3_AMT = S.QCY_3_AMT
-       , T.QCY_4_AMT = S.QCY_4_AMT
-       , T.QCY_5_AMT = S.QCY_5_AMT
-       , T.QCY_6_AMT = S.QCY_6_AMT
-       , T.QCY_7_AMT = S.QCY_7_AMT
-       , T.QCY_8_AMT = S.QCY_8_AMT
-       , T.QCY_9_AMT = S.QCY_9_AMT
-       , T.QCY_10_AMT = S.QCY_10_AMT
-       , T.QCY_11_AMT = S.QCY_11_AMT
-       , T.QCY_12_AMT = S.QCY_12_AMT
-       , T.QCY_13_AMT = S.QCY_13_AMT
-       , T.QCY_14_AMT = S.QCY_14_AMT
-       , T.QCY_15_AMT = S.QCY_15_AMT
-       , T.SHP_NINV_AMT = S.SHP_NINV_AMT
-       , T.RET_NTRF_AMT = S.RET_NTRF_AMT
-       , T.BCY_ADJ_INCL_0_AMT = S.BCY_ADJ_INCL_0_AMT
-       , T.BCY_ADJ_INCL_1_AMT = S.BCY_ADJ_INCL_1_AMT
-       , T.BCY_ADJ_INCL_2_AMT = S.BCY_ADJ_INCL_2_AMT
-       , T.BCY_ADJ_INCL_3_AMT = S.BCY_ADJ_INCL_3_AMT
-       , T.BCY_ADJ_INCL_4_AMT = S.BCY_ADJ_INCL_4_AMT
-       , T.BCY_ADJ_INCL_5_AMT = S.BCY_ADJ_INCL_5_AMT
-       , T.BCY_ADJ_INCL_6_AMT = S.BCY_ADJ_INCL_6_AMT
-       , T.BCY_ADJ_INCL_7_AMT = S.BCY_ADJ_INCL_7_AMT
-       , T.BCY_ADJ_INCL_8_AMT = S.BCY_ADJ_INCL_8_AMT
-       , T.BCY_ADJ_INCL_9_AMT = S.BCY_ADJ_INCL_9_AMT
-       , T.BCY_ADJ_INCL_10_AMT = S.BCY_ADJ_INCL_10_AMT
-       , T.BCY_ADJ_INCL_11_AMT = S.BCY_ADJ_INCL_11_AMT
-       , T.BCY_ADJ_INCL_12_AMT = S.BCY_ADJ_INCL_12_AMT
-       , T.BCY_ADJ_INCL_13_AMT = S.BCY_ADJ_INCL_13_AMT
-       , T.BCY_ADJ_INCL_14_AMT = S.BCY_ADJ_INCL_14_AMT
-       , T.BCY_ADJ_INCL_15_AMT = S.BCY_ADJ_INCL_15_AMT
-       , T.BCY_ADJ_EXCL_0_AMT = S.BCY_ADJ_EXCL_0_AMT
-       , T.OVERDUE_0_AMT = S.OVERDUE_0_AMT
-       , T.OVERDUE_1_AMT = S.OVERDUE_1_AMT
-       , T.OVERDUE_2_AMT = S.OVERDUE_2_AMT
-       , T.OVERDUE_3_AMT = S.OVERDUE_3_AMT
-       , T.OVERDUE_4_AMT = S.OVERDUE_4_AMT
-       , T.OVERDUE_5_AMT = S.OVERDUE_5_AMT
-       , T.OVERDUE_6_AMT = S.OVERDUE_6_AMT
-       , T.OVERDUE_7_AMT = S.OVERDUE_7_AMT
-       , T.OVERDUE_8_AMT = S.OVERDUE_8_AMT
-       , T.OVERDUE_9_AMT = S.OVERDUE_9_AMT
-       , T.INV_SAMPLE_AMT = S.INV_SAMPLE_AMT
-       , T.EPAY_AMT = S.EPAY_AMT
-       , T.ECLS_AMT = S.ECLS_AMT
-       , T.UREB_AMT = S.UREB_AMT
-       , T.UFEE_AMT = S.UFEE_AMT
-       , T.PAY_TERM_CODE = S.PAY_TERM_CODE
-       , T.PAY_TERM_DESC = S.PAY_TERM_DESC
-       , T.CLOSING_RATE_BCY_AMT = S.CLOSING_RATE_BCY_AMT
-       , T.POSTING_RATE_BCY_AMT = S.POSTING_RATE_BCY_AMT
-       , T.EXCHANGE_RATE_EVAL_FLAG = S.EXCHANGE_RATE_EVAL_FLAG
-       , T.TH_FX_EVAL_AMT = S.TH_FX_EVAL_AMT
-       , T.CURRENCY_ACCT_DETAIL = S.CURRENCY_ACCT_DETAIL
-       , T.ADJ_REB_AMT = S.ADJ_REB_AMT
-       , T.ADJ_RET_AMT = S.ADJ_RET_AMT
-       , T.DATEUPD = S.DATEUPD
-       , T.USERUPD = S.USERUPD
-  WHEN NOT MATCHED THEN INSERT (
-      OID
-    , COD_SCENARIO
-    , COD_PERIODO
-    , COD_AZIENDA
-    , COD_CONTO
-    , COD_CATEGORIA
-    , CUST_CODE
-    , CUST_NAME
-    , CUST_HEAD_CODE
-    , CUST_HEAD_NAME
-    , CUST_BRANCH_CODE
-    , CUST_BRANCH_NAME
-    , COD_AZI_CTP
-    , COUNTRY_CODE
-    , COUNTRY_NAME
-    , LE_AGE_FLAG
-    , IS_REC_LG
-    , ME_AGE_FLAG
-    , IS_REC_ME
-    , MB_AGE_FLAG
-    , IS_REC_MB
-    , GRP_SCOPE
-    , NATURE_L1_NAME
-    , NATURE_L2_NAME
-    , NATURE_L3_NAME
-    , D_CHANNEL
-    , D_CHANNEL_BU
-    , D_CC_CUSTGRP
-    , D_ONOFFLINE
-    , COD_DEST2
-    , COD_DEST3
-    , D_SALE_DEPT
-    , TAX_RATE
-    , COD_VALUTA
-    , COD_VALUTA_ORIGINARIA
-    , BY_BCY_0_AMT
-    , LM_BCY_0_AMT
-    , BCY_0_AMT
-    , BCY_1_AMT
-    , BCY_2_AMT
-    , BCY_3_AMT
-    , BCY_4_AMT
-    , BCY_5_AMT
-    , BCY_6_AMT
-    , BCY_7_AMT
-    , BCY_8_AMT
-    , BCY_9_AMT
-    , BCY_10_AMT
-    , BCY_11_AMT
-    , BCY_12_AMT
-    , BCY_13_AMT
-    , BCY_14_AMT
-    , BCY_15_AMT
-    , QCY_0_AMT
-    , QCY_1_AMT
-    , QCY_2_AMT
-    , QCY_3_AMT
-    , QCY_4_AMT
-    , QCY_5_AMT
-    , QCY_6_AMT
-    , QCY_7_AMT
-    , QCY_8_AMT
-    , QCY_9_AMT
-    , QCY_10_AMT
-    , QCY_11_AMT
-    , QCY_12_AMT
-    , QCY_13_AMT
-    , QCY_14_AMT
-    , QCY_15_AMT
-    , SHP_NINV_AMT
-    , RET_NTRF_AMT
-    , BCY_ADJ_INCL_0_AMT
-    , BCY_ADJ_INCL_1_AMT
-    , BCY_ADJ_INCL_2_AMT
-    , BCY_ADJ_INCL_3_AMT
-    , BCY_ADJ_INCL_4_AMT
-    , BCY_ADJ_INCL_5_AMT
-    , BCY_ADJ_INCL_6_AMT
-    , BCY_ADJ_INCL_7_AMT
-    , BCY_ADJ_INCL_8_AMT
-    , BCY_ADJ_INCL_9_AMT
-    , BCY_ADJ_INCL_10_AMT
-    , BCY_ADJ_INCL_11_AMT
-    , BCY_ADJ_INCL_12_AMT
-    , BCY_ADJ_INCL_13_AMT
-    , BCY_ADJ_INCL_14_AMT
-    , BCY_ADJ_INCL_15_AMT
-    , BCY_ADJ_EXCL_0_AMT
-    , OVERDUE_0_AMT
-    , OVERDUE_1_AMT
-    , OVERDUE_2_AMT
-    , OVERDUE_3_AMT
-    , OVERDUE_4_AMT
-    , OVERDUE_5_AMT
-    , OVERDUE_6_AMT
-    , OVERDUE_7_AMT
-    , OVERDUE_8_AMT
-    , OVERDUE_9_AMT
-    , INV_SAMPLE_AMT
-    , EPAY_AMT
-    , ECLS_AMT
-    , UREB_AMT
-    , UFEE_AMT
-    , PAY_TERM_CODE
-    , PAY_TERM_DESC
-    , CLOSING_RATE_BCY_AMT
-    , POSTING_RATE_BCY_AMT
-    , EXCHANGE_RATE_EVAL_FLAG
-    , TH_FX_EVAL_AMT
-    , CURRENCY_ACCT_DETAIL
-    , ADJ_REB_AMT
-    , ADJ_RET_AMT
-    , PROVENIENZA
-    , DATEUPD
-    , USERUPD
-  ) VALUES (
-      S.OID
-    , S.COD_SCENARIO
-    , S.COD_PERIODO
-    , S.COD_AZIENDA
-    , S.COD_CONTO
-    , S.COD_CATEGORIA
-    , S.CUST_CODE
-    , S.CUST_NAME
-    , S.CUST_HEAD_CODE
-    , S.CUST_HEAD_NAME
-    , S.CUST_BRANCH_CODE
-    , S.CUST_BRANCH_NAME
-    , S.COD_AZI_CTP
-    , S.COUNTRY_CODE
-    , S.COUNTRY_NAME
-    , S.LE_AGE_FLAG
-    , S.IS_REC_LG
-    , S.ME_AGE_FLAG
-    , S.IS_REC_ME
-    , S.MB_AGE_FLAG
-    , S.IS_REC_MB
-    , S.GRP_SCOPE
-    , S.NATURE_L1_NAME
-    , S.NATURE_L2_NAME
-    , S.NATURE_L3_NAME
-    , S.D_CHANNEL
-    , S.D_CHANNEL_BU
-    , S.D_CC_CUSTGRP
-    , S.D_ONOFFLINE
-    , S.COD_DEST2
-    , S.COD_DEST3
-    , S.D_SALE_DEPT
-    , S.TAX_RATE
-    , S.COD_VALUTA
-    , S.COD_VALUTA_ORIGINARIA
-    , S.BY_BCY_0_AMT
-    , S.LM_BCY_0_AMT
-    , S.BCY_0_AMT
-    , S.BCY_1_AMT
-    , S.BCY_2_AMT
-    , S.BCY_3_AMT
-    , S.BCY_4_AMT
-    , S.BCY_5_AMT
-    , S.BCY_6_AMT
-    , S.BCY_7_AMT
-    , S.BCY_8_AMT
-    , S.BCY_9_AMT
-    , S.BCY_10_AMT
-    , S.BCY_11_AMT
-    , S.BCY_12_AMT
-    , S.BCY_13_AMT
-    , S.BCY_14_AMT
-    , S.BCY_15_AMT
-    , S.QCY_0_AMT
-    , S.QCY_1_AMT
-    , S.QCY_2_AMT
-    , S.QCY_3_AMT
-    , S.QCY_4_AMT
-    , S.QCY_5_AMT
-    , S.QCY_6_AMT
-    , S.QCY_7_AMT
-    , S.QCY_8_AMT
-    , S.QCY_9_AMT
-    , S.QCY_10_AMT
-    , S.QCY_11_AMT
-    , S.QCY_12_AMT
-    , S.QCY_13_AMT
-    , S.QCY_14_AMT
-    , S.QCY_15_AMT
-    , S.SHP_NINV_AMT
-    , S.RET_NTRF_AMT
-    , S.BCY_ADJ_INCL_0_AMT
-    , S.BCY_ADJ_INCL_1_AMT
-    , S.BCY_ADJ_INCL_2_AMT
-    , S.BCY_ADJ_INCL_3_AMT
-    , S.BCY_ADJ_INCL_4_AMT
-    , S.BCY_ADJ_INCL_5_AMT
-    , S.BCY_ADJ_INCL_6_AMT
-    , S.BCY_ADJ_INCL_7_AMT
-    , S.BCY_ADJ_INCL_8_AMT
-    , S.BCY_ADJ_INCL_9_AMT
-    , S.BCY_ADJ_INCL_10_AMT
-    , S.BCY_ADJ_INCL_11_AMT
-    , S.BCY_ADJ_INCL_12_AMT
-    , S.BCY_ADJ_INCL_13_AMT
-    , S.BCY_ADJ_INCL_14_AMT
-    , S.BCY_ADJ_INCL_15_AMT
-    , S.BCY_ADJ_EXCL_0_AMT
-    , S.OVERDUE_0_AMT
-    , S.OVERDUE_1_AMT
-    , S.OVERDUE_2_AMT
-    , S.OVERDUE_3_AMT
-    , S.OVERDUE_4_AMT
-    , S.OVERDUE_5_AMT
-    , S.OVERDUE_6_AMT
-    , S.OVERDUE_7_AMT
-    , S.OVERDUE_8_AMT
-    , S.OVERDUE_9_AMT
-    , S.INV_SAMPLE_AMT
-    , S.EPAY_AMT
-    , S.ECLS_AMT
-    , S.UREB_AMT
-    , S.UFEE_AMT
-    , S.PAY_TERM_CODE
-    , S.PAY_TERM_DESC
-    , S.CLOSING_RATE_BCY_AMT
-    , S.POSTING_RATE_BCY_AMT
-    , S.EXCHANGE_RATE_EVAL_FLAG
-    , S.TH_FX_EVAL_AMT
-    , S.CURRENCY_ACCT_DETAIL
-    , S.ADJ_REB_AMT
-    , S.ADJ_RET_AMT
-    , S.PROVENIENZA
-    , S.DATEUPD
-    , S.USERUPD
-  );
-
-  /* ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录。 */
-  /* 不删除 INPUT_DEFORM 人工行，避免清理自动结果时误删界面维护的数据。 */
-  DELETE FROM AW_MR9_ARPM02_000001 T
-   WHERE T.COD_SCENARIO = V_SCENARIO
-     AND T.COD_PERIODO = V_PERIODO
-     AND T.COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
-     )
-     AND T.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2'
-     AND NVL(T.BY_BCY_0_AMT, 0) = 0
-     AND NVL(T.LM_BCY_0_AMT, 0) = 0
-     AND NVL(T.BCY_0_AMT, 0) = 0
-     AND NVL(T.BCY_1_AMT, 0) = 0
-     AND NVL(T.BCY_2_AMT, 0) = 0
-     AND NVL(T.BCY_3_AMT, 0) = 0
-     AND NVL(T.BCY_4_AMT, 0) = 0
-     AND NVL(T.BCY_5_AMT, 0) = 0
-     AND NVL(T.BCY_6_AMT, 0) = 0
-     AND NVL(T.BCY_7_AMT, 0) = 0
-     AND NVL(T.BCY_8_AMT, 0) = 0
-     AND NVL(T.BCY_9_AMT, 0) = 0
-     AND NVL(T.BCY_10_AMT, 0) = 0
-     AND NVL(T.BCY_11_AMT, 0) = 0
-     AND NVL(T.BCY_12_AMT, 0) = 0
-     AND NVL(T.BCY_13_AMT, 0) = 0
-     AND NVL(T.BCY_14_AMT, 0) = 0
-     AND NVL(T.BCY_15_AMT, 0) = 0
-     AND NVL(T.QCY_0_AMT, 0) = 0
-     AND NVL(T.QCY_1_AMT, 0) = 0
-     AND NVL(T.QCY_2_AMT, 0) = 0
-     AND NVL(T.QCY_3_AMT, 0) = 0
-     AND NVL(T.QCY_4_AMT, 0) = 0
-     AND NVL(T.QCY_5_AMT, 0) = 0
-     AND NVL(T.QCY_6_AMT, 0) = 0
-     AND NVL(T.QCY_7_AMT, 0) = 0
-     AND NVL(T.QCY_8_AMT, 0) = 0
-     AND NVL(T.QCY_9_AMT, 0) = 0
-     AND NVL(T.QCY_10_AMT, 0) = 0
-     AND NVL(T.QCY_11_AMT, 0) = 0
-     AND NVL(T.QCY_12_AMT, 0) = 0
-     AND NVL(T.QCY_13_AMT, 0) = 0
-     AND NVL(T.QCY_14_AMT, 0) = 0
-     AND NVL(T.QCY_15_AMT, 0) = 0
-     AND NVL(T.SHP_NINV_AMT, 0) = 0
-     AND NVL(T.RET_NTRF_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_0_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_1_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_2_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_3_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_4_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_5_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_6_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_7_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_8_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_9_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_10_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_11_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_12_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_13_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_14_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_INCL_15_AMT, 0) = 0
-     AND NVL(T.BCY_ADJ_EXCL_0_AMT, 0) = 0
-     AND NVL(T.OVERDUE_0_AMT, 0) = 0
-     AND NVL(T.OVERDUE_1_AMT, 0) = 0
-     AND NVL(T.OVERDUE_2_AMT, 0) = 0
-     AND NVL(T.OVERDUE_3_AMT, 0) = 0
-     AND NVL(T.OVERDUE_4_AMT, 0) = 0
-     AND NVL(T.OVERDUE_5_AMT, 0) = 0
-     AND NVL(T.OVERDUE_6_AMT, 0) = 0
-     AND NVL(T.OVERDUE_7_AMT, 0) = 0
-     AND NVL(T.OVERDUE_8_AMT, 0) = 0
-     AND NVL(T.OVERDUE_9_AMT, 0) = 0
-     AND NVL(T.INV_SAMPLE_AMT, 0) = 0
-     AND NVL(T.EPAY_AMT, 0) = 0
-     AND NVL(T.ECLS_AMT, 0) = 0
-     AND NVL(T.UREB_AMT, 0) = 0
-     AND NVL(T.UFEE_AMT, 0) = 0
-     AND NVL(T.CLOSING_RATE_BCY_AMT, 0) = 0
-     AND NVL(T.POSTING_RATE_BCY_AMT, 0) = 0
-     AND NVL(T.TH_FX_EVAL_AMT, 0) = 0
-     AND NVL(T.ADJ_REB_AMT, 0) = 0
-     AND NVL(T.ADJ_RET_AMT, 0) = 0;
-
-  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '目标表装载完成并清理全零金额记录' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
-  COMMIT;
-  /* 20261105 新增是否存续字段更新 */
-  CPM_SP_D2M_ARP_EXS_PHASE2(P_SCENARIO , P_PERIODO , P_AZIENDA , SESSION_USER);
-
-  /* 清理当前会话数据。 */
-  DELETE FROM SESSION_AZIENDA_LIST
-   WHERE SESSION_ID = V_SESSION_ID;
-  DELETE FROM SESSION_V_REF_AZIENDA
-   WHERE SESSION_ID = V_SESSION_ID;
-
-  INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'END 执行完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
-  COMMIT;
-
-EXCEPTION
-  WHEN OTHERS THEN
-    ROLLBACK;
-    DELETE FROM SESSION_AZIENDA_LIST
-     WHERE SESSION_ID = V_SESSION_ID;
-    DELETE FROM SESSION_V_REF_AZIENDA
-     WHERE SESSION_ID = V_SESSION_ID;
-    V_ERROR_COD := SQLCODE;
-    V_ERROR_MSG := SUBSTR(SQLERRM, 1, 4000);
-    INSERT INTO ZTAB_CPM_LOG(CPM , STEP , REMARK , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'ERROR 执行报错' , V_ERROR_COD || ':' || V_ERROR_MSG , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , NVL(V_AZIENDA, P_AZIENDA));
+            SELECT T.OID
+                , T.COD_SCENARIO
+                , T.COD_PERIODO
+                , T.COD_AZIENDA
+                , T.COD_CONTO
+                , T.CUST_CODE
+                , T.COD_DEST2
+                , ROW_NUMBER() OVER (
+                      PARTITION BY T.COD_SCENARIO
+                                  , T.COD_PERIODO
+                                  , T.COD_AZIENDA
+                                  , T.COD_CONTO
+                                  , T.CUST_CODE
+                                  , T.COD_DEST2
+                      ORDER BY T.DATEUPD DESC NULLS LAST, T.OID
+                  ) AS RN
+              FROM AW_MR9_ARPM02_000001 T
+            WHERE T.PROVENIENZA = 'INPUT_DEFORM'
+              AND T.COD_SCENARIO = V_SCENARIO
+              AND T.COD_PERIODO = V_PERIODO
+              AND T.COD_AZIENDA IN (
+                    SELECT ELEM
+                      FROM SESSION_AZIENDA_LIST
+                      WHERE SESSION_ID = V_SESSION_ID
+              )
+          ) M0
+        WHERE M0.RN = 1
+      ) M
+        ON M.COD_SCENARIO = R.COD_SCENARIO
+      AND M.COD_PERIODO = R.COD_PERIODO
+      AND M.COD_AZIENDA = R.COD_AZIENDA
+      AND M.COD_CONTO = R.COD_CONTO
+      AND NVL(M.CUST_CODE, '#') = NVL(R.CUST_CODE, '#')
+      AND NVL(M.COD_DEST2, '#') = NVL(R.COD_DEST2, '#')
+    ) S
+      ON (T.OID = S.OID)
+    WHEN MATCHED THEN UPDATE SET
+          T.COD_SCENARIO = S.COD_SCENARIO
+        , T.COD_PERIODO = S.COD_PERIODO
+        , T.COD_AZIENDA = S.COD_AZIENDA
+        , T.COD_CONTO = S.COD_CONTO
+        , T.COD_CATEGORIA = S.COD_CATEGORIA
+        , T.CUST_CODE = S.CUST_CODE
+        , T.CUST_NAME = S.CUST_NAME
+        , T.CUST_HEAD_CODE = S.CUST_HEAD_CODE
+        , T.CUST_HEAD_NAME = S.CUST_HEAD_NAME
+        , T.CUST_BRANCH_CODE = S.CUST_BRANCH_CODE
+        , T.CUST_BRANCH_NAME = S.CUST_BRANCH_NAME
+        , T.COD_AZI_CTP = S.COD_AZI_CTP
+        , T.COUNTRY_CODE = S.COUNTRY_CODE
+        , T.COUNTRY_NAME = S.COUNTRY_NAME
+        , T.LE_AGE_FLAG = S.LE_AGE_FLAG
+        , T.IS_REC_LG = S.IS_REC_LG
+        , T.ME_AGE_FLAG = S.ME_AGE_FLAG
+        , T.IS_REC_ME = S.IS_REC_ME
+        , T.MB_AGE_FLAG = S.MB_AGE_FLAG
+        , T.IS_REC_MB = S.IS_REC_MB
+        , T.GRP_SCOPE = S.GRP_SCOPE
+        , T.NATURE_L1_NAME = S.NATURE_L1_NAME
+        , T.NATURE_L2_NAME = S.NATURE_L2_NAME
+        /* , T.NATURE_L3_NAME = S.NATURE_L3_NAME */
+        , T.D_CHANNEL = S.D_CHANNEL
+        , T.D_CHANNEL_BU = S.D_CHANNEL_BU
+        , T.D_CC_CUSTGRP = S.D_CC_CUSTGRP
+        , T.D_ONOFFLINE = S.D_ONOFFLINE
+        , T.COD_DEST2 = S.COD_DEST2
+        , T.COD_DEST3 = S.COD_DEST3
+        , T.D_SALE_DEPT = S.D_SALE_DEPT
+        , T.TAX_RATE = S.TAX_RATE
+        , T.COD_VALUTA = S.COD_VALUTA
+        , T.COD_VALUTA_ORIGINARIA = S.COD_VALUTA_ORIGINARIA
+        , T.BY_BCY_0_AMT = S.BY_BCY_0_AMT
+        , T.LM_BCY_0_AMT = S.LM_BCY_0_AMT
+        , T.BCY_0_AMT = S.BCY_0_AMT
+        , T.BCY_1_AMT = S.BCY_1_AMT
+        , T.BCY_2_AMT = S.BCY_2_AMT
+        , T.BCY_3_AMT = S.BCY_3_AMT
+        , T.BCY_4_AMT = S.BCY_4_AMT
+        , T.BCY_5_AMT = S.BCY_5_AMT
+        , T.BCY_6_AMT = S.BCY_6_AMT
+        , T.BCY_7_AMT = S.BCY_7_AMT
+        , T.BCY_8_AMT = S.BCY_8_AMT
+        , T.BCY_9_AMT = S.BCY_9_AMT
+        , T.BCY_10_AMT = S.BCY_10_AMT
+        , T.BCY_11_AMT = S.BCY_11_AMT
+        , T.BCY_12_AMT = S.BCY_12_AMT
+        , T.BCY_13_AMT = S.BCY_13_AMT
+        , T.BCY_14_AMT = S.BCY_14_AMT
+        , T.BCY_15_AMT = S.BCY_15_AMT
+        , T.QCY_0_AMT = S.QCY_0_AMT
+        , T.QCY_1_AMT = S.QCY_1_AMT
+        , T.QCY_2_AMT = S.QCY_2_AMT
+        , T.QCY_3_AMT = S.QCY_3_AMT
+        , T.QCY_4_AMT = S.QCY_4_AMT
+        , T.QCY_5_AMT = S.QCY_5_AMT
+        , T.QCY_6_AMT = S.QCY_6_AMT
+        , T.QCY_7_AMT = S.QCY_7_AMT
+        , T.QCY_8_AMT = S.QCY_8_AMT
+        , T.QCY_9_AMT = S.QCY_9_AMT
+        , T.QCY_10_AMT = S.QCY_10_AMT
+        , T.QCY_11_AMT = S.QCY_11_AMT
+        , T.QCY_12_AMT = S.QCY_12_AMT
+        , T.QCY_13_AMT = S.QCY_13_AMT
+        , T.QCY_14_AMT = S.QCY_14_AMT
+        , T.QCY_15_AMT = S.QCY_15_AMT
+        , T.SHP_NINV_AMT = S.SHP_NINV_AMT
+        , T.RET_NTRF_AMT = S.RET_NTRF_AMT
+        , T.BCY_ADJ_INCL_0_AMT = S.BCY_ADJ_INCL_0_AMT
+        , T.BCY_ADJ_INCL_1_AMT = S.BCY_ADJ_INCL_1_AMT
+        , T.BCY_ADJ_INCL_2_AMT = S.BCY_ADJ_INCL_2_AMT
+        , T.BCY_ADJ_INCL_3_AMT = S.BCY_ADJ_INCL_3_AMT
+        , T.BCY_ADJ_INCL_4_AMT = S.BCY_ADJ_INCL_4_AMT
+        , T.BCY_ADJ_INCL_5_AMT = S.BCY_ADJ_INCL_5_AMT
+        , T.BCY_ADJ_INCL_6_AMT = S.BCY_ADJ_INCL_6_AMT
+        , T.BCY_ADJ_INCL_7_AMT = S.BCY_ADJ_INCL_7_AMT
+        , T.BCY_ADJ_INCL_8_AMT = S.BCY_ADJ_INCL_8_AMT
+        , T.BCY_ADJ_INCL_9_AMT = S.BCY_ADJ_INCL_9_AMT
+        , T.BCY_ADJ_INCL_10_AMT = S.BCY_ADJ_INCL_10_AMT
+        , T.BCY_ADJ_INCL_11_AMT = S.BCY_ADJ_INCL_11_AMT
+        , T.BCY_ADJ_INCL_12_AMT = S.BCY_ADJ_INCL_12_AMT
+        , T.BCY_ADJ_INCL_13_AMT = S.BCY_ADJ_INCL_13_AMT
+        , T.BCY_ADJ_INCL_14_AMT = S.BCY_ADJ_INCL_14_AMT
+        , T.BCY_ADJ_INCL_15_AMT = S.BCY_ADJ_INCL_15_AMT
+        , T.BCY_ADJ_EXCL_0_AMT = S.BCY_ADJ_EXCL_0_AMT
+        , T.OVERDUE_0_AMT = S.OVERDUE_0_AMT
+        , T.OVERDUE_1_AMT = S.OVERDUE_1_AMT
+        , T.OVERDUE_2_AMT = S.OVERDUE_2_AMT
+        , T.OVERDUE_3_AMT = S.OVERDUE_3_AMT
+        , T.OVERDUE_4_AMT = S.OVERDUE_4_AMT
+        , T.OVERDUE_5_AMT = S.OVERDUE_5_AMT
+        , T.OVERDUE_6_AMT = S.OVERDUE_6_AMT
+        , T.OVERDUE_7_AMT = S.OVERDUE_7_AMT
+        , T.OVERDUE_8_AMT = S.OVERDUE_8_AMT
+        , T.OVERDUE_9_AMT = S.OVERDUE_9_AMT
+        , T.INV_SAMPLE_AMT = S.INV_SAMPLE_AMT
+        , T.EPAY_AMT = S.EPAY_AMT
+        , T.ECLS_AMT = S.ECLS_AMT
+        , T.UREB_AMT = S.UREB_AMT
+        , T.UFEE_AMT = S.UFEE_AMT
+        , T.PAY_TERM_CODE = S.PAY_TERM_CODE
+        , T.PAY_TERM_DESC = S.PAY_TERM_DESC
+        , T.CLOSING_RATE_BCY_AMT = S.CLOSING_RATE_BCY_AMT
+        , T.POSTING_RATE_BCY_AMT = S.POSTING_RATE_BCY_AMT
+        , T.EXCHANGE_RATE_EVAL_FLAG = S.EXCHANGE_RATE_EVAL_FLAG
+        , T.TH_FX_EVAL_AMT = S.TH_FX_EVAL_AMT
+        , T.CURRENCY_ACCT_DETAIL = S.CURRENCY_ACCT_DETAIL
+        , T.ADJ_REB_AMT = S.ADJ_REB_AMT
+        , T.ADJ_RET_AMT = S.ADJ_RET_AMT
+        , T.DATEUPD = S.DATEUPD
+        , T.USERUPD = S.USERUPD
+    WHEN NOT MATCHED THEN INSERT (
+        OID
+      , COD_SCENARIO
+      , COD_PERIODO
+      , COD_AZIENDA
+      , COD_CONTO
+      , COD_CATEGORIA
+      , CUST_CODE
+      , CUST_NAME
+      , CUST_HEAD_CODE
+      , CUST_HEAD_NAME
+      , CUST_BRANCH_CODE
+      , CUST_BRANCH_NAME
+      , COD_AZI_CTP
+      , COUNTRY_CODE
+      , COUNTRY_NAME
+      , LE_AGE_FLAG
+      , IS_REC_LG
+      , ME_AGE_FLAG
+      , IS_REC_ME
+      , MB_AGE_FLAG
+      , IS_REC_MB
+      , GRP_SCOPE
+      , NATURE_L1_NAME
+      , NATURE_L2_NAME
+      , NATURE_L3_NAME
+      , D_CHANNEL
+      , D_CHANNEL_BU
+      , D_CC_CUSTGRP
+      , D_ONOFFLINE
+      , COD_DEST2
+      , COD_DEST3
+      , D_SALE_DEPT
+      , TAX_RATE
+      , COD_VALUTA
+      , COD_VALUTA_ORIGINARIA
+      , BY_BCY_0_AMT
+      , LM_BCY_0_AMT
+      , BCY_0_AMT
+      , BCY_1_AMT
+      , BCY_2_AMT
+      , BCY_3_AMT
+      , BCY_4_AMT
+      , BCY_5_AMT
+      , BCY_6_AMT
+      , BCY_7_AMT
+      , BCY_8_AMT
+      , BCY_9_AMT
+      , BCY_10_AMT
+      , BCY_11_AMT
+      , BCY_12_AMT
+      , BCY_13_AMT
+      , BCY_14_AMT
+      , BCY_15_AMT
+      , QCY_0_AMT
+      , QCY_1_AMT
+      , QCY_2_AMT
+      , QCY_3_AMT
+      , QCY_4_AMT
+      , QCY_5_AMT
+      , QCY_6_AMT
+      , QCY_7_AMT
+      , QCY_8_AMT
+      , QCY_9_AMT
+      , QCY_10_AMT
+      , QCY_11_AMT
+      , QCY_12_AMT
+      , QCY_13_AMT
+      , QCY_14_AMT
+      , QCY_15_AMT
+      , SHP_NINV_AMT
+      , RET_NTRF_AMT
+      , BCY_ADJ_INCL_0_AMT
+      , BCY_ADJ_INCL_1_AMT
+      , BCY_ADJ_INCL_2_AMT
+      , BCY_ADJ_INCL_3_AMT
+      , BCY_ADJ_INCL_4_AMT
+      , BCY_ADJ_INCL_5_AMT
+      , BCY_ADJ_INCL_6_AMT
+      , BCY_ADJ_INCL_7_AMT
+      , BCY_ADJ_INCL_8_AMT
+      , BCY_ADJ_INCL_9_AMT
+      , BCY_ADJ_INCL_10_AMT
+      , BCY_ADJ_INCL_11_AMT
+      , BCY_ADJ_INCL_12_AMT
+      , BCY_ADJ_INCL_13_AMT
+      , BCY_ADJ_INCL_14_AMT
+      , BCY_ADJ_INCL_15_AMT
+      , BCY_ADJ_EXCL_0_AMT
+      , OVERDUE_0_AMT
+      , OVERDUE_1_AMT
+      , OVERDUE_2_AMT
+      , OVERDUE_3_AMT
+      , OVERDUE_4_AMT
+      , OVERDUE_5_AMT
+      , OVERDUE_6_AMT
+      , OVERDUE_7_AMT
+      , OVERDUE_8_AMT
+      , OVERDUE_9_AMT
+      , INV_SAMPLE_AMT
+      , EPAY_AMT
+      , ECLS_AMT
+      , UREB_AMT
+      , UFEE_AMT
+      , PAY_TERM_CODE
+      , PAY_TERM_DESC
+      , CLOSING_RATE_BCY_AMT
+      , POSTING_RATE_BCY_AMT
+      , EXCHANGE_RATE_EVAL_FLAG
+      , TH_FX_EVAL_AMT
+      , CURRENCY_ACCT_DETAIL
+      , ADJ_REB_AMT
+      , ADJ_RET_AMT
+      , PROVENIENZA
+      , DATEUPD
+      , USERUPD
+    ) VALUES (
+        S.OID
+      , S.COD_SCENARIO
+      , S.COD_PERIODO
+      , S.COD_AZIENDA
+      , S.COD_CONTO
+      , S.COD_CATEGORIA
+      , S.CUST_CODE
+      , S.CUST_NAME
+      , S.CUST_HEAD_CODE
+      , S.CUST_HEAD_NAME
+      , S.CUST_BRANCH_CODE
+      , S.CUST_BRANCH_NAME
+      , S.COD_AZI_CTP
+      , S.COUNTRY_CODE
+      , S.COUNTRY_NAME
+      , S.LE_AGE_FLAG
+      , S.IS_REC_LG
+      , S.ME_AGE_FLAG
+      , S.IS_REC_ME
+      , S.MB_AGE_FLAG
+      , S.IS_REC_MB
+      , S.GRP_SCOPE
+      , S.NATURE_L1_NAME
+      , S.NATURE_L2_NAME
+      , S.NATURE_L3_NAME
+      , S.D_CHANNEL
+      , S.D_CHANNEL_BU
+      , S.D_CC_CUSTGRP
+      , S.D_ONOFFLINE
+      , S.COD_DEST2
+      , S.COD_DEST3
+      , S.D_SALE_DEPT
+      , S.TAX_RATE
+      , S.COD_VALUTA
+      , S.COD_VALUTA_ORIGINARIA
+      , S.BY_BCY_0_AMT
+      , S.LM_BCY_0_AMT
+      , S.BCY_0_AMT
+      , S.BCY_1_AMT
+      , S.BCY_2_AMT
+      , S.BCY_3_AMT
+      , S.BCY_4_AMT
+      , S.BCY_5_AMT
+      , S.BCY_6_AMT
+      , S.BCY_7_AMT
+      , S.BCY_8_AMT
+      , S.BCY_9_AMT
+      , S.BCY_10_AMT
+      , S.BCY_11_AMT
+      , S.BCY_12_AMT
+      , S.BCY_13_AMT
+      , S.BCY_14_AMT
+      , S.BCY_15_AMT
+      , S.QCY_0_AMT
+      , S.QCY_1_AMT
+      , S.QCY_2_AMT
+      , S.QCY_3_AMT
+      , S.QCY_4_AMT
+      , S.QCY_5_AMT
+      , S.QCY_6_AMT
+      , S.QCY_7_AMT
+      , S.QCY_8_AMT
+      , S.QCY_9_AMT
+      , S.QCY_10_AMT
+      , S.QCY_11_AMT
+      , S.QCY_12_AMT
+      , S.QCY_13_AMT
+      , S.QCY_14_AMT
+      , S.QCY_15_AMT
+      , S.SHP_NINV_AMT
+      , S.RET_NTRF_AMT
+      , S.BCY_ADJ_INCL_0_AMT
+      , S.BCY_ADJ_INCL_1_AMT
+      , S.BCY_ADJ_INCL_2_AMT
+      , S.BCY_ADJ_INCL_3_AMT
+      , S.BCY_ADJ_INCL_4_AMT
+      , S.BCY_ADJ_INCL_5_AMT
+      , S.BCY_ADJ_INCL_6_AMT
+      , S.BCY_ADJ_INCL_7_AMT
+      , S.BCY_ADJ_INCL_8_AMT
+      , S.BCY_ADJ_INCL_9_AMT
+      , S.BCY_ADJ_INCL_10_AMT
+      , S.BCY_ADJ_INCL_11_AMT
+      , S.BCY_ADJ_INCL_12_AMT
+      , S.BCY_ADJ_INCL_13_AMT
+      , S.BCY_ADJ_INCL_14_AMT
+      , S.BCY_ADJ_INCL_15_AMT
+      , S.BCY_ADJ_EXCL_0_AMT
+      , S.OVERDUE_0_AMT
+      , S.OVERDUE_1_AMT
+      , S.OVERDUE_2_AMT
+      , S.OVERDUE_3_AMT
+      , S.OVERDUE_4_AMT
+      , S.OVERDUE_5_AMT
+      , S.OVERDUE_6_AMT
+      , S.OVERDUE_7_AMT
+      , S.OVERDUE_8_AMT
+      , S.OVERDUE_9_AMT
+      , S.INV_SAMPLE_AMT
+      , S.EPAY_AMT
+      , S.ECLS_AMT
+      , S.UREB_AMT
+      , S.UFEE_AMT
+      , S.PAY_TERM_CODE
+      , S.PAY_TERM_DESC
+      , S.CLOSING_RATE_BCY_AMT
+      , S.POSTING_RATE_BCY_AMT
+      , S.EXCHANGE_RATE_EVAL_FLAG
+      , S.TH_FX_EVAL_AMT
+      , S.CURRENCY_ACCT_DETAIL
+      , S.ADJ_REB_AMT
+      , S.ADJ_RET_AMT
+      , S.PROVENIENZA
+      , S.DATEUPD
+      , S.USERUPD
+      );
+    END;
+    /* ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录。 */
+    /* 不删除 INPUT_DEFORM 人工行，避免清理自动结果时误删界面维护的数据。 */
+    BEGIN
+      DELETE FROM AW_MR9_ARPM02_000001 T
+      WHERE T.COD_SCENARIO = V_SCENARIO
+        AND T.COD_PERIODO = V_PERIODO
+        AND T.COD_AZIENDA IN (
+              SELECT ELEM
+                FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+        )
+        AND T.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+        AND NVL(T.BY_BCY_0_AMT, 0) = 0
+        AND NVL(T.LM_BCY_0_AMT, 0) = 0
+        AND NVL(T.BCY_0_AMT, 0) = 0
+        AND NVL(T.BCY_1_AMT, 0) = 0
+        AND NVL(T.BCY_2_AMT, 0) = 0
+        AND NVL(T.BCY_3_AMT, 0) = 0
+        AND NVL(T.BCY_4_AMT, 0) = 0
+        AND NVL(T.BCY_5_AMT, 0) = 0
+        AND NVL(T.BCY_6_AMT, 0) = 0
+        AND NVL(T.BCY_7_AMT, 0) = 0
+        AND NVL(T.BCY_8_AMT, 0) = 0
+        AND NVL(T.BCY_9_AMT, 0) = 0
+        AND NVL(T.BCY_10_AMT, 0) = 0
+        AND NVL(T.BCY_11_AMT, 0) = 0
+        AND NVL(T.BCY_12_AMT, 0) = 0
+        AND NVL(T.BCY_13_AMT, 0) = 0
+        AND NVL(T.BCY_14_AMT, 0) = 0
+        AND NVL(T.BCY_15_AMT, 0) = 0
+        AND NVL(T.QCY_0_AMT, 0) = 0
+        AND NVL(T.QCY_1_AMT, 0) = 0
+        AND NVL(T.QCY_2_AMT, 0) = 0
+        AND NVL(T.QCY_3_AMT, 0) = 0
+        AND NVL(T.QCY_4_AMT, 0) = 0
+        AND NVL(T.QCY_5_AMT, 0) = 0
+        AND NVL(T.QCY_6_AMT, 0) = 0
+        AND NVL(T.QCY_7_AMT, 0) = 0
+        AND NVL(T.QCY_8_AMT, 0) = 0
+        AND NVL(T.QCY_9_AMT, 0) = 0
+        AND NVL(T.QCY_10_AMT, 0) = 0
+        AND NVL(T.QCY_11_AMT, 0) = 0
+        AND NVL(T.QCY_12_AMT, 0) = 0
+        AND NVL(T.QCY_13_AMT, 0) = 0
+        AND NVL(T.QCY_14_AMT, 0) = 0
+        AND NVL(T.QCY_15_AMT, 0) = 0
+        AND NVL(T.SHP_NINV_AMT, 0) = 0
+        AND NVL(T.RET_NTRF_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_0_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_1_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_2_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_3_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_4_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_5_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_6_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_7_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_8_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_9_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_10_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_11_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_12_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_13_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_14_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_INCL_15_AMT, 0) = 0
+        AND NVL(T.BCY_ADJ_EXCL_0_AMT, 0) = 0
+        AND NVL(T.OVERDUE_0_AMT, 0) = 0
+        AND NVL(T.OVERDUE_1_AMT, 0) = 0
+        AND NVL(T.OVERDUE_2_AMT, 0) = 0
+        AND NVL(T.OVERDUE_3_AMT, 0) = 0
+        AND NVL(T.OVERDUE_4_AMT, 0) = 0
+        AND NVL(T.OVERDUE_5_AMT, 0) = 0
+        AND NVL(T.OVERDUE_6_AMT, 0) = 0
+        AND NVL(T.OVERDUE_7_AMT, 0) = 0
+        AND NVL(T.OVERDUE_8_AMT, 0) = 0
+        AND NVL(T.OVERDUE_9_AMT, 0) = 0
+        AND NVL(T.INV_SAMPLE_AMT, 0) = 0
+        AND NVL(T.EPAY_AMT, 0) = 0
+        AND NVL(T.ECLS_AMT, 0) = 0
+        AND NVL(T.UREB_AMT, 0) = 0
+        AND NVL(T.UFEE_AMT, 0) = 0
+        AND NVL(T.CLOSING_RATE_BCY_AMT, 0) = 0
+        AND NVL(T.POSTING_RATE_BCY_AMT, 0) = 0
+        AND NVL(T.TH_FX_EVAL_AMT, 0) = 0
+        AND NVL(T.ADJ_REB_AMT, 0) = 0
+        AND NVL(T.ADJ_RET_AMT, 0) = 0;
+  END;
+    INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '目标表装载完成并清理全零金额记录' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
     COMMIT;
-    RAISE;
-END CPM_SP_M2M_ARP_AG_M_PHASE2;
+
+    /* 按周转取数限制条件回写TOV_FLAG，TOV取数直接限制该标识列。
+      ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新 */
+  BEGIN
+    UPDATE AW_MR9_ARPM02_000001 T
+      SET T.TOV_FLAG = CASE
+              WHEN T.GRP_SCOPE = 'GEX-集团外'
+              AND T.COD_DEST2 IS NOT NULL
+              AND T.COD_DEST2 <> 'ZZZZ'
+              /* 至少有一类账龄标识满足周转取数范围。 */
+              AND (
+                    T.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
+                  OR T.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
+              )
+              /* BATCH_ID=6：公司有维护时仅保留配置的二级性质，公司无维护时默认全部取数。 */
+              AND (
+                    NOT EXISTS (
+                        SELECT 1
+                          FROM AW_RUL_ARPTOV_000001 R6
+                          WHERE R6.BATCH_ID = '6'
+                            AND R6.COD_AZIENDA IS NOT NULL
+                            AND R6.NATURE_L2_NAME IS NOT NULL
+                            AND R6.VALID_FR <= V_YEARMONTH
+                            AND NVL(R6.VALID_TO, '999999') >= V_YEARMONTH
+                            AND R6.COD_AZIENDA = TRIM(T.COD_AZIENDA)
+                    )
+                  OR EXISTS (
+                        SELECT 1
+                          FROM AW_RUL_ARPTOV_000001 R6
+                          WHERE R6.BATCH_ID = '6'
+                            AND R6.VALID_FR <= V_YEARMONTH
+                            AND NVL(R6.VALID_TO, '999999') >= V_YEARMONTH
+                            AND R6.COD_AZIENDA = TRIM(T.COD_AZIENDA)
+                            AND R6.NATURE_L2_NAME = TRIM(T.NATURE_L2_NAME)
+                    )
+              )
+              /* BATCH_ID=1至4：在取数范围确定后，统一执行特殊剔除规则。 */
+              AND NOT EXISTS (
+                    SELECT 1
+                      FROM AW_RUL_ARPTOV_000001 R1
+                      WHERE R1.BATCH_ID = '1'
+                        AND R1.VALID_FR <= V_YEARMONTH
+                        AND NVL(R1.VALID_TO, '999999') >= V_YEARMONTH
+                        AND R1.CUST_CODE IS NOT NULL
+                        AND TRIM(T.CUST_CODE) LIKE '%' || R1.CUST_CODE || '%'
+              )
+              AND NOT EXISTS (
+                    SELECT 1
+                      FROM AW_RUL_ARPTOV_000001 R2
+                      WHERE R2.BATCH_ID = '2'
+                        AND R2.VALID_FR <= V_YEARMONTH
+                        AND NVL(R2.VALID_TO, '999999') >= V_YEARMONTH
+                        AND R2.COD_AZIENDA = TRIM(T.COD_AZIENDA)
+                        AND R2.CUST_CODE IS NOT NULL
+                        AND R2.CUST_CODE = TRIM(T.CUST_CODE)
+              )
+              AND NOT EXISTS (
+                    SELECT 1
+                      FROM AW_RUL_ARPTOV_000001 R3
+                      WHERE R3.BATCH_ID = '3'
+                        AND R3.VALID_FR <= V_YEARMONTH
+                        AND NVL(R3.VALID_TO, '999999') >= V_YEARMONTH
+                        AND R3.NATURE_L2_NAME IS NOT NULL
+                        AND R3.NATURE_L2_NAME = TRIM(T.NATURE_L2_NAME)
+              )
+              AND NOT EXISTS (
+                    SELECT 1
+                      FROM AW_RUL_ARPTOV_000001 R4
+                      WHERE R4.BATCH_ID = '4'
+                        AND R4.VALID_FR <= V_YEARMONTH
+                        AND NVL(R4.VALID_TO, '999999') >= V_YEARMONTH
+                        AND R4.COD_AZIENDA = TRIM(T.COD_AZIENDA)
+                        AND R4.D_SALE_DEPT IS NOT NULL
+                        AND R4.D_SALE_DEPT = TRIM(T.D_SALE_DEPT)
+              )
+              THEN 'Y' ELSE 'N' END
+        , T.USERUPD = SESSION_USER
+        , T.DATEUPD = SYSDATE
+    WHERE T.COD_SCENARIO = V_SCENARIO
+      AND T.COD_PERIODO = V_PERIODO
+      AND T.COD_AZIENDA IN (
+            SELECT ELEM
+              FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+      );
+  END;
+
+    INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'TOV取数标识更新完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    COMMIT;
+    /* 20261105 新增是否存续字段更新 */
+    CPM_SP_D2M_ARP_EXS_PHASE2(P_SCENARIO , P_PERIODO , P_AZIENDA , SESSION_USER);
+
+    /* 清理当前会话数据。 */
+    DELETE FROM SESSION_AZIENDA_LIST
+    WHERE SESSION_ID = V_SESSION_ID;
+    DELETE FROM SESSION_V_REF_AZIENDA
+    WHERE SESSION_ID = V_SESSION_ID;
+
+    INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'END 执行完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    COMMIT;
+
+  EXCEPTION
+    WHEN OTHERS THEN
+      ROLLBACK;
+      DELETE FROM SESSION_AZIENDA_LIST
+      WHERE SESSION_ID = V_SESSION_ID;
+      DELETE FROM SESSION_V_REF_AZIENDA
+      WHERE SESSION_ID = V_SESSION_ID;
+      V_ERROR_COD := SQLCODE;
+      V_ERROR_MSG := SUBSTR(SQLERRM, 1, 4000);
+      INSERT INTO ZTAB_CPM_LOG(CPM , STEP , REMARK , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
+      VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'ERROR 执行报错' , V_ERROR_COD || ':' || V_ERROR_MSG , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , NVL(V_AZIENDA, P_AZIENDA));
+      COMMIT;
+      RAISE;
+  END CPM_SP_M2M_ARP_AG_M_PHASE2;
