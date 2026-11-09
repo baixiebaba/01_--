@@ -83,6 +83,7 @@ SELECT COD_SCENARIO                                                       /* 场
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
    AND MB_AGE_FLAG IN ('AR', 'OR', 'CA')
+   AND COD_CATEGORIA IN ('ZAMOUNT')
  GROUP BY COD_SCENARIO
         , COD_PERIODO
         , COD_AZIENDA

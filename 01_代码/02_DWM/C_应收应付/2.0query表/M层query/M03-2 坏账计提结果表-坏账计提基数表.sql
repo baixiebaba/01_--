@@ -84,5 +84,6 @@ SELECT COD_SCENARIO                                                       /* 场
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
    AND ME_AGE_FLAG IN ('AR', 'OR', 'CA')
+   AND COD_CATEGORIA IN ('ZAMOUNT')
  ORDER BY COD_AZIENDA
         , A.COD_CONTO
