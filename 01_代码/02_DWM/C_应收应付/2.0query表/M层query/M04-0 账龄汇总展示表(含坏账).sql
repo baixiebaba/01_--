@@ -192,6 +192,7 @@ SELECT COD_SCENARIO                                                       /* 场
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
+   AND COD_CATEGORIA IN ('ZAMOUNT')
  ORDER BY COD_AZIENDA
         , A.COD_CONTO
         , LE_AGE_FLAG
