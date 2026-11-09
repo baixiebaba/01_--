@@ -164,6 +164,7 @@ SELECT COD_SCENARIO                                                       /* 场
      , RSP_PSN                                                            /* 责任人 */
      , IS_ADJ                                                             /* 是否调整 */
      , ADJ_RSN                                                            /* 调整原因 */
+     , TOV_FLAG                                                           /* 周转取数标识 */
      , A.USERUPD                                                          /* 更新用户 */
      , A.DATEUPD                                                          /* 更新时间 */
   FROM AW_MR9_ARPM02_000001 A
