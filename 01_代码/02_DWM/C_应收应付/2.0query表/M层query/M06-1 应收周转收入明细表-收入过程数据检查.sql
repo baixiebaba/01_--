@@ -179,11 +179,11 @@ REVENUE_CALC AS (
                                          ELSE CTP_NODE.NODE
                                        END
               AND CUR_NODE.HQ = CTP_NODE.HQ
-               THEN 'SUB-子公司'
+               THEN F_TGK_UNICODE_AS('decode','SUB-子公司')
              WHEN CUR_NODE.HQ = CTP_NODE.HQ
-               THEN 'GIN-集团内'
-             ELSE 'GEX-集团外'
-           END = 'GEX-集团外'
+               THEN F_TGK_UNICODE_AS('decode','GIN-集团内')
+             ELSE F_TGK_UNICODE_AS('decode','GEX-集团外')
+           END = F_TGK_UNICODE_AS('decode','GEX-集团外')
        AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) IS NOT NULL
        AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) <> 'ZZZZ'
 ),
