@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261109 17:00
-   * 本次修改：ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录
-   * 上次修改：ALTER BY 20261109 16:38 SHIQINGFENG.EX 去掉全部锁定判断，取数、删除、装载都按参数事业部全量执行
+   * 最后更新时间：20261109 18:22
+   * 本次修改：ALTER BY 20261109 18:22 SHIQINGFENG.EX 利润中心事业部映射去重，避免配置重复行导致金额翻倍
+   * 上次修改：ALTER BY 20261109 18:12 SHIQINGFENG.EX 修复周转行事业部二次映射，ARPM03周转金额不再按命中事业部数翻倍
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,8 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261109 18:22 SHIQINGFENG.EX 利润中心事业部映射去重，避免配置重复行导致金额翻倍
+   *   ALTER BY 20261109 18:12 SHIQINGFENG.EX 修复周转行事业部二次映射，ARPM03周转金额不再按命中事业部数翻倍
    *   ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录
    *   ALTER BY 20261109 16:38 SHIQINGFENG.EX 去掉全部锁定判断，取数、删除、装载都按参数事业部全量执行
    *   ALTER BY 20261109 16:20 SHIQINGFENG.EX 入参取消公司参数，删除范围改为按事业部，取数仍按事业部推导的公司清单限制
@@ -203,9 +205,11 @@ BEGIN
       AND (P_BG = 'ALL'
           OR INSTR(',' || P_BG || ',', ',' || A.COD_BG || ',') > 0)
   ),
-  /* 利润中心所属事业部映射：保留利润中心在P_BG范围内匹配到的全部事业部，最终与公司事业部比较。 */
+  /* 利润中心所属事业部映射：保留利润中心在P_BG范围内匹配到的全部事业部，最终与公司事业部比较。
+     配置表存在同一利润中心+事业部重复维护行，去重防止映射阶段整行翻倍。
+     ALTER BY 20261109 18:22 SHIQINGFENG.EX 利润中心事业部映射去重，避免配置重复行导致金额翻倍 */
   PCR_BG_MAP AS (
-    SELECT LTRIM(TRIM(P.COD_DEST2), '0') AS COD_DEST2
+    SELECT DISTINCT LTRIM(TRIM(P.COD_DEST2), '0') AS COD_DEST2
         , P.COD_BG
       FROM TGK_FIMA_HISENSE.AW_RUL_PCRMAP_000001 P
     WHERE P.VALID_FR <= V_YEARMONTH
@@ -769,6 +773,8 @@ BEGIN
         , T.D_CHANNEL_BU
         , T.D_CC_CUSTGRP
         , T.COD_VALUTA
+        /* ALTER BY 20261109 18:12 SHIQINGFENG.EX 保留周转行已映射事业部，防止MAPPED_FACT二次展开导致金额翻倍 */
+        , T.D_BG
         , T.AR_AMT
         , NVL(R.REV_AMT, 0) AS REV_AMT
         , T.F1_ODUE_AMT
@@ -813,6 +819,7 @@ BEGIN
         , R.D_CHANNEL_BU
         , R.D_CC_CUSTGRP
         , R.COD_VALUTA
+        , NULL AS D_BG
         , R.AR_AMT
         , R.REV_AMT
         , R.F1_ODUE_AMT
@@ -864,6 +871,7 @@ BEGIN
         , 'ZZZZ' AS D_CHANNEL_BU
         , 'ZZZZ' AS D_CC_CUSTGRP
         , 'CNY' AS COD_VALUTA
+        , NULL AS D_BG
         , 0 AS AR_AMT
         , NVL(P.BCY_AMT, 0) AS REV_AMT
         , 0 AS F1_ODUE_AMT
@@ -901,13 +909,14 @@ BEGIN
         SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
       ) C
   ),
-  /* 合并已匹配周转、未匹配收入及CPRS，至此尚未产生D_BG。 */
+  /* 合并已匹配周转、未匹配收入及CPRS；周转行带TURNOVER_MAPPED已映射的D_BG，收入/CPRS该列为NULL。
+     ALTER BY 20261109 18:12 SHIQINGFENG.EX MERGED_FACT保留周转行D_BG */
   MERGED_FACT AS (
     SELECT COD_SCENARIO, COD_PERIODO, COD_AZIENDA, COD_CONTO, COD_CATEGORIA
         , GRP_SCOPE, CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
         , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_NAME, NATURE_L2_NAME
         , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU
-        , D_CC_CUSTGRP, COD_VALUTA, AR_AMT, REV_AMT, F1_ODUE_AMT, F2_EPAY_AMT
+        , D_CC_CUSTGRP, COD_VALUTA, D_BG, AR_AMT, REV_AMT, F1_ODUE_AMT, F2_EPAY_AMT
         , F3_ECR_AMT, F4_UREB_AMT, F5_UFEE_AMT, F6_INVSM_AMT, F7_GSUB_AMT, F8_ADJ_AMT
       FROM MATCHED
     UNION ALL
@@ -915,7 +924,7 @@ BEGIN
         , GRP_SCOPE, CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
         , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_NAME, NATURE_L2_NAME
         , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU
-        , D_CC_CUSTGRP, COD_VALUTA, AR_AMT, REV_AMT, F1_ODUE_AMT, F2_EPAY_AMT
+        , D_CC_CUSTGRP, COD_VALUTA, D_BG, AR_AMT, REV_AMT, F1_ODUE_AMT, F2_EPAY_AMT
         , F3_ECR_AMT, F4_UREB_AMT, F5_UFEE_AMT, F6_INVSM_AMT, F7_GSUB_AMT, F8_ADJ_AMT
       FROM UNMATCHED_REVENUE
     UNION ALL
@@ -923,7 +932,7 @@ BEGIN
         , GRP_SCOPE, CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
         , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_NAME, NATURE_L2_NAME
         , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU
-        , D_CC_CUSTGRP, COD_VALUTA, AR_AMT, REV_AMT, F1_ODUE_AMT, F2_EPAY_AMT
+        , D_CC_CUSTGRP, COD_VALUTA, D_BG, AR_AMT, REV_AMT, F1_ODUE_AMT, F2_EPAY_AMT
         , F3_ECR_AMT, F4_UREB_AMT, F5_UFEE_AMT, F6_INVSM_AMT, F7_GSUB_AMT, F8_ADJ_AMT
       FROM CPRS
   ),
@@ -966,6 +975,9 @@ BEGIN
       FROM MERGED_FACT M
       LEFT JOIN PCR_BG_MAP PCR
         ON PCR.COD_DEST2 = LTRIM(TRIM(M.COD_DEST2), '0')
+       /* 周转行已在TURNOVER_MAPPED按事业部展开，此处锁定原映射只关联一次；无D_BG的收入/CPRS按全部命中事业部展开。
+          ALTER BY 20261109 18:12 SHIQINGFENG.EX 已映射周转行不再二次展开，修复周转金额按命中事业部数翻倍 */
+       AND (M.D_BG IS NULL OR PCR.COD_BG = M.D_BG)
       LEFT JOIN ATS_BG_MAP ATS
         ON ATS.COD_AZIENDA = M.COD_AZIENDA
     WHERE PCR.COD_BG IS NOT NULL
