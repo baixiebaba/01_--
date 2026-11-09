@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 17:35
- * 本次修改：ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
- * 上次修改：ALTER BY 20261109 16:25 SHIQINGFENG.EX 最终展示只保留参数事业部，无事业部的记录不再展示。
+ * 最后更新时间：20261109 17:52
+ * 本次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 上次修改：ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
  *   ALTER BY 20261109 16:25 SHIQINGFENG.EX 最终展示只保留参数事业部，无事业部的记录不再展示。
  *   ALTER BY 20261109 16:15 SHIQINGFENG.EX 最终展示按事业部参数过滤，其他事业部整批排除。
@@ -489,6 +490,15 @@ SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
         , F.BUSINESS_UNIT_CODE
         , F.ARPTOV_FLAG
         , F.AR_AMT_FLAG
+   HAVING SUM(F.TURNOVER_AMT) <> 0
+       OR SUM(F.F1_ODUE_AMT) <> 0
+       OR SUM(F.F2_EPAY_AMT) <> 0
+       OR SUM(F.F3_ECR_AMT) <> 0
+       OR SUM(F.F4_UREB_AMT) <> 0
+       OR SUM(F.F5_UFEE_AMT) <> 0
+       OR SUM(F.F6_INVSM_AMT) <> 0
+       OR SUM(F.F7_GSUB_AMT) <> 0
+       OR SUM(F.F8_ADJ_AMT) <> 0
  ORDER BY F.COD_AZIENDA
         , F.CUST_CODE
         , F.TURNOVER_PROFITCENTER_CODE

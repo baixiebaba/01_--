@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 14:08
- * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
- * 上次修改：ALTER BY 20261103 11:41 SHIQINGFENG.EX 删除展示字段前的列字母注释，新增公司一级/二级分类编码及描述字段，未修改金额和过滤逻辑。
+ * 最后更新时间：20261109 18:00
+ * 本次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *
  * 查询名称  ：应收周转展示表-客商-周转展示表-客商
  * 源表      ：AW_MR7_ARPA01_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 11:41 SHIQINGFENG.EX 删除展示字段前的列字母注释，新增公司一级/二级分类编码及描述字段，未修改金额和过滤逻辑。
  *******************************************************************************/
@@ -265,6 +266,83 @@ SELECT
          WHERE COD_DEST3_GERARCHIA = '01'
        ) D3
     ON D3.COD_DEST3 = S.COD_DEST3
+ /* 金额全为 0 的记录不输出 */
+ WHERE NVL(S.ACT_BEG_OCP_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_OCP_AMT, 0) <> 0
+    OR NVL(S.ACT_END_OCP_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_OCP_AMT, 0) <> 0
+    OR NVL(S.ACT_MTD_CSM_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_CSM_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_OCP_AMT, 0) <> 0
+    OR NVL(S.LY_LM_OCP_AMT, 0) <> 0
+    OR NVL(S.LY_END_OCP_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_OCP_AMT, 0) <> 0
+    OR NVL(S.LY_MTD_CSM_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_CSM_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.ACT_BEG_F8_ADJ_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.ACT_LM_F8_ADJ_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.ACT_END_F8_ADJ_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.ACT_YTD_F8_ADJ_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.LY_BEG_F8_ADJ_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.LY_LM_F8_ADJ_AMT, 0) <> 0
+    OR NVL(S.LY_END_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.LY_END_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.LY_END_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.LY_END_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.LY_END_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.LY_END_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.LY_END_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.LY_END_F8_ADJ_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F1_ODUE_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F2_EPAY_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F3_ECR_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F4_UREB_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F5_UFEE_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F6_INVSM_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F7_GSUB_AMT, 0) <> 0
+    OR NVL(S.LY_YTD_F8_ADJ_AMT, 0) <> 0
  ORDER BY S.COD_AZIENDA
         , S.CUST_CODE
 

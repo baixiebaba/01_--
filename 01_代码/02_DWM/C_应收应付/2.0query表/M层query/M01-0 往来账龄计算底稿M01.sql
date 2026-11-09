@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 14:08
- * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
- * 上次修改：ALTER BY 20261103 14:04 SHIQINGFENG.EX 将公司分类标量子查询改为去重后的 CHANNEL_DIM 关联，未修改业务逻辑。
+ * 最后更新时间：20261109 18:00
+ * 本次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *
  * 查询名称  ：往来账龄计算底稿M01
  * 源表      ：AW_MR9_ARPM01_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 14:04 SHIQINGFENG.EX 将公司分类标量子查询改为去重后的 CHANNEL_DIM 关联，未修改业务逻辑。
  *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
@@ -130,5 +131,15 @@ SELECT COD_SCENARIO                                                       /* 场
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
+   /* 金额全为 0 的记录不输出 */
+   AND (
+        NVL(A.BCY_0_AMT, 0) <> 0
+        OR NVL(A.QCY_0_AMT, 0) <> 0
+        OR NVL(A.CLOSING_RATE_BCY_AMT, 0) <> 0
+        OR NVL(A.POSTING_RATE_BCY_AMT, 0) <> 0
+        OR NVL(A.TH_FX_EVAL_AMT, 0) <> 0
+        OR NVL(A.ADJ_REB_AMT, 0) <> 0
+        OR NVL(A.ADJ_RET_AMT, 0) <> 0
+       )
    AND COD_CATEGORIA = 'ZAMOUNT'
  ORDER BY SRC_DETAIL,COD_AZIENDA,COD_CONTO

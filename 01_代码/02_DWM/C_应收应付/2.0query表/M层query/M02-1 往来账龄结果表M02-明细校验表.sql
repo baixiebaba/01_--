@@ -109,11 +109,18 @@ SELECT NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE)            AS COMPANY_CODE   /*
      , NVL(T20C.CUR_AMT, 0) - NVL(T10C.CUR_AMT, 0)          AS CUR_AMT_DIFF   /* 本期 */
        /* 按金额判断该侧是否有数，两侧金额全为 0 的行已在 WHERE 排除 */
      , CASE
-         WHEN GREATEST(ABS(NVL(T20C.BY_AMT, 0)), ABS(NVL(T20C.LM_AMT, 0)), ABS(NVL(T20C.CUR_AMT, 0))) <= 0.005
-           THEN '仅1.0有'
-         WHEN GREATEST(ABS(NVL(T10C.BY_AMT, 0)), ABS(NVL(T10C.LM_AMT, 0)), ABS(NVL(T10C.CUR_AMT, 0))) <= 0.005
+         WHEN (   NVL(T20C.BY_AMT, 0) <> 0
+               OR NVL(T20C.LM_AMT, 0) <> 0
+               OR NVL(T20C.CUR_AMT, 0) <> 0)
+          AND (   NVL(T10C.BY_AMT, 0) <> 0
+               OR NVL(T10C.LM_AMT, 0) <> 0
+               OR NVL(T10C.CUR_AMT, 0) <> 0)
+           THEN '两边都有'
+         WHEN (   NVL(T20C.BY_AMT, 0) <> 0
+               OR NVL(T20C.LM_AMT, 0) <> 0
+               OR NVL(T20C.CUR_AMT, 0) <> 0)
            THEN '仅2.0有'
-         ELSE '两边都有'
+         ELSE '仅1.0有'
        END AS MATCH_FLAG
      , NVL(T10C.ADJ_FLAG, 0)                                AS ADJ_FLAG       /* 1.0 手工调整标识 */
   FROM T20C
@@ -122,6 +129,10 @@ SELECT NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE)            AS COMPANY_CODE   /*
    AND T20C.SEQ = T10C.SEQ
    AND T20C.CUST_CODE = T10C.CUST_CODE
  /* 两侧金额全为 0 的空壳行不展示 */
- WHERE GREATEST(ABS(NVL(T20C.BY_AMT, 0)), ABS(NVL(T20C.LM_AMT, 0)), ABS(NVL(T20C.CUR_AMT, 0))) > 0.005
-    OR GREATEST(ABS(NVL(T10C.BY_AMT, 0)), ABS(NVL(T10C.LM_AMT, 0)), ABS(NVL(T10C.CUR_AMT, 0))) > 0.005
+ WHERE NVL(T20C.BY_AMT, 0) <> 0
+    OR NVL(T20C.LM_AMT, 0) <> 0
+    OR NVL(T20C.CUR_AMT, 0) <> 0
+    OR NVL(T10C.BY_AMT, 0) <> 0
+    OR NVL(T10C.LM_AMT, 0) <> 0
+    OR NVL(T10C.CUR_AMT, 0) <> 0
  ORDER BY NVL(T20C.COMPANY_CODE, T10C.COMPANY_CODE), NVL(T20C.SEQ, T10C.SEQ), NVL(T20C.CUST_CODE, T10C.CUST_CODE)

@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 14:08
- * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
- * 上次修改：ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，未修改金额和过滤逻辑。
+ * 最后更新时间：20261109 18:00
+ * 本次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *
  * 查询名称  ：应收周转展示表-客商-ADS数据查询
  * 源表      ：AW_MR7_ARPA01_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，未修改金额和过滤逻辑。
  *******************************************************************************/
@@ -152,6 +153,91 @@ SELECT T.COD_SCENARIO
  WHERE T.COD_SCENARIO = ${$Scenario.code}
    AND T.COD_PERIODO = ${$Period.code}
    /* 公司和事业部范围由报表参数传入，保留 IN 写法支持多值参数。 */
+   /* 金额全为 0 的记录不输出 */
+   AND (
+        NVL(T.PLN_BEG_OCP_AMT, 0) <> 0
+        OR NVL(T.PLN_LM_OCP_AMT, 0) <> 0
+        OR NVL(T.PLN_END_OCP_AMT, 0) <> 0
+        OR NVL(T.PLN_YTD_OCP_AMT, 0) <> 0
+        OR NVL(T.PLN_MTD_CSM_AMT, 0) <> 0
+        OR NVL(T.PLN_YTD_CSM_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_OCP_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_OCP_AMT, 0) <> 0
+        OR NVL(T.ACT_END_OCP_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_OCP_AMT, 0) <> 0
+        OR NVL(T.ACT_MTD_CSM_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_CSM_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_OCP_AMT, 0) <> 0
+        OR NVL(T.LY_LM_OCP_AMT, 0) <> 0
+        OR NVL(T.LY_END_OCP_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_OCP_AMT, 0) <> 0
+        OR NVL(T.LY_MTD_CSM_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_CSM_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.LY_END_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F1_ODUE_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.LY_END_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F2_EPAY_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.LY_END_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F3_ECR_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.LY_END_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F4_UREB_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.LY_END_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F5_UFEE_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.LY_END_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F6_INVSM_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.LY_END_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F7_GSUB_AMT, 0) <> 0
+        OR NVL(T.ACT_BEG_F8_ADJ_AMT, 0) <> 0
+        OR NVL(T.ACT_LM_F8_ADJ_AMT, 0) <> 0
+        OR NVL(T.ACT_END_F8_ADJ_AMT, 0) <> 0
+        OR NVL(T.ACT_YTD_F8_ADJ_AMT, 0) <> 0
+        OR NVL(T.LY_BEG_F8_ADJ_AMT, 0) <> 0
+        OR NVL(T.LY_LM_F8_ADJ_AMT, 0) <> 0
+        OR NVL(T.LY_END_F8_ADJ_AMT, 0) <> 0
+        OR NVL(T.LY_YTD_F8_ADJ_AMT, 0) <> 0
+       )
    AND T.D_BG IN (${$ANL_D_BG.code})
  ORDER BY T.COD_AZIENDA
         , T.CUST_CODE

@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261104 17:56
- * 本次修改：ALTER BY 20261104 17:56 SHIQINGFENG.EX 恢复校验设计：M02金额按存储过程从M01重算，不读取M02目标表；删除CURRENT_SOURCE_ROW_CNT，并完成M01/M02键级对账。
- * 上次修改：ALTER BY 20261104 17:51 SHIQINGFENG.EX 修正M01/M02金额来源：M01直接汇总ARPM01当前ORG来源，M02直接汇总ARPM02实际落表；删除CURRENT_SOURCE_ROW_CNT。
+ * 最后更新时间：20261109 18:00
+ * 本次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 上次修改：ALTER BY 20261104 17:56 SHIQINGFENG.EX 恢复校验设计：M02金额按存储过程从M01重算，不读取M02目标表；删除CURRENT_SOURCE_ROW_CNT，并完成M01/M02键级对账。
  *
  * 查询名称  ：SUPPLEMENT_AGG补充金额进入M02校验
  * 源表      ：TGK_FIMA_HISENSE.AW_MR9_ARPM01_000001、TGK_FIMA_HISENSE.DATI_CAMBIO、TGK_FIMA_HISENSE.SQF_TEST
  *
  * 修改历史：
+ *   ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261104 17:56 SHIQINGFENG.EX 恢复校验设计：M02金额按存储过程从M01重算，不读取M02目标表；删除CURRENT_SOURCE_ROW_CNT，并完成M01/M02键级对账。
  *   ALTER BY 20261104 17:51 SHIQINGFENG.EX 修正M01/M02金额来源：M01直接汇总ARPM01当前ORG来源，M02直接汇总ARPM02实际落表；删除CURRENT_SOURCE_ROW_CNT。
  *   ALTER BY 20261104 17:43 SHIQINGFENG.EX 修正校验范围：改用CURRENT_SOURCE_KEY与SUPPLEMENT_AGG业务键并集，完整保留仅M01/M02和仅补充金额数据；补全SQF_TEST schema。
@@ -256,6 +257,17 @@
      AND NVL(S.COD_CONTO, '#') = NVL(K.COD_CONTO, '#')
      AND NVL(S.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
      AND NVL(S.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+   /* 金额全为 0 的记录不输出 */
+   WHERE NVL(C.M01_BCY_0_AMT, 0) <> 0
+      OR NVL(C.M02_BCY_0_AMT, 0) <> 0
+      OR NVL(S.SHP_NINV_AMT, 0) <> 0
+      OR NVL(S.RET_NTRF_AMT, 0) <> 0
+      OR NVL(S.OVERDUE_AMT, 0) <> 0
+      OR NVL(S.INV_SAMPLE_AMT, 0) <> 0
+      OR NVL(S.EPAY_AMT, 0) <> 0
+      OR NVL(S.ECLS_AMT, 0) <> 0
+      OR NVL(S.UREB_AMT, 0) <> 0
+      OR NVL(S.UFEE_AMT, 0) <> 0
   ORDER BY M02_ENTRY_FLAG
           , K.COD_AZIENDA
           , K.COD_CONTO

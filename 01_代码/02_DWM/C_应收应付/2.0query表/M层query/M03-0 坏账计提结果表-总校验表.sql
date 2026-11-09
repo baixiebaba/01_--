@@ -159,6 +159,7 @@ SELECT COMPANY_CODE                         AS COMPANY_CODE/* 公司 */
      , AMT_20 - AMT_10                     AS AMT_DIFF     /* 差异（2.0减1.0） */
   FROM T20_T10
  /* 2.0 与 1.0 金额全为 0 的组合不展示 */
- WHERE GREATEST(ABS(AMT_20), ABS(AMT_10)) > 0.005
+ WHERE NVL(AMT_20, 0) <> 0
+    OR NVL(AMT_10, 0) <> 0
  ORDER BY COMPANY_CODE
         , ITEM_SEQ

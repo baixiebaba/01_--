@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 18:56
- * 本次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
- * 上次修改：ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
+ * 最后更新时间：20261109 18:00
+ * 本次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *
  * 查询名称  ：坏账计提结果表-坏账计算表（管理口径-事业部）
  * 源表      ：AW_MR9_ARPM02_000001
  *
  * 修改历史：
+ *   ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
  *   ALTER BY 20261102 17:26 SHIQINGFENG.EX 将公司参数筛选由等值判断统一为 IN 写法，并统一 Query 排版，未修改其他逻辑。
@@ -130,6 +131,17 @@ SELECT COD_SCENARIO                                                       /* 场
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
    AND ME_AGE_FLAG IN ('AR', 'OR', 'CA')
+   /* 金额全为 0 的记录不输出 */
+   AND (
+        NVL(A.BD_BASE_0_AMT, 0) <> 0
+        OR NVL(A.SPID_0_AMT, 0) <> 0
+        OR NVL(A.BD_0_AMT, 0) <> 0
+        OR NVL(A.AGE_ALLOC_0_AMT, 0) <> 0
+        OR NVL(A.BD_AFAL_0_AMT, 0) <> 0
+        OR NVL(A.LM_BD_AFAL_0_AMT, 0) <> 0
+        OR NVL(A.WRITEOFF_AMT, 0) <> 0
+        OR NVL(A.MTD_BD_PROV_OCUR_AMT, 0) <> 0
+       )
    AND COD_CATEGORIA IN ('ZAMOUNT')
  ORDER BY COD_AZIENDA
         , A.COD_CONTO

@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 14:08
- * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
- * 上次修改：ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，统一渠道层级视图来源，未修改金额和过滤逻辑。
+ * 最后更新时间：20261109 17:52
+ * 本次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *
  * 查询名称  ：应收周转收入明细表-周转收入明细
  * 源表      ：AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，统一渠道层级视图来源，未修改金额和过滤逻辑。
  *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
@@ -45,6 +46,8 @@ BASE AS (
                  OR T.COD_PERIODO = '12'))
         )
 )
+SELECT X.*
+  FROM (
 SELECT
  /* 场景 / 期间 */
        ${$Scenario.code}                   AS COD_SCENARIO                       /* 场景 */
@@ -138,4 +141,10 @@ SELECT
         , B.D_CHANNEL_BU, B.D_CC_CUSTGRP, B.COD_VALUTA
         , G.COD_ELEGER6, G.DESC_ELEGER6, G.COD_ELEGER5, G.DESC_ELEGER5
         , DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER4, DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5
+) X
+ /* 金额全为 0 的公司客商组合不展示 */
+ WHERE    NVL(X.REV_AMT, 0) <> 0
+       OR NVL(X.LY_REV_AMT, 0) <> 0
+       OR NVL(X.YTD_REV_AMT, 0) <> 0
+       OR NVL(X.YTD_LY_REV_AMT, 0) <> 0
 

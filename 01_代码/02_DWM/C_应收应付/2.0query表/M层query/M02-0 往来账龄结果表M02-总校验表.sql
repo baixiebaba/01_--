@@ -336,9 +336,15 @@ SELECT COMPANY_CODE   /* 公司 */
      , CUR_AMT_DIFF   /* 差异-本期（2.0减1.0） */
   FROM ALL_RESULT
  /* 2.0、1.0 及总余额金额全为 0 的维度组合不展示 */
- WHERE GREATEST(ABS(BY_AMT_20), ABS(LM_AMT_20), ABS(CUR_AMT_20)
-              , ABS(BY_AMT_10), ABS(LM_AMT_10), ABS(CUR_AMT_10)
-              , ABS(BY_AMT_LORDI), ABS(LM_AMT_LORDI), ABS(CUR_AMT_LORDI)) > 0.005
+ WHERE NVL(BY_AMT_20, 0) <> 0
+    OR NVL(LM_AMT_20, 0) <> 0
+    OR NVL(CUR_AMT_20, 0) <> 0
+    OR NVL(BY_AMT_10, 0) <> 0
+    OR NVL(LM_AMT_10, 0) <> 0
+    OR NVL(CUR_AMT_10, 0) <> 0
+    OR NVL(BY_AMT_LORDI, 0) <> 0
+    OR NVL(LM_AMT_LORDI, 0) <> 0
+    OR NVL(CUR_AMT_LORDI, 0) <> 0
 /* 按公司、往来项目、总计及用户指定的三段集团所属范围顺序展示。 */
  ORDER BY COMPANY_CODE
         , ITEM_SEQ
