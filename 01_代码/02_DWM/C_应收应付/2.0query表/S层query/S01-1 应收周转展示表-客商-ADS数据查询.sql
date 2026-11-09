@@ -152,7 +152,6 @@ SELECT T.COD_SCENARIO
  WHERE T.COD_SCENARIO = ${$Scenario.code}
    AND T.COD_PERIODO = ${$Period.code}
    /* 公司和事业部范围由报表参数传入，保留 IN 写法支持多值参数。 */
-   AND T.COD_AZIENDA IN (${$Entity.code})
    AND T.D_BG IN (${$ANL_D_BG.code})
  ORDER BY T.COD_AZIENDA
         , T.CUST_CODE
