@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 17:52
- * 本次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
- * 上次修改：ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
+ * 最后更新时间：20261109 18:32
+ * 本次修改：ALTER BY 20261109 18:32 SHIQINGFENG.EX 取消事业部映射冲突判定，利润中心命中多个事业部时逐组出行。
+ * 上次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 18:32 SHIQINGFENG.EX 取消事业部映射冲突判定，利润中心命中多个事业部时逐组出行。
  *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
  *   ALTER BY 20261109 16:25 SHIQINGFENG.EX 最终展示只保留参数事业部，无事业部的记录不再展示。
@@ -205,33 +206,31 @@ TURNOVER_NORMALIZED AS (
             , LTRIM(TRIM(T.SRC_PROFITCENTER_CODE), '0')
             , T.ARPTOV_FLAG
 ),
-/* 账套映射聚合：每个账套只保留一个状态行，供未映射和冲突留痕使用。 */
+/* 账套映射聚合：每个账套只保留一个状态行，供未映射留痕使用。 */
 ATS_BG_STATUS AS (
     SELECT A.COD_AZIENDA
          , COUNT(DISTINCT A.COD_BG) AS ATS_BG_COUNT
       FROM ATS_BG_MAP A
      GROUP BY A.COD_AZIENDA
 ),
-/* 利润中心映射聚合：每个利润中心只保留一个状态行，供未映射和冲突留痕使用。 */
+/* 利润中心映射聚合：每个利润中心只保留一个状态行，供未映射留痕使用。 */
 PCR_BG_STATUS AS (
     SELECT P.COD_DEST2
          , COUNT(DISTINCT P.COD_BG) AS PCR_BG_COUNT
       FROM PCR_BG_MAP P
      GROUP BY P.COD_DEST2
 ),
-/* 按TOV实际连接方式匹配公司与利润中心的共同事业部，避免分别聚合后丢失有效交集。 */
+/* 利润中心与公司的事业部交集：命中几个事业部就出几行，与TOV的INNER JOIN口径一致。
+   ALTER BY 20261109 18:32 SHIQINGFENG.EX 取消事业部映射冲突判定 */
 MATCHED_BG_STATUS AS (
-    SELECT P.COD_DEST2
+    SELECT DISTINCT P.COD_DEST2
          , A.COD_AZIENDA
-         , COUNT(DISTINCT P.COD_BG) AS MATCHED_BG_COUNT
-         , MAX(P.COD_BG) AS MATCHED_BG_CODE
+         , P.COD_BG
       FROM PCR_BG_MAP P
       JOIN ATS_BG_MAP A
         ON A.COD_BG = P.COD_BG
-     GROUP BY P.COD_DEST2
-            , A.COD_AZIENDA
 ),
-/* 映射后的周转数据：全量事业部先计算，保留映射冲突、未映射和公司与利润中心不一致的留痕状态。 */
+/* 映射后的周转数据：每个命中事业部出一行，保留未映射和公司与利润中心不一致的留痕状态。 */
 MAPPED_TURNOVER AS (
     SELECT T.COD_SCENARIO
          , T.COD_PERIODO
@@ -247,19 +246,14 @@ MAPPED_TURNOVER AS (
          , T.GRP_SCOPE
          , T.CP_COMPANY_CODE
          , T.TURNOVER_PROFITCENTER_CODE
-         , CASE
-             WHEN MATCHED.MATCHED_BG_COUNT = 1
-               THEN MATCHED.MATCHED_BG_CODE
-           END AS BUSINESS_UNIT_CODE
+         , MATCHED.COD_BG AS BUSINESS_UNIT_CODE
          , T.ARPTOV_FLAG
          , CASE
-             WHEN MATCHED.MATCHED_BG_COUNT > 1
-               THEN '事业部映射冲突'
              WHEN PCR.PCR_BG_COUNT IS NULL
                THEN '利润中心未映射事业部'
              WHEN ATS.ATS_BG_COUNT IS NULL
                THEN '账套未映射事业部'
-             WHEN MATCHED.MATCHED_BG_COUNT IS NULL
+             WHEN MATCHED.COD_BG IS NULL
                THEN '公司与利润中心事业部不一致'
              ELSE '已映射同一事业部'
            END AS BUSINESS_UNIT_MAP_STATUS
