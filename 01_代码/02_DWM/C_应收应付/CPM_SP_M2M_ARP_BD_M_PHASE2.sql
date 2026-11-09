@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_BD_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261109 10:30
-   * 本次修改：ALTER BY 20261109 10:30 SHIQINGFENG.EX STEP3被分摊负数金额改按公司+主户+科目+利润中心汇总，比例仍按公司+主户+科目
-   * 上次修改：ALTER BY 20261106 18:10 SHIQINGFENG.EX 个别认定行按其认定金额全额计提坏账，不再参与比例计算
+   * 最后更新时间：20261109 10:45
+   * 本次修改：ALTER BY 20261109 10:45 SHIQINGFENG.EX STEP3分摊范围限定ZAMOUNT业务行，组内无负数时正数行不再计算分摊比例
+   * 上次修改：ALTER BY 20261109 10:30 SHIQINGFENG.EX STEP3被分摊负数金额改按公司+主户+科目+利润中心汇总，比例仍按公司+主户+科目
    *
    * 过程名称  ：CPM_SP_M2M_ARP_BD_M_PHASE2
    * 功能描述  ：按STEP1坏账计提基数、STEP2坏账计算、STEP3坏账分摊三步加工ARPM02坏账表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_BD_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM02_000001
    *
    * 修改历史：
+   *   ALTER BY 20261109 10:45 SHIQINGFENG.EX STEP3分摊范围限定ZAMOUNT业务行，组内无负数时正数行不再计算分摊比例
    *   ALTER BY 20261109 10:30 SHIQINGFENG.EX STEP3被分摊负数金额改按公司+主户+科目+利润中心汇总，比例仍按公司+主户+科目
    *   ALTER BY 20261106 18:10 SHIQINGFENG.EX 个别认定行按其认定金额全额计提坏账，不再参与比例计算
    *   ALTER BY 20261105 18:25 SHIQINGFENG.EX STEP1负数改为行内优先冲减，行内冲不掉的再跨利润中心按账龄从远到近分配，冲不完落账龄1
@@ -677,7 +678,8 @@ BEGIN
   MERGE INTO AW_MR9_ARPM02_000001 T
   USING (
     WITH
-    /* 当前期间目标表行，仅保留STEP3实际使用字段并前置公司、期间过滤。 */
+    /* 当前期间业务行，仅保留STEP3实际使用字段并前置公司、期间过滤。
+       ALTER BY 20261109 10:45 SHIQINGFENG.EX STEP3分摊范围限定ZAMOUNT业务行，组内无负数时正数行不再计算分摊比例 */
     BASE_DATA AS (
       SELECT A.OID, A.COD_AZIENDA, A.CUST_CODE, A.COD_CONTO, A.COD_DEST2
           , NVL(NULLIF(TRIM(A.CUST_HEAD_CODE), ''), A.CUST_CODE) CUST_HEAD_KEY
@@ -691,6 +693,7 @@ BEGIN
         FROM AW_MR9_ARPM02_000001 A
        WHERE A.COD_SCENARIO = V_SCENARIO
          AND A.COD_PERIODO = V_PERIODO
+         AND A.COD_CATEGORIA = 'ZAMOUNT'
          AND A.COD_AZIENDA IN (
                SELECT ELEM
                  FROM SESSION_AZIENDA_LIST
@@ -714,10 +717,11 @@ BEGIN
          )
        GROUP BY I.COD_AZIENDA, I.CUST_CODE, I.COD_DEST2, I.COD_CONTO, I.NATURE_L3_NAME
     ),
-    /* 按公司、主户、科目汇总正数基数，作为分摊比例分母。 */
+    /* 按公司、主户、科目汇总：正数基数作分摊比例分母，负数行数判断本组是否存在待分摊数据。 */
     KEY_TOTAL AS (
       SELECT COD_AZIENDA, CUST_HEAD_KEY, COD_CONTO
           , SUM(CASE WHEN BD_0_AMT > 0 THEN BD_0_AMT ELSE 0 END) POS_TOTAL
+          , SUM(CASE WHEN BD_0_AMT < 0 THEN 1 ELSE 0 END) NEG_CNT
         FROM BASE_DATA
        GROUP BY COD_AZIENDA, CUST_HEAD_KEY, COD_CONTO
     ),
@@ -743,12 +747,12 @@ BEGIN
         FROM BASE_DATA
        GROUP BY COD_AZIENDA, CUST_HEAD_KEY, COD_CONTO, COD_DEST2
     ),
-    /* 合并预聚合结果：比例按公司+主户+科目正数基数计算，负数金额取本利润中心组内合计。源数据保持OID唯一且科目不跨组分摊。 */
+    /* 合并预聚合结果：比例按公司+主户+科目正数基数计算、仅组内存在负数时才算，负数金额取本利润中心组内合计。源数据保持OID唯一且科目不跨组分摊。 */
     ALLOCATION_DATA AS (
       SELECT BASE_DATA.*
           , CASE WHEN INDIVIDUAL_KEYS.COD_AZIENDA IS NULL THEN 0 ELSE 1 END HAS_INDIVIDUAL
           , NVL(KEY_TOTAL.POS_TOTAL, 0) POS_TOTAL
-          , CASE WHEN BASE_DATA.BD_0_AMT > 0
+          , CASE WHEN BASE_DATA.BD_0_AMT > 0 AND KEY_TOTAL.NEG_CNT > 0
                  THEN BASE_DATA.BD_0_AMT / NULLIF(KEY_TOTAL.POS_TOTAL, 0) ELSE 0 END ALLOC_RATIO
           , NVL(AGE_ALLOC_TOTAL.AGE_ALLOC_1, 0) AGE_ALLOC_1, NVL(AGE_ALLOC_TOTAL.AGE_ALLOC_2, 0) AGE_ALLOC_2
           , NVL(AGE_ALLOC_TOTAL.AGE_ALLOC_3, 0) AGE_ALLOC_3, NVL(AGE_ALLOC_TOTAL.AGE_ALLOC_4, 0) AGE_ALLOC_4
