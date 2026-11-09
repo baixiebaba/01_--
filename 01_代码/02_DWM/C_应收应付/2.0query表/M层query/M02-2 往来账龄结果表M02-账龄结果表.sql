@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 14:08
- * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
- * 上次修改：ALTER BY 20261103 14:04 SHIQINGFENG.EX 将公司分类标量子查询改为去重后的 CHANNEL_DIM 关联，未修改业务逻辑。
+ * 最后更新时间：20261109 17:20
+ * 本次修改：ALTER BY 20261109 17:20 SHIQINGFENG.EX 新增直销垫资扣减、返利扣减两个金额字段，放在呆死金额之前。
+ * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *
  * 查询名称  ：往来账龄结果表M02-账龄结果表
  * 源表      ：AW_MR9_ARPM02_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261109 17:20 SHIQINGFENG.EX 新增直销垫资扣减、返利扣减两个金额字段，放在呆死金额之前。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 14:04 SHIQINGFENG.EX 将公司分类标量子查询改为去重后的 CHANNEL_DIM 关联，未修改业务逻辑。
  *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
@@ -150,6 +151,8 @@ SELECT COD_SCENARIO                                                       /* 场
      , CURRENCY_ACCT_DETAIL                                               /* 币种科目构成明细 */
      , ADJ_REB_AMT                                                        /* 调整后返利金额 */
      , ADJ_RET_AMT                                                        /* 调整后退货金额 */
+     , SPC_DSV_DED_AMT                                                    /* 特殊调整项-直销垫资扣减金额 */
+     , SPC_REB_DED_AMT                                                    /* 特殊调整项-返利扣减金额 */
      , DEAD_AMT                                                           /* 呆死金额 */
      , RISK_AMT                                                           /* 风险金额 */
      , PAY_METHOD                                                         /* 付款方式 */

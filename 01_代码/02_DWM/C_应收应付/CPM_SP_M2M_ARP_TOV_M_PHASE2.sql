@@ -1,16 +1,15 @@
 CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
     P_SCENARIO   IN VARCHAR2
   , P_PERIODO    IN VARCHAR2
-  , P_AZIENDA    IN VARCHAR2
   , P_BG         IN VARCHAR2
   , SESSION_USER IN VARCHAR2
 ) AS
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261109 11:10
-   * 本次修改：ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为AG过程维护的TOV_FLAG标识列
-   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
+   * 最后更新时间：20261109 17:00
+   * 本次修改：ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录
+   * 上次修改：ALTER BY 20261109 16:38 SHIQINGFENG.EX 去掉全部锁定判断，取数、删除、装载都按参数事业部全量执行
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -18,6 +17,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录
+   *   ALTER BY 20261109 16:38 SHIQINGFENG.EX 去掉全部锁定判断，取数、删除、装载都按参数事业部全量执行
+   *   ALTER BY 20261109 16:20 SHIQINGFENG.EX 入参取消公司参数，删除范围改为按事业部，取数仍按事业部推导的公司清单限制
    *   ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为AG过程维护的TOV_FLAG标识列
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度
@@ -53,17 +55,12 @@ BEGIN
   V_PERIODO := LPAD(P_PERIODO, 2, '0');
   V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
 
-  /* 保持DWMCRS现状，仅以账套映射限制本次输入公司范围。 */
+  /* 公司清单由事业部参数反推，只用于限制取数源数据量；删除与写入范围按事业部判断。 */
   INSERT INTO SESSION_AZIENDA_LIST(SESSION_ID, ELEM)
   SELECT DISTINCT V_SESSION_ID
       , ELEM
     FROM SESSION_V_REF_AZIENDA
   WHERE HIE = '10'
-    AND (
-          INSTR(',' || P_AZIENDA || ',', ',' || ELEM || ',') > 0
-        OR INSTR(',' || P_AZIENDA || ',', ',' || NODE || ',') > 0
-        OR P_AZIENDA = 'ALL'
-    )
     AND ELEM IN (
           SELECT COD_AZIENDA
             FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
@@ -101,46 +98,14 @@ BEGIN
   VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
   COMMIT;
 
-  /* 删除当前批次未锁定事业部的本过程数据，锁定事业部保留既有结果且不参与重算。 */
-  DELETE FROM AW_MR9_ARPM03_000001 D
-  WHERE COD_SCENARIO = V_SCENARIO
-    AND COD_PERIODO = V_PERIODO
-    AND COD_AZIENDA IN (
-          SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
-    )
-    AND PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M_PHASE2'
-    AND NOT EXISTS (
-          SELECT 1
-            FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
-            WHERE T.ARP_FLAG = 'Y'
-              AND T.COD_SCENARIO = V_SCENARIO
-              AND T.COD_PERIODO = V_PERIODO
-              AND T.COD_CONTO = 'ZAW_M2S_LOCK'
-              AND T.D_BG = D.D_BG
-    );
-
-  /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 特殊来源入表公司不在SESSION_AZIENDA_LIST内，按默认事业部和固定公司独立删除旧数据。 */
+  /* 按事业部删除当期本过程数据。 */
   DELETE FROM AW_MR9_ARPM03_000001 D
   WHERE D.COD_SCENARIO = V_SCENARIO
     AND D.COD_PERIODO = V_PERIODO
     AND D.PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M_PHASE2'
     AND (
-          (D.D_BG = 'BG001_BU001' AND D.COD_AZIENDA = '4330')
-      OR (D.D_BG = 'BG004_BU001' AND D.COD_AZIENDA = '1100')
-    )
-    /* 默认事业部仅在P_BG参数范围内执行删除。 */
-    AND (
           P_BG = 'ALL'
       OR INSTR(',' || P_BG || ',', ',' || D.D_BG || ',') > 0
-    )
-    AND NOT EXISTS (
-          SELECT 1
-            FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
-            WHERE T.ARP_FLAG = 'Y'
-              AND T.COD_SCENARIO = V_SCENARIO
-              AND T.COD_PERIODO = V_PERIODO
-              AND T.COD_CONTO = 'ZAW_M2S_LOCK'
-              AND T.D_BG = D.D_BG
     );
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
@@ -1005,15 +970,6 @@ BEGIN
         ON ATS.COD_AZIENDA = M.COD_AZIENDA
     WHERE PCR.COD_BG IS NOT NULL
       AND ATS.COD_BG = PCR.COD_BG
-  ),
-  /* 事业部锁定清单：仅取当前场景、期间且ARP_FLAG为Y的M2S锁定事业部。 */
-  LOCKED_BG AS (
-    SELECT DISTINCT T.D_BG
-      FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
-    WHERE T.ARP_FLAG = 'Y'
-      AND T.COD_SCENARIO = V_SCENARIO
-      AND T.COD_PERIODO = V_PERIODO
-      AND T.COD_CONTO = 'ZAW_M2S_LOCK'
   )
   SELECT NEWID() AS OID
       , COD_SCENARIO
@@ -1056,11 +1012,6 @@ BEGIN
       , SESSION_USER AS USERUPD
     FROM MAPPED_FACT M
   WHERE M.GRP_SCOPE = 'GEX-集团外'
-    AND NOT EXISTS (
-          SELECT 1
-            FROM LOCKED_BG L
-            WHERE L.D_BG = M.D_BG
-    )
     AND (NVL(AR_AMT, 0) <> 0
       OR NVL(REV_AMT, 0) <> 0
       OR NVL(F1_ODUE_AMT, 0) <> 0
@@ -1386,21 +1337,31 @@ BEGIN
       , SYSDATE AS DATEUPD
       , SESSION_USER AS USERUPD
     FROM SPECIAL_SOURCE_SUM S
-  WHERE (NVL(S.AR_AMT, 0) <> 0 OR NVL(S.REV_AMT, 0) <> 0)
-    /* 已锁定事业部不重算，保持与主装载和前置删除一致。 */
-    AND NOT EXISTS (
-          SELECT 1
-            FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
-            WHERE T.ARP_FLAG = 'Y'
-              AND T.COD_SCENARIO = V_SCENARIO
-              AND T.COD_PERIODO = V_PERIODO
-              AND T.COD_CONTO = 'ZAW_M2S_LOCK'
-              AND T.D_BG = S.D_BG
-    );
+  WHERE (NVL(S.AR_AMT, 0) <> 0 OR NVL(S.REV_AMT, 0) <> 0);
 
   /* ALTER BY 20261027 16:04 SHIQINGFENG.EX 记录第二段特殊数据源装载完成，便于定位两段装载执行状态。 */
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
   VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', '第二段目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+
+  /* 主装载的零金额条件在聚合前生效，正负抵消的分组仍会落成全0行，装载后统一清理。
+     ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录 */
+  DELETE FROM AW_MR9_ARPM03_000001 D
+  WHERE D.COD_SCENARIO = V_SCENARIO
+    AND D.COD_PERIODO = V_PERIODO
+    AND D.PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M_PHASE2'
+    AND COD_AZIENDA IN (
+              SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
+          )
+    AND NVL(D.AR_AMT, 0) = 0
+    AND NVL(D.REV_AMT, 0) = 0
+    AND NVL(D.F1_ODUE_AMT, 0) = 0
+    AND NVL(D.F2_EPAY_AMT, 0) = 0
+    AND NVL(D.F3_ECR_AMT, 0) = 0
+    AND NVL(D.F4_UREB_AMT, 0) = 0
+    AND NVL(D.F5_UFEE_AMT, 0) = 0
+    AND NVL(D.F6_INVSM_AMT, 0) = 0
+    AND NVL(D.F7_GSUB_AMT, 0) = 0
+    AND NVL(D.F8_ADJ_AMT, 0) = 0;
 
   DELETE FROM SESSION_AZIENDA_LIST
   WHERE SESSION_ID = V_SESSION_ID;
