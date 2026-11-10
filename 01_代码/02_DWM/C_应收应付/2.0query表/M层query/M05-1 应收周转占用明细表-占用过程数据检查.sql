@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261110 18:12
- * 本次修改：ALTER BY 20261110 18:12 SHIQINGFENG.EX ARPM02利润中心改按AW_RUL_ARPPRC_000001映射：batch1公司+源利润中心 > batch2源利润中心 > 原值，复刻TOV。
- * 上次修改：ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
+ * 最后更新时间：20261110 18:45
+ * 本次修改：ALTER BY 20261110 18:45 SHIQINGFENG.EX 新增原始利润中心编码与名称，置于映射后周转利润中心之前。
+ * 上次修改：ALTER BY 20261110 18:12 SHIQINGFENG.EX ARPM02利润中心改按AW_RUL_ARPPRC_000001映射：batch1公司+源利润中心 > batch2源利润中心 > 原值，复刻TOV。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261110 18:45 SHIQINGFENG.EX 新增原始利润中心编码与名称，置于映射后周转利润中心之前。
  *   ALTER BY 20261110 18:12 SHIQINGFENG.EX ARPM02利润中心改按AW_RUL_ARPPRC_000001映射：batch1公司+源利润中心 > batch2源利润中心 > 原值，复刻TOV。
  *   ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
  *   ALTER BY 20261110 10:19 SHIQINGFENG.EX 新增UREB_AMT、SPC_DSV_DED_AMT和AR_AMT应收占用金额字段。
@@ -121,8 +122,9 @@ TURNOVER_SOURCE AS (
          , A.GRP_SCOPE
          , A.COD_AZI_CTP AS CP_COMPANY_CODE
          , A.NATURE_L2_NAME
+         , A.COD_DEST2 AS SRC_PROFITCENTER_CODE
          /* 利润中心按ARPPRC映射：batch1公司+源利润中心 > batch2源利润中心 > 原值。 */
-         , NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, A.COD_DEST2)) AS SRC_PROFITCENTER_CODE
+         , NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, A.COD_DEST2)) AS MAPPED_PROFITCENTER_CODE
          , NULL AS FIXED_BG
          /* TOV_FLAG由AG过程统一打标，涵盖利润中心、账龄标识及特殊取数剔除规则；N行保留用于过程留痕。
             ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列 */
@@ -195,6 +197,7 @@ TURNOVER_SOURCE AS (
          , I.CP_COMPANY_CODE AS CP_COMPANY_CODE
          , NULL AS NATURE_L2_NAME
          , I.PROFITCENTER_CODE AS SRC_PROFITCENTER_CODE
+         , I.PROFITCENTER_CODE AS MAPPED_PROFITCENTER_CODE
          , NULL AS FIXED_BG
          , 'Y' AS ARPTOV_FLAG
          , NVL(I.IMOCC_CNY_AMT, 0) AS TURNOVER_AMT
@@ -236,6 +239,7 @@ TURNOVER_SOURCE AS (
          , 'ZZZZ' AS CP_COMPANY_CODE
          , NULL AS NATURE_L2_NAME
          , 'ZZZZ' AS SRC_PROFITCENTER_CODE
+         , 'ZZZZ' AS MAPPED_PROFITCENTER_CODE
          , 'BG001_BU001' AS FIXED_BG
          , 'Y' AS ARPTOV_FLAG
          , NVL(SUM(A.IMPORTO), 0) AS TURNOVER_AMT
@@ -283,6 +287,7 @@ TURNOVER_SOURCE AS (
          , 'ZZZZ' AS CP_COMPANY_CODE
          , NULL AS NATURE_L2_NAME
          , 'ZZZZ' AS SRC_PROFITCENTER_CODE
+         , 'ZZZZ' AS MAPPED_PROFITCENTER_CODE
          , 'BG004_BU001' AS FIXED_BG
          , 'Y' AS ARPTOV_FLAG
          , NVL(SUM(A.IMPORTO), 0) AS TURNOVER_AMT
@@ -346,7 +351,8 @@ TURNOVER_NORMALIZED AS (
          , T.GRP_SCOPE
          , T.CP_COMPANY_CODE
          , T.NATURE_L2_NAME
-         , LTRIM(TRIM(T.SRC_PROFITCENTER_CODE), '0') AS TURNOVER_PROFITCENTER_CODE
+         , LTRIM(TRIM(T.SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
+         , LTRIM(TRIM(T.MAPPED_PROFITCENTER_CODE), '0') AS TURNOVER_PROFITCENTER_CODE
          , T.FIXED_BG
          , T.ARPTOV_FLAG
          , SUM(T.TURNOVER_AMT) AS TURNOVER_AMT
@@ -377,6 +383,7 @@ TURNOVER_NORMALIZED AS (
             , T.CP_COMPANY_CODE
             , T.NATURE_L2_NAME
             , LTRIM(TRIM(T.SRC_PROFITCENTER_CODE), '0')
+            , LTRIM(TRIM(T.MAPPED_PROFITCENTER_CODE), '0')
             , T.FIXED_BG
             , T.ARPTOV_FLAG
 ),
@@ -422,6 +429,7 @@ MAPPED_TURNOVER AS (
          , T.GRP_SCOPE
          , T.CP_COMPANY_CODE
          , T.NATURE_L2_NAME
+         , T.SRC_PROFITCENTER_CODE
          , T.TURNOVER_PROFITCENTER_CODE
          , T.FIXED_BG
          , NVL(MATCHED.COD_BG, T.FIXED_BG) AS BUSINESS_UNIT_CODE
@@ -522,6 +530,7 @@ FILTERED_TURNOVER AS (
          , M.GRP_SCOPE
          , M.CP_COMPANY_CODE
          , M.NATURE_L2_NAME
+         , M.SRC_PROFITCENTER_CODE
          , M.TURNOVER_PROFITCENTER_CODE
          , M.FIXED_BG
          , M.BUSINESS_UNIT_CODE
@@ -575,6 +584,7 @@ DISPLAY_TURNOVER AS (
          , F.GRP_SCOPE
          , F.CP_COMPANY_CODE
          , F.NATURE_L2_NAME
+         , F.SRC_PROFITCENTER_CODE
          , F.TURNOVER_PROFITCENTER_CODE
          , F.FIXED_BG
          , F.BUSINESS_UNIT_CODE
@@ -617,6 +627,7 @@ FINAL_TURNOVER AS (
          , D.GRP_SCOPE
          , D.CP_COMPANY_CODE
          , D.NATURE_L2_NAME
+         , D.SRC_PROFITCENTER_CODE
          , D.TURNOVER_PROFITCENTER_CODE
          , D.FIXED_BG
          , D.BUSINESS_UNIT_CODE
@@ -662,6 +673,8 @@ SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
      , MAX(F.SUB_CUST_NAME) AS SUB_CUST_NAME    /* 分户名称 */
      , F.CP_COMPANY_CODE AS CP_COMPANY_CODE     /* 对方公司 */
      , MAX(F.NATURE_L2_NAME) AS NATURE_L2_NAME  /* 二级性质 */
+     , F.SRC_PROFITCENTER_CODE                  /* 原始利润中心编码 */
+     , MAX(F_TGK_GET_DIMNAME('DEST2', F.SRC_PROFITCENTER_CODE)) AS SRC_PROFITCENTER_NAME  /* 原始利润中心名称 */
      , F.TURNOVER_PROFITCENTER_CODE             /* 周转利润中心编码 */
      , F_TGK_GET_DIMNAME('DEST2', F.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME  /* 周转利润中心名称 */
      , F.BUSINESS_UNIT_CODE                     /* 事业部编码 */
@@ -695,6 +708,7 @@ SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
         , F.CUST_HEAD_CODE
         , F.SUB_CUST_CODE
         , F.CP_COMPANY_CODE
+        , F.SRC_PROFITCENTER_CODE
         , F.TURNOVER_PROFITCENTER_CODE
         , F.BUSINESS_UNIT_CODE
         , F.ARPTOV_FLAG
