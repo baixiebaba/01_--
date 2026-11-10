@@ -1,15 +1,16 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 14:08
- * 本次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
- * 上次修改：ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
+ * 最后更新时间：20261110 11:09
+ * 本次修改：ALTER BY 20261110 11:09 SHIQINGFENG.EX 特殊剔除改按M02周转取数标识TOV_FLAG判断，移除公司客商剔除配置匹配。
+ * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261029 11:18 SHIQINGFENG.EX COMPANY_NAME改为通过F_TGK_GET_DIMNAME函数获取。
  *
  * 查询名称  ：应收占用管法差明细表
- * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、AW_RUL_ARPTOV_000001 等，详见正文。
+ * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261110 11:09 SHIQINGFENG.EX 特殊剔除改按M02周转取数标识TOV_FLAG判断，移除公司客商剔除配置匹配。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 09:53 SHIQINGFENG.EX 周转分析渠道维度更换为渠道BU（D_TOV_CHAN→D_CHANNEL_BU），字段注释与段注释同步更新，未修改其它逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
@@ -59,17 +60,6 @@ DEST3_REGION_DIM AS (
       FROM TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT D
      WHERE D.COD_DEST3_GERARCHIA = '01'
 ),
-/* 匹配顺序2的公司和客户特殊剔除配置，仅取当前年月有效记录。 */
-SPECIAL_EXCLUDE_RULE AS (
-    SELECT DISTINCT TRIM(R.COD_AZIENDA) AS COMPANY_CODE
-         , TRIM(R.CUST_CODE) AS CUST_CODE
-      FROM AW_RUL_ARPTOV_000001 R
-     WHERE R.BATCH_ID = '2'
-       AND R.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
-       AND NVL(R.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
-       AND R.COD_AZIENDA IS NOT NULL
-       AND R.CUST_CODE IS NOT NULL
-),
 /*
  * M03管理口径应收占用：按事业部、公司、客商、利润中心四个匹配键汇总AR_AMT。
  * ZAMOUNT对应管理单体账龄口径，利润中心统一去除前导零后参与匹配。
@@ -110,6 +100,8 @@ M02_BASE AS (
          , A.CUST_BRANCH_CODE
          , A.CUST_BRANCH_NAME
          , A.GRP_SCOPE
+         /* ALTER BY 20261110 11:09 SHIQINGFENG.EX 新增周转取数标识，供差异原因判断 */
+         , A.TOV_FLAG AS TOV_FLAG
          , A.COD_AZI_CTP AS CP_COMPANY_CODE
          , A.COUNTRY_NAME
          , A.NATURE_L2_NAME
@@ -163,12 +155,8 @@ CALC_DETAIL AS (
                THEN '货款-材料外协'
              WHEN A.GRP_SCOPE IN ('SUB-子公司', 'GIN-集团内')
                THEN A.GRP_SCOPE
-             WHEN EXISTS (
-                      SELECT 1
-                        FROM SPECIAL_EXCLUDE_RULE R
-                       WHERE R.COMPANY_CODE = TRIM(A.COMPANY_CODE)
-              AND R.CUST_CODE = A.CUST_CODE
-                    )
+             /* TOV_FLAG='N'即未通过周转取数规则、被特殊剔除的客商。 */
+             WHEN A.TOV_FLAG = 'N'
                THEN '特殊剔除'
              WHEN A.OTHER_ADJ_AMT <> 0
                THEN '其他调整项'
