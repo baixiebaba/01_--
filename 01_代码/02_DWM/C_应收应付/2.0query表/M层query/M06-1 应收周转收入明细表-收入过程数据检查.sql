@@ -1,29 +1,56 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 17:52
- * 本次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
- * 上次修改：ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
+ * 最后更新时间：20261110 18:14
+ * 本次修改：ALTER BY 20261110 18:14 SHIQINGFENG.EX 收入利润中心映射改按AW_RUL_ARPPRC_000001：ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值，复刻TOV映射链并补齐缺失的batch6层。
+ * 上次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *
  * 查询名称  ：应收周转收入明细表-收入过程数据检查
- * 源表      ：AW_MR9_REVM01_000001、TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 等，详见正文。
+ * 源表      ：AW_MR9_REVM01_000001、TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001、TGK_FIMA_HISENSE.DIM_RULE_FI_MR_AR_PROFIT_MAPPING、TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261110 18:14 SHIQINGFENG.EX 收入利润中心映射改按AW_RUL_ARPPRC_000001：ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值，复刻TOV映射链并补齐缺失的batch6层。
  *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
- *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
  *******************************************************************************/
 WITH
-/* 收入利润中心映射规则：按源收入利润中心和有效期匹配。 */
-PROFIT_CENTER_RULE AS (
-    SELECT LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
-         , MAX(M.PROFITCENTER_CODE) AS PROFITCENTER_CODE
-      FROM DIM_RULE_FI_MR_AR_PROFIT_MAPPING M
-     WHERE M.BATCH_ID = 2
-       AND M.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
-       AND NVL(M.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
-     GROUP BY LTRIM(TRIM(M.SRC_PROFITCENTER_CODE), '0')
+/* 应收周转利润中心映射：batch1按公司+源利润中心（一公司一行），batch2仅按源利润中心，源利润中心去前导零匹配。 */
+ARPPRC_RULE_1 AS (
+    SELECT TRIM(COD_AZIENDA) AS COD_AZIENDA
+         , NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '') AS SRC_PROFITCENTER_CODE
+         , MAX(TRIM(COD_DEST2)) AS COD_DEST2
+      FROM TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001
+     WHERE BATCH_ID = '1'
+       AND VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+     GROUP BY TRIM(COD_AZIENDA)
+            , NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '')
+),
+ARPPRC_RULE_2 AS (
+    SELECT NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '') AS SRC_PROFITCENTER_CODE
+         , MAX(TRIM(COD_DEST2)) AS COD_DEST2
+      FROM TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001
+     WHERE BATCH_ID = '2'
+       AND VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+     GROUP BY NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '')
+),
+/* 收入物料组映射规则：batch6先按公司主数据展开公司通配，物料组为空的配置不参与。 */
+PROFIT_CENTER_RULE_6 AS (
+    SELECT A.COD_AZIENDA AS COMPANY_CODE
+         , TRIM(PM.MATERIAL_GROUP_CODE) AS MATERIAL_GROUP_CODE
+         , MAX(PM.PROFITCENTER_CODE) AS PROFITCENTER_CODE
+      FROM TGK_FIMA_HISENSE.DIM_RULE_FI_MR_AR_PROFIT_MAPPING PM
+      JOIN (SELECT DISTINCT COD_AZIENDA
+              FROM TGK_FIMA_HISENSE.AZIENDA) A
+        ON A.COD_AZIENDA LIKE TRIM(PM.COMPANY_CODE)
+     WHERE PM.BATCH_ID = 6
+       AND NVL(TRIM(PM.MATERIAL_GROUP_CODE), 'ZZZZ') <> 'ZZZZ'
+       AND PM.VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(PM.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+     GROUP BY A.COD_AZIENDA
+            , TRIM(PM.MATERIAL_GROUP_CODE)
 ),
 /* 周转事业部范围：复刻TOV，仅保留当前期间AR_TOV_FLAG=Y且命中事业部参数的范围。 */
 TOV_BG_SCOPE AS (
@@ -91,6 +118,7 @@ REVM01_BASE AS (
          , R.SRC_DETAIL
          , R.COD_DEST2
          , R.D_ADJ_TYPE
+         , R.MATERIAL_GROUP_CODE
          , 0 - R.ORG_REV AS ORG_REV
          , R.POLICY_AMT
          , 0 - R.MAP_DIS1 AS MAP_DIS1
@@ -107,7 +135,7 @@ REVM01_BASE AS (
        AND R.D_ADJ_TYPE NOT IN ('REV_01_210', 'REV_01_212')
        AND R.COD_AZIENDA IN (SELECT COD_AZIENDA FROM ATS_BG_MAP)
 ),
-/* REVENUE_CALC：直接取收入原始利润中心，完成收入利润中心映射；未命中时回退原始收入利润中心。 */
+/* REVENUE_CALC：收入利润中心按ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值映射；未命中时回退原始收入利润中心。 */
 REVENUE_CALC AS (
     SELECT R.COD_SCENARIO
          , R.COD_PERIODO
@@ -117,10 +145,10 @@ REVENUE_CALC AS (
          , R.COD_AZI_CTP
          , R.COD_DEST2 AS INCOME_PROFITCENTER_CODE
          , F_TGK_GET_DIMNAME('DEST2', NVL(R.COD_DEST2, 'ZZZZ')) AS INCOME_PROFITCENTER_NAME
-         , NVL(PM.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ')) AS MAPPED_PROFITCENTER_CODE
-         , F_TGK_GET_DIMNAME('DEST2', NVL(PM.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ'))) AS MAPPED_PROFITCENTER_NAME
+         , NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ')))) AS MAPPED_PROFITCENTER_CODE
+         , F_TGK_GET_DIMNAME('DEST2', NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ'))))) AS MAPPED_PROFITCENTER_NAME
          , CASE
-             WHEN PM.PROFITCENTER_CODE IS NULL
+             WHEN NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, PM6.PROFITCENTER_CODE)) IS NULL
                THEN '未命中收入利润中心映射'
              ELSE '已命中收入利润中心映射'
            END AS INCOME_PC_MAP_STATUS
@@ -170,8 +198,13 @@ REVENUE_CALC AS (
         ON CTP_NODE.COD_SCENARIO = R.COD_SCENARIO
        AND CTP_NODE.COD_PERIODO = R.COD_PERIODO
        AND CTP_NODE.ELEM = R.COD_AZI_CTP
-      LEFT JOIN PROFIT_CENTER_RULE PM
-        ON PM.SRC_PROFITCENTER_CODE = LTRIM(TRIM(R.COD_DEST2), '0')
+      LEFT JOIN ARPPRC_RULE_1 P1
+        ON P1.COD_AZIENDA = TRIM(R.COD_AZIENDA)
+      LEFT JOIN ARPPRC_RULE_2 P2
+        ON P2.SRC_PROFITCENTER_CODE = LTRIM(TRIM(R.COD_DEST2), '0')
+      LEFT JOIN PROFIT_CENTER_RULE_6 PM6
+        ON PM6.COMPANY_CODE = R.COD_AZIENDA
+       AND PM6.MATERIAL_GROUP_CODE = TRIM(R.MATERIAL_GROUP_CODE)
      WHERE CASE
              WHEN CUR_NODE.SELF_NODE = CASE
                                          WHEN CUR_NODE.IS_HITACHI = 1
@@ -184,8 +217,8 @@ REVENUE_CALC AS (
                THEN F_TGK_UNICODE_AS('decode','GIN-集团内')
              ELSE F_TGK_UNICODE_AS('decode','GEX-集团外')
            END = F_TGK_UNICODE_AS('decode','GEX-集团外')
-       AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) IS NOT NULL
-       AND NVL(PM.PROFITCENTER_CODE, R.COD_DEST2) <> 'ZZZZ'
+       AND NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, R.COD_DEST2))) IS NOT NULL
+       AND NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, R.COD_DEST2))) <> 'ZZZZ'
 ),
 /* REVENUE_BG_MAP：完成收入利润中心映射后，再匹配利润中心事业部和账套事业部。 */
 REVENUE_BG_MAP AS (

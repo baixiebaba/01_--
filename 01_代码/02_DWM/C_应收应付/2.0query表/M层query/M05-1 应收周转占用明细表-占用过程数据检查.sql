@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261110 10:46
- * 本次修改：ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
- * 上次修改：ALTER BY 20261110 10:19 SHIQINGFENG.EX 新增UREB_AMT、SPC_DSV_DED_AMT和AR_AMT应收占用金额字段。
+ * 最后更新时间：20261110 18:12
+ * 本次修改：ALTER BY 20261110 18:12 SHIQINGFENG.EX ARPM02利润中心改按AW_RUL_ARPPRC_000001映射：batch1公司+源利润中心 > batch2源利润中心 > 原值，复刻TOV。
+ * 上次修改：ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
- * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
+ * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261110 18:12 SHIQINGFENG.EX ARPM02利润中心改按AW_RUL_ARPPRC_000001映射：batch1公司+源利润中心 > batch2源利润中心 > 原值，复刻TOV。
  *   ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
  *   ALTER BY 20261110 10:19 SHIQINGFENG.EX 新增UREB_AMT、SPC_DSV_DED_AMT和AR_AMT应收占用金额字段。
  *   ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增智动精工和模具周转占用来源，并增加SRC_DETAIL数据源标识列。
@@ -56,6 +57,27 @@ PCR_BG_MAP AS (
        AND P.COD_BG IN (SELECT COD_BG FROM TOV_BG_SCOPE_ALL)
        AND P.COD_BG NOT LIKE 'CXC%'
 ),
+/* 应收周转利润中心映射：batch1按公司+源利润中心（一公司一行），batch2仅按源利润中心，源利润中心去前导零匹配。 */
+ARPPRC_RULE_1 AS (
+    SELECT TRIM(COD_AZIENDA) AS COD_AZIENDA
+         , NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '') AS SRC_PROFITCENTER_CODE
+         , MAX(TRIM(COD_DEST2)) AS COD_DEST2
+      FROM TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001
+     WHERE BATCH_ID = '1'
+       AND VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+     GROUP BY TRIM(COD_AZIENDA)
+            , NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '')
+),
+ARPPRC_RULE_2 AS (
+    SELECT NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '') AS SRC_PROFITCENTER_CODE
+         , MAX(TRIM(COD_DEST2)) AS COD_DEST2
+      FROM TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001
+     WHERE BATCH_ID = '2'
+       AND VALID_FR <= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+       AND NVL(VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
+     GROUP BY NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '')
+),
 /* ARPM01调整汇总：完全复用TOV按场景、期间、公司、客商和利润中心汇总因素7、因素8的逻辑。 */
 ARPM01_ADJ_SUM AS (
     SELECT A.COD_SCENARIO
@@ -99,7 +121,8 @@ TURNOVER_SOURCE AS (
          , A.GRP_SCOPE
          , A.COD_AZI_CTP AS CP_COMPANY_CODE
          , A.NATURE_L2_NAME
-         , A.COD_DEST2 AS SRC_PROFITCENTER_CODE
+         /* 利润中心按ARPPRC映射：batch1公司+源利润中心 > batch2源利润中心 > 原值。 */
+         , NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, A.COD_DEST2)) AS SRC_PROFITCENTER_CODE
          , NULL AS FIXED_BG
          /* TOV_FLAG由AG过程统一打标，涵盖利润中心、账龄标识及特殊取数剔除规则；N行保留用于过程留痕。
             ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列 */
@@ -137,6 +160,11 @@ TURNOVER_SOURCE AS (
        AND ADJ.COD_AZIENDA = A.COD_AZIENDA
        AND ADJ.CUST_CODE = TRIM(A.CUST_CODE)
        AND ADJ.COD_DEST2 = TRIM(A.COD_DEST2)
+      LEFT JOIN ARPPRC_RULE_1 P1
+        ON P1.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+       AND P1.SRC_PROFITCENTER_CODE = LTRIM(TRIM(A.COD_DEST2), '0')
+      LEFT JOIN ARPPRC_RULE_2 P2
+        ON P2.SRC_PROFITCENTER_CODE = LTRIM(TRIM(A.COD_DEST2), '0')
      WHERE A.COD_SCENARIO = ${$Scenario.code}
        AND A.COD_PERIODO = LPAD(${$Period.code}, 2, '0')
        AND A.GRP_SCOPE = F_TGK_UNICODE_AS('decode', 'GEX-集团外')
@@ -297,7 +325,7 @@ TURNOVER_SOURCE AS (
            )
        AND A.COD_DEST5 = 'ZZOT'
 ),
-/* 周转利润中心仅按TOV实际逻辑标准化：ARPM02取COD_DEST2，IMOCC取PROFITCENTER_CODE，均在此处去除前导零一次。 */
+/* 周转利润中心仅按TOV实际逻辑标准化：ARPM02取ARPPRC映射后的COD_DEST2，IMOCC取PROFITCENTER_CODE，均在此处去除前导零一次。 */
 TURNOVER_NORMALIZED AS (
     SELECT T.COD_SCENARIO
          , T.COD_PERIODO
