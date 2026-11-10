@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261110 10:19
- * 本次修改：ALTER BY 20261110 10:19 SHIQINGFENG.EX 新增UREB_AMT、SPC_DSV_DED_AMT和AR_AMT应收占用金额字段。
- * 上次修改：ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增智动精工和模具周转占用来源，并增加SRC_DETAIL数据源标识列。
+ * 最后更新时间：20261110 10:46
+ * 本次修改：ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
+ * 上次修改：ALTER BY 20261110 10:19 SHIQINGFENG.EX 新增UREB_AMT、SPC_DSV_DED_AMT和AR_AMT应收占用金额字段。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
  *   ALTER BY 20261110 10:19 SHIQINGFENG.EX 新增UREB_AMT、SPC_DSV_DED_AMT和AR_AMT应收占用金额字段。
  *   ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增智动精工和模具周转占用来源，并增加SRC_DETAIL数据源标识列。
  *   ALTER BY 20261109 18:32 SHIQINGFENG.EX 取消事业部映射冲突判定，利润中心命中多个事业部时逐组出行。
@@ -97,6 +98,7 @@ TURNOVER_SOURCE AS (
          , A.CUST_NAME AS SUB_CUST_NAME
          , A.GRP_SCOPE
          , A.COD_AZI_CTP AS CP_COMPANY_CODE
+         , A.NATURE_L2_NAME
          , A.COD_DEST2 AS SRC_PROFITCENTER_CODE
          , NULL AS FIXED_BG
          /* TOV_FLAG由AG过程统一打标，涵盖利润中心、账龄标识及特殊取数剔除规则；N行保留用于过程留痕。
@@ -163,6 +165,7 @@ TURNOVER_SOURCE AS (
          , I.CUST_NAME AS SUB_CUST_NAME
          , 'GEX-集团外' AS GRP_SCOPE
          , I.CP_COMPANY_CODE AS CP_COMPANY_CODE
+         , NULL AS NATURE_L2_NAME
          , I.PROFITCENTER_CODE AS SRC_PROFITCENTER_CODE
          , NULL AS FIXED_BG
          , 'Y' AS ARPTOV_FLAG
@@ -203,6 +206,7 @@ TURNOVER_SOURCE AS (
          , NULL AS SUB_CUST_NAME
          , 'GEX-集团外' AS GRP_SCOPE
          , 'ZZZZ' AS CP_COMPANY_CODE
+         , NULL AS NATURE_L2_NAME
          , 'ZZZZ' AS SRC_PROFITCENTER_CODE
          , 'BG001_BU001' AS FIXED_BG
          , 'Y' AS ARPTOV_FLAG
@@ -249,6 +253,7 @@ TURNOVER_SOURCE AS (
          , NULL AS SUB_CUST_NAME
          , 'GEX-集团外' AS GRP_SCOPE
          , 'ZZZZ' AS CP_COMPANY_CODE
+         , NULL AS NATURE_L2_NAME
          , 'ZZZZ' AS SRC_PROFITCENTER_CODE
          , 'BG004_BU001' AS FIXED_BG
          , 'Y' AS ARPTOV_FLAG
@@ -312,6 +317,7 @@ TURNOVER_NORMALIZED AS (
          , T.SUB_CUST_NAME
          , T.GRP_SCOPE
          , T.CP_COMPANY_CODE
+         , T.NATURE_L2_NAME
          , LTRIM(TRIM(T.SRC_PROFITCENTER_CODE), '0') AS TURNOVER_PROFITCENTER_CODE
          , T.FIXED_BG
          , T.ARPTOV_FLAG
@@ -341,6 +347,7 @@ TURNOVER_NORMALIZED AS (
             , T.SUB_CUST_NAME
             , T.GRP_SCOPE
             , T.CP_COMPANY_CODE
+            , T.NATURE_L2_NAME
             , LTRIM(TRIM(T.SRC_PROFITCENTER_CODE), '0')
             , T.FIXED_BG
             , T.ARPTOV_FLAG
@@ -386,6 +393,7 @@ MAPPED_TURNOVER AS (
          , T.SUB_CUST_NAME
          , T.GRP_SCOPE
          , T.CP_COMPANY_CODE
+         , T.NATURE_L2_NAME
          , T.TURNOVER_PROFITCENTER_CODE
          , T.FIXED_BG
          , NVL(MATCHED.COD_BG, T.FIXED_BG) AS BUSINESS_UNIT_CODE
@@ -485,6 +493,7 @@ FILTERED_TURNOVER AS (
          , M.SUB_CUST_NAME
          , M.GRP_SCOPE
          , M.CP_COMPANY_CODE
+         , M.NATURE_L2_NAME
          , M.TURNOVER_PROFITCENTER_CODE
          , M.FIXED_BG
          , M.BUSINESS_UNIT_CODE
@@ -537,6 +546,7 @@ DISPLAY_TURNOVER AS (
          , F.SUB_CUST_NAME
          , F.GRP_SCOPE
          , F.CP_COMPANY_CODE
+         , F.NATURE_L2_NAME
          , F.TURNOVER_PROFITCENTER_CODE
          , F.FIXED_BG
          , F.BUSINESS_UNIT_CODE
@@ -578,6 +588,7 @@ FINAL_TURNOVER AS (
          , D.SUB_CUST_NAME
          , D.GRP_SCOPE
          , D.CP_COMPANY_CODE
+         , D.NATURE_L2_NAME
          , D.TURNOVER_PROFITCENTER_CODE
          , D.FIXED_BG
          , D.BUSINESS_UNIT_CODE
@@ -618,6 +629,7 @@ SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
      , F.SUB_CUST_CODE AS SUB_CUST_CODE         /* 分户编码 */
      , MAX(F.SUB_CUST_NAME) AS SUB_CUST_NAME    /* 分户名称 */
      , F.CP_COMPANY_CODE AS CP_COMPANY_CODE     /* 对方公司 */
+     , MAX(F.NATURE_L2_NAME) AS NATURE_L2_NAME  /* 二级性质 */
      , F.TURNOVER_PROFITCENTER_CODE             /* 周转利润中心编码 */
      , F_TGK_GET_DIMNAME('DEST2', F.TURNOVER_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME  /* 周转利润中心名称 */
      , F.BUSINESS_UNIT_CODE                     /* 事业部编码 */
@@ -626,6 +638,7 @@ SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
            THEN NULL
          ELSE F_TGK_GET_DIMNAME('D_BG', F.BUSINESS_UNIT_CODE)
        END AS BUSINESS_UNIT_NAME            /* 事业部名称 */
+     , F.ARPTOV_FLAG                        /* 周转取数来源标记 */
      , SUM(F.TURNOVER_AMT) AS TURNOVER_AMT  /* 周转金额 */
      , SUM(F.UREB_AMT) AS UREB_AMT          /* 已回款未开票金额 */
      , SUM(F.SPC_DSV_DED_AMT) AS SPC_DSV_DED_AMT  /* DSV专扣金额 */
@@ -638,7 +651,7 @@ SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
      , SUM(F.F6_INVSM_AMT) AS F6_INVSM_AMT  /* 因素6-开票样机额度 */
      , SUM(F.F7_GSUB_AMT) AS F7_GSUB_AMT    /* 因素7-国补未回款影响金额 */
      , SUM(F.F8_ADJ_AMT) AS F8_ADJ_AMT      /* 因素8手工导入因素 */
-     , F.ARPTOV_FLAG                        /* 周转取数来源标记 */
+     
   FROM FINAL_TURNOVER F
  WHERE  SRC_DETAIL = F_TGK_UNICODE_AS('decode','ARPM02-账龄表')
  GROUP BY F.COD_SCENARIO
