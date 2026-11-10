@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 17:52
- * 本次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
- * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ * 最后更新时间：20261110 10:35
+ * 本次修改：ALTER BY 20261110 10:35 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转数据来源。
+ * 上次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *
  * 查询名称  ：应收周转占用明细表-事业部口径
  * 源表      ：AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261110 10:35 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转数据来源。
  *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 11:49 SHIQINGFENG.EX 补充公司一级、二级分类编码及描述，D_CHANNEL作为公司三级分类，统一渠道层级视图来源，未修改金额和过滤逻辑。
@@ -21,7 +22,8 @@ WITH
  is_prior 标记该行是否来自上年场景, 后续 CASE 用它代替反复写上年场景表达式 */
 BASE AS (
  SELECT T.COD_SCENARIO, T.COD_PERIODO, T.D_BG, T.COD_AZIENDA,
-    T.CUST_CODE, T.CUST_NAME, T.CUST_HEAD_CODE, T.CUST_HEAD_NAME,
+    /* ALTER BY 20261110 10:35 SHIQINGFENG.EX 新增数据分类 */
+    T.SRC_DETAIL, T.CUST_CODE, T.CUST_NAME, T.CUST_HEAD_CODE, T.CUST_HEAD_NAME,
     T.CUST_BRANCH_CODE, T.CUST_BRANCH_NAME, T.GRP_SCOPE, T.COD_AZI_CTP,
     T.COUNTRY_NAME, T.NATURE_L2_NAME,
     T.D_CHANNEL, T.D_ONOFFLINE, T.COD_DEST2, T.COD_DEST3, T.D_SALE_DEPT,
@@ -58,6 +60,7 @@ SELECT
      , F_TGK_GET_DIMNAME('D_BG', B.D_BG)           AS D_BG_DESC                  /* 事业部名称 */
  /* 公司 / 客户 */
      , B.COD_AZIENDA                                                             /* 公司 */
+     , B.SRC_DETAIL                                                              /* 数据分类 */
      , B.CUST_CODE                                                               /* 客商编码 */
      , MAX(CASE WHEN B.COD_PERIODO = ${$Period.code} THEN B.CUST_NAME    END) AS CUST_NAME  /* 客商名称 */
      , B.CUST_HEAD_CODE                                                          /* 主户编码 */
@@ -209,7 +212,7 @@ SELECT
 ) DEST3_GERARCHIA_FLAT
     ON DEST3_GERARCHIA_FLAT.COD_DEST3 = B.COD_DEST3
  GROUP BY
-        B.COD_AZIENDA, B.D_BG, B.CUST_CODE, B.CUST_HEAD_CODE, B.CUST_BRANCH_CODE
+        B.COD_AZIENDA, B.D_BG, B.SRC_DETAIL, B.CUST_CODE, B.CUST_HEAD_CODE, B.CUST_BRANCH_CODE
         , B.GRP_SCOPE, B.COD_AZI_CTP
         , B.D_CHANNEL, B.D_ONOFFLINE, B.COD_DEST2, B.COD_DEST3, B.D_SALE_DEPT
         , B.D_CHANNEL_BU, B.D_CC_CUSTGRP, B.COD_VALUTA
