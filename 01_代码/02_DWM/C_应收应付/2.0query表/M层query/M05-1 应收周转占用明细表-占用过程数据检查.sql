@@ -620,7 +620,11 @@ FINAL_TURNOVER AS (
 SELECT F.COD_SCENARIO AS SCENARIO               /* 场景 */
      , F.COD_PERIODO AS PERIODO                 /* 期间 */
      , F.COD_AZIENDA AS COMPANY_CODE            /* 公司 */
-     , F.COD_CATEGORIA                          /* 类别 */
+     , CASE WHEN F.COD_CATEGORIA = 'ZAMOUNT' 
+              THEN '事业部口径' 
+            WHEN F.COD_CATEGORIA = 'ZAMOUNT_L2' 
+              THEN '分公司口径'
+       END COD_CATEGORIA                        /* 类别 */
      , F.SRC_DETAIL                             /* 数据源标识 */
      , F.CUST_CODE                              /* 客商编码 */
      , MAX(F.CUST_NAME) AS CUST_NAME            /* 客商名称 */
