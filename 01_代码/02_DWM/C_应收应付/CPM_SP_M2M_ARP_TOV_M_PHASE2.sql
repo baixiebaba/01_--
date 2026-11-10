@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261110 10:05
-   * 本次修改：ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转各数据来源
-   * 上次修改：ALTER BY 20261109 18:22 SHIQINGFENG.EX 利润中心事业部映射去重，避免配置重复行导致金额翻倍
+   * 最后更新时间：20261110 11:25
+   * 本次修改：ALTER BY 20261110 11:25 SHIQINGFENG.EX ARPM02的050节点判断由逐行EXISTS改为LEFT JOIN
+   * 上次修改：ALTER BY 20261110 11:22 SHIQINGFENG.EX 会话表HIE装载时拼FIMA_/GB_前缀区分两棵组织树，免加字段
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261110 11:25 SHIQINGFENG.EX ARPM02的050节点判断由逐行EXISTS改为LEFT JOIN
+   *   ALTER BY 20261110 11:22 SHIQINGFENG.EX 会话表HIE装载时拼FIMA_/GB_前缀区分两棵组织树，免加字段
+   *   ALTER BY 20261110 11:14 SHIQINGFENG.EX 特殊来源改为公共底层CTE单次扫描GB余额表，降低大表重复扫描耗时
    *   ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转各数据来源
    *   ALTER BY 20261109 18:22 SHIQINGFENG.EX 利润中心事业部映射去重，避免配置重复行导致金额翻倍
    *   ALTER BY 20261109 18:12 SHIQINGFENG.EX 修复周转行事业部二次映射，ARPM03周转金额不再按命中事业部数翻倍
@@ -50,9 +53,14 @@ BEGIN
   DELETE FROM SESSION_V_REF_AZIENDA
   WHERE SESSION_ID = V_SESSION_ID;
 
+  /* HIE拼前缀区分FIMA和GB两棵组织树：两树HIE/NODE键位大量重叠且成员不同，查询时写死FIMA_/GB_前缀。 */
   INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
-  SELECT V_SESSION_ID, HIE, NODE, ELEM
+  SELECT V_SESSION_ID, 'FIMA_' || HIE, NODE, ELEM
     FROM TGK_FIMA_HISENSE.V_REF_AZIENDA;
+
+  INSERT INTO SESSION_V_REF_AZIENDA(SESSION_ID, HIE, NODE, ELEM)
+  SELECT V_SESSION_ID, 'GB_' || HIE, NODE, ELEM
+    FROM TGK_GB_HISENSE.V_REF_AZIENDA;
 
   V_SCENARIO := P_SCENARIO;
   V_PERIODO := LPAD(P_PERIODO, 2, '0');
@@ -63,7 +71,7 @@ BEGIN
   SELECT DISTINCT V_SESSION_ID
       , ELEM
     FROM SESSION_V_REF_AZIENDA
-  WHERE HIE = '10'
+  WHERE HIE = 'FIMA_10'
     AND ELEM IN (
           SELECT COD_AZIENDA
             FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
@@ -349,16 +357,9 @@ BEGIN
         , A.D_CHANNEL_BU
         , A.D_CC_CUSTGRP
         , A.COD_VALUTA
-        /* ALTER BY 20261027 18:47 SHIQINGFENG.EX 还原ARPM02 AR_AMT的050节点和其他公司计算公式。 */
+        /* ALTER BY 20261110 11:25 SHIQINGFENG.EX 050节点判断由逐行EXISTS改为LEFT JOIN会话表去重结果集。 */
         , CASE
-              WHEN EXISTS (
-                  SELECT 1
-                    FROM SESSION_V_REF_AZIENDA R10_050
-                   WHERE R10_050.SESSION_ID = V_SESSION_ID
-                     AND R10_050.HIE = '10'
-                     AND R10_050.NODE = '050'
-                     AND R10_050.ELEM = A.COD_AZIENDA
-              ) THEN CASE
+              WHEN R10_050.ELEM IS NOT NULL THEN CASE
                          WHEN NVL(A.UREB_AMT, 0) > NVL(A.BCY_ADJ_INCL_0_AMT, 0) THEN 0
                          ELSE NVL(A.BCY_ADJ_INCL_0_AMT, 0) - NVL(A.UREB_AMT, 0)
                      END
@@ -382,6 +383,14 @@ BEGIN
       AND ADJ.COD_AZIENDA = A.COD_AZIENDA
       AND ADJ.CUST_CODE = TRIM(A.CUST_CODE)
       AND ADJ.COD_DEST2 = TRIM(A.COD_DEST2)
+      LEFT JOIN (
+          SELECT DISTINCT ELEM
+            FROM SESSION_V_REF_AZIENDA
+          WHERE SESSION_ID = V_SESSION_ID
+            AND HIE = 'FIMA_10'
+            AND NODE = '050'
+      ) R10_050
+        ON R10_050.ELEM = A.COD_AZIENDA
     WHERE A.COD_SCENARIO = V_SCENARIO
       AND A.COD_PERIODO = V_PERIODO
       /* ARPM02仅取集团外数据。 */
@@ -1116,43 +1125,83 @@ BEGIN
     , USERUPD
   )
   WITH
-  /* 智动精工收入：ACT、BGT均按当前场景取数，收入为当前月减上月的期间差额。 */
-  ZHIDONG_REVENUE AS (
+  /* GB余额表底层取数：智动精工和模具四个来源共用一次扫描，只带各分支完全相同的公共条件，分支特有条件由下方CTE自行过滤。 */
+  GB_SOURCE_RAW AS (
     SELECT A.COD_SCENARIO
-        , V_PERIODO AS COD_PERIODO
-        , 'BG001_BU001' AS D_BG
-        , '4330' AS COD_AZIENDA
+        , A.COD_PERIODO
+        , A.COD_AZIENDA
         , A.COD_VALUTA
-        , 0 - SUM(
-              CASE
-                WHEN A.COD_PERIODO = V_PERIODO THEN A.IMPORTO
-                ELSE 0 - A.IMPORTO
-              END
-          ) AS REV_AMT
-        , 0 AS AR_AMT
+        , A.COD_CONTO
+        , A.COD_CATEGORIA
+        , A.COD_DEST1
+        , A.COD_DEST2
+        , A.IMPORTO
+        , CASE WHEN ZH.ELEM IS NOT NULL THEN 'Y' END AS IS_ZHIDONG
+        , CASE WHEN MJ.ELEM IS NOT NULL THEN 'Y' END AS IS_MOJU
       FROM TGK_GB_HISENSE.DATI_SALDI_LORDI A
+      LEFT JOIN (
+          SELECT ELEM
+            FROM SESSION_V_REF_AZIENDA
+          WHERE SESSION_ID = V_SESSION_ID
+            AND HIE = 'GB_10'
+            AND NODE = '150'
+      ) ZH
+        ON ZH.ELEM = A.COD_AZIENDA
+      LEFT JOIN (
+          SELECT ELEM
+            FROM SESSION_V_REF_AZIENDA
+          WHERE SESSION_ID = V_SESSION_ID
+            AND HIE = 'GB_10'
+            AND NODE IN ('100', '110')
+      ) MJ
+        ON MJ.ELEM = A.COD_AZIENDA
     WHERE SUBSTR(V_SCENARIO, -3) IN ('ACT', 'BGT')
       AND A.COD_SCENARIO = V_SCENARIO
-      /* 收入按当前月及上月计算期间差额。 */
+      /* 收入按当前月及上月计算期间差额，占用类科目多带一个月上月数据由分支CTE剔除。 */
       AND A.COD_PERIODO IN (
           TO_CHAR(ADD_MONTHS(TO_DATE(V_YEARMONTH, 'YYYYMM'), -1), 'MM')
         , V_PERIODO
       )
+      AND A.COD_CONTO IN (
+          SELECT ELEM
+            FROM TGK_GB_HISENSE.V_REF_CONTO
+          WHERE HIE = '01'
+            AND NODE = 'S6001A'
+          UNION ALL
+          SELECT 'S600100' FROM DUAL
+          UNION ALL
+          SELECT 'SZK1011' FROM DUAL
+          UNION ALL
+          SELECT 'SZK1014' FROM DUAL
+      )
+      AND A.COD_DEST5 = 'ZZOT'
+      AND (ZH.ELEM IS NOT NULL OR MJ.ELEM IS NOT NULL)
+  ),
+  /* 智动精工收入：ACT、BGT均按当前场景取数，收入为当前月减上月的期间差额。 */
+  ZHIDONG_REVENUE AS (
+    SELECT COD_SCENARIO
+        , V_PERIODO AS COD_PERIODO
+        , 'BG001_BU001' AS D_BG
+        , '4330' AS COD_AZIENDA
+        , COD_VALUTA
+        , 0 - SUM(
+              CASE
+                WHEN COD_PERIODO = V_PERIODO THEN IMPORTO
+                ELSE 0 - IMPORTO
+              END
+          ) AS REV_AMT
+        , 0 AS AR_AMT
+      FROM GB_SOURCE_RAW
+    WHERE IS_ZHIDONG = 'Y'
       /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 智动精工源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG001_BU001,') > 0
       )
-      AND A.COD_AZIENDA IN (
-          SELECT ELEM
-            FROM TGK_GB_HISENSE.V_REF_AZIENDA
-          WHERE HIE = '10'
-            AND NODE = '150'
-      )
-      AND A.COD_CONTO = 'S600100'
-      AND A.COD_CATEGORIA IN ('ZAMOUNT', 'ZB00')
-      AND A.COD_DEST1 = 'ZZCC'
-      AND A.COD_DEST2 IN (
+      AND COD_CONTO = 'S600100'
+      AND COD_CATEGORIA IN ('ZAMOUNT', 'ZB00')
+      AND COD_DEST1 = 'ZZCC'
+      AND COD_DEST2 IN (
           SELECT ELEM
             FROM TGK_GB_HISENSE.V_REF_DEST2
           WHERE HIE = '01'
@@ -1160,78 +1209,57 @@ BEGIN
           UNION ALL
           SELECT '4320.S0320' FROM DUAL
       )
-      AND A.COD_DEST5 = 'ZZOT'
-    GROUP BY A.COD_SCENARIO
-            , A.COD_AZIENDA
-            , A.COD_VALUTA
+    GROUP BY COD_SCENARIO
+            , COD_AZIENDA
+            , COD_VALUTA
   ),
   /* 智动精工占用：ACT、BGT均按当前场景和当前期间取数。 */
   ZHIDONG_AR AS (
-    SELECT A.COD_SCENARIO
-        , A.COD_PERIODO
+    SELECT COD_SCENARIO
+        , COD_PERIODO
         , 'BG001_BU001' AS D_BG
         , '4330' AS COD_AZIENDA
-        , A.COD_VALUTA
+        , COD_VALUTA
         , 0 AS REV_AMT
-        , SUM(A.IMPORTO) AS AR_AMT
-      FROM TGK_GB_HISENSE.DATI_SALDI_LORDI A
-    WHERE SUBSTR(V_SCENARIO, -3) IN ('ACT', 'BGT')
-      AND A.COD_SCENARIO = V_SCENARIO
-      AND A.COD_PERIODO = V_PERIODO
+        , SUM(IMPORTO) AS AR_AMT
+      FROM GB_SOURCE_RAW
+    WHERE IS_ZHIDONG = 'Y'
       /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 智动精工源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG001_BU001,') > 0
       )
-      AND A.COD_AZIENDA IN (
-          SELECT ELEM
-            FROM TGK_GB_HISENSE.V_REF_AZIENDA
-          WHERE HIE = '10'
-            AND NODE = '150'
-      )
-      AND A.COD_CONTO = 'SZK1011'
-      AND A.COD_CATEGORIA IN ('ZAMOUNT', 'ZB00')
-      AND A.COD_DEST1 = 'ZZCC'
-      AND A.COD_DEST5 = 'ZZOT'
-    GROUP BY A.COD_SCENARIO
-            , A.COD_PERIODO
-            , A.COD_AZIENDA
-            , A.COD_VALUTA
+      AND COD_PERIODO = V_PERIODO
+      AND COD_CONTO = 'SZK1011'
+      AND COD_CATEGORIA IN ('ZAMOUNT', 'ZB00')
+      AND COD_DEST1 = 'ZZCC'
+    GROUP BY COD_SCENARIO
+            , COD_PERIODO
+            , COD_AZIENDA
+            , COD_VALUTA
   ),
   /* 模具收入：仅取当前ACT或BGT场景，并按场景使用对应的收入类别。 */
   MOJU_REVENUE AS (
-    SELECT A.COD_SCENARIO
+    SELECT COD_SCENARIO
         , V_PERIODO AS COD_PERIODO
         , 'BG004_BU001' AS D_BG
         , '1100' AS COD_AZIENDA
-        , A.COD_VALUTA
+        , COD_VALUTA
         , 0 - SUM(
               CASE
-                WHEN A.COD_PERIODO = V_PERIODO THEN A.IMPORTO
-                ELSE 0 - A.IMPORTO
+                WHEN COD_PERIODO = V_PERIODO THEN IMPORTO
+                ELSE 0 - IMPORTO
               END
           ) AS REV_AMT
         , 0 AS AR_AMT
-      FROM TGK_GB_HISENSE.DATI_SALDI_LORDI A
-    WHERE SUBSTR(V_SCENARIO, -3) IN ('ACT', 'BGT')
-      AND A.COD_SCENARIO = V_SCENARIO
-      /* 收入按当前月及上月计算期间差额。 */
-      AND A.COD_PERIODO IN (
-          TO_CHAR(ADD_MONTHS(TO_DATE(V_YEARMONTH, 'YYYYMM'), -1), 'MM')
-        , V_PERIODO
-      )
+      FROM GB_SOURCE_RAW
+    WHERE IS_MOJU = 'Y'
       /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 模具源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG004_BU001,') > 0
       )
-      AND A.COD_AZIENDA IN (
-          SELECT ELEM
-            FROM TGK_GB_HISENSE.V_REF_AZIENDA
-          WHERE HIE = '10'
-            AND NODE IN ('100', '110')
-      )
-      AND A.COD_CONTO IN (
+      AND COD_CONTO IN (
           SELECT ELEM
             FROM TGK_GB_HISENSE.V_REF_CONTO
           WHERE HIE = '01'
@@ -1240,11 +1268,11 @@ BEGIN
       /* BGT和ACT仅使用各自维护的收入类别。 */
       AND (
             (SUBSTR(V_SCENARIO, -3) = 'BGT'
-              AND A.COD_CATEGORIA IN ('ZAMOUNT', 'XT01', 'ZT01'))
+              AND COD_CATEGORIA IN ('ZAMOUNT', 'XT01', 'ZT01'))
           OR (SUBSTR(V_SCENARIO, -3) = 'ACT'
-              AND A.COD_CATEGORIA IN ('ZAMOUNT', '1ADJ', 'ZB00', 'ZADJ'))
+              AND COD_CATEGORIA IN ('ZAMOUNT', '1ADJ', 'ZB00', 'ZADJ'))
       )
-      AND A.COD_DEST1 IN (
+      AND COD_DEST1 IN (
           SELECT ELEM
             FROM TGK_GB_HISENSE.V_REF_DEST1
           WHERE HIE = '01'
@@ -1252,50 +1280,42 @@ BEGIN
           UNION ALL
           SELECT 'ZZCC' FROM DUAL
       )
-      AND A.COD_DEST2 IN (
+      AND COD_DEST2 IN (
           SELECT ELEM
             FROM TGK_GB_HISENSE.V_REF_DEST2
           WHERE HIE = '01'
             AND NODE IN ('1102', '1103', '1104', '1105', '10090')
       )
-      AND A.COD_DEST5 = 'ZZOT'
-    GROUP BY A.COD_SCENARIO
-            , A.COD_AZIENDA
-            , A.COD_VALUTA
+    GROUP BY COD_SCENARIO
+            , COD_AZIENDA
+            , COD_VALUTA
   ),
   /* 模具占用：仅取当前ACT或BGT场景，并按场景使用对应的占用类别。 */
   MOJU_AR AS (
-    SELECT A.COD_SCENARIO
-        , A.COD_PERIODO
+    SELECT COD_SCENARIO
+        , COD_PERIODO
         , 'BG004_BU001' AS D_BG
         , '1100' AS COD_AZIENDA
-        , A.COD_VALUTA
+        , COD_VALUTA
         , 0 AS REV_AMT
-        , SUM(A.IMPORTO) AS AR_AMT
-      FROM TGK_GB_HISENSE.DATI_SALDI_LORDI A
-    WHERE SUBSTR(V_SCENARIO, -3) IN ('ACT', 'BGT')
-      AND A.COD_SCENARIO = V_SCENARIO
-      AND A.COD_PERIODO = V_PERIODO
+        , SUM(IMPORTO) AS AR_AMT
+      FROM GB_SOURCE_RAW
+    WHERE IS_MOJU = 'Y'
       /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 模具源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG004_BU001,') > 0
       )
-      AND A.COD_AZIENDA IN (
-          SELECT ELEM
-            FROM TGK_GB_HISENSE.V_REF_AZIENDA
-          WHERE HIE = '10'
-            AND NODE IN ('100', '110')
-      )
-      AND A.COD_CONTO = 'SZK1014'
+      AND COD_PERIODO = V_PERIODO
+      AND COD_CONTO = 'SZK1014'
       /* BGT和ACT仅使用各自维护的占用类别。 */
       AND (
             (SUBSTR(V_SCENARIO, -3) = 'BGT'
-              AND A.COD_CATEGORIA IN ('ZAMOUNT', 'ZT01'))
+              AND COD_CATEGORIA IN ('ZAMOUNT', 'ZT01'))
           OR (SUBSTR(V_SCENARIO, -3) = 'ACT'
-              AND A.COD_CATEGORIA IN ('ZAMOUNT', '1ADJ', 'ZB00', 'ZADJ'))
+              AND COD_CATEGORIA IN ('ZAMOUNT', '1ADJ', 'ZB00', 'ZADJ'))
       )
-      AND A.COD_DEST1 IN (
+      AND COD_DEST1 IN (
           SELECT ELEM
             FROM TGK_GB_HISENSE.V_REF_DEST1
           WHERE HIE = '01'
@@ -1303,11 +1323,10 @@ BEGIN
           UNION ALL
           SELECT 'ZZCC' FROM DUAL
       )
-      AND A.COD_DEST5 = 'ZZOT'
-    GROUP BY A.COD_SCENARIO
-            , A.COD_PERIODO
-            , A.COD_AZIENDA
-            , A.COD_VALUTA
+    GROUP BY COD_SCENARIO
+            , COD_PERIODO
+            , COD_AZIENDA
+            , COD_VALUTA
   ),
   /* 两个特殊来源按场景、期间、事业部、公司和币种汇总收入及占用。 */
   SPECIAL_SOURCE_SUM AS (
