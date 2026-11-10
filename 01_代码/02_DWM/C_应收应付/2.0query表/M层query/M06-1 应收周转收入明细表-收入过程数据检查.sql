@@ -1,18 +1,17 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261110 18:14
- * 本次修改：ALTER BY 20261110 18:14 SHIQINGFENG.EX 收入利润中心映射改按AW_RUL_ARPPRC_000001：ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值，复刻TOV映射链并补齐缺失的batch6层。
- * 上次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 最后更新时间：20261110 19:40
+ * 本次修改：ALTER BY 20261110 19:40 SHIQINGFENG.EX 输出新增数据分类字段SRC_DETAIL，标识收入数据来源。
+ * 上次修改：ALTER BY 20261110 19:35 SHIQINGFENG.EX 账套事业部改按公司预聚合连接，修复多事业部公司扇出导致未映射利润中心收入重复计算，并下移维度名称函数、移除逐行解密调用以提升查询性能。
  *
  * 查询名称  ：应收周转收入明细表-收入过程数据检查
  * 源表      ：AW_MR9_REVM01_000001、TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001、TGK_FIMA_HISENSE.DIM_RULE_FI_MR_AR_PROFIT_MAPPING、TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261110 19:40 SHIQINGFENG.EX 输出新增数据分类字段SRC_DETAIL，标识收入数据来源。
+ *   ALTER BY 20261110 19:35 SHIQINGFENG.EX 账套事业部改按公司预聚合连接，修复多事业部公司扇出导致未映射利润中心收入重复计算，并下移维度名称函数、移除逐行解密调用以提升查询性能。
  *   ALTER BY 20261110 18:14 SHIQINGFENG.EX 收入利润中心映射改按AW_RUL_ARPPRC_000001：ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值，复刻TOV映射链并补齐缺失的batch6层。
- *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
- *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
- *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
  *******************************************************************************/
 WITH
 /* 应收周转利润中心映射：batch1按公司+源利润中心（一公司一行），batch2仅按源利润中心，源利润中心去前导零匹配。 */
@@ -70,6 +69,14 @@ ATS_BG_MAP AS (
        AND NVL(A.VALID_TO, '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || LPAD(${$Period.code}, 2, '0')
        AND A.COD_BG IN (SELECT COD_BG FROM TOV_BG_SCOPE)
        AND A.COD_BG NOT LIKE 'CXC%'
+),
+/* 账套事业部按公司预聚合：一公司一行，避免多事业部公司在收入明细上扇出、放大金额。 */
+ATS_BG_CNT AS (
+    SELECT COD_AZIENDA
+         , COUNT(DISTINCT COD_BG) AS BG_CNT
+         , CASE WHEN COUNT(DISTINCT COD_BG) = 1 THEN MAX(COD_BG) END AS SINGLE_BG
+      FROM ATS_BG_MAP
+     GROUP BY COD_AZIENDA
 ),
 /* 利润中心事业部配置：限制为参数事业部，并保留事业部为空的利润中心映射。 */
 PCR_BG_MAP AS (
@@ -135,18 +142,19 @@ REVM01_BASE AS (
        AND R.D_ADJ_TYPE NOT IN ('REV_01_210', 'REV_01_212')
        AND R.COD_AZIENDA IN (SELECT COD_AZIENDA FROM ATS_BG_MAP)
 ),
-/* REVENUE_CALC：收入利润中心按ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值映射；未命中时回退原始收入利润中心。 */
+/* REVENUE_CALC：收入利润中心按ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值映射；未命中时回退原始收入利润中心。
+   维度名称不在此层生成，统一在最终输出按编码取，避免明细行逐行调用维度函数。
+   SRC_DETAIL此处为数据分类（对齐ARPM03口径），区别于REVM01自身的凭证明细来源SRC_DETAIL（BSEG_FLJC/VBRP）。 */
 REVENUE_CALC AS (
     SELECT R.COD_SCENARIO
          , R.COD_PERIODO
          , R.COD_AZIENDA
+         , 'REVM01-收入模块M01' AS SRC_DETAIL
          , TRIM(R.CUST_CODE) AS CUST_CODE
          , R.CUST_NAME
          , R.COD_AZI_CTP
          , R.COD_DEST2 AS INCOME_PROFITCENTER_CODE
-         , F_TGK_GET_DIMNAME('DEST2', NVL(R.COD_DEST2, 'ZZZZ')) AS INCOME_PROFITCENTER_NAME
          , NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ')))) AS MAPPED_PROFITCENTER_CODE
-         , F_TGK_GET_DIMNAME('DEST2', NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, NVL(R.COD_DEST2, 'ZZZZ'))))) AS MAPPED_PROFITCENTER_NAME
          , CASE
              WHEN NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, PM6.PROFITCENTER_CODE)) IS NULL
                THEN '未命中收入利润中心映射'
@@ -205,122 +213,131 @@ REVENUE_CALC AS (
       LEFT JOIN PROFIT_CENTER_RULE_6 PM6
         ON PM6.COMPANY_CODE = R.COD_AZIENDA
        AND PM6.MATERIAL_GROUP_CODE = TRIM(R.MATERIAL_GROUP_CODE)
+     /* 只保留GEX-集团外：HQ不相等即集团外，等价于原集团归属判断，免去逐行解密调用。 */
      WHERE CASE
-             WHEN CUR_NODE.SELF_NODE = CASE
-                                         WHEN CUR_NODE.IS_HITACHI = 1
-                                           THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE)
-                                         ELSE CTP_NODE.NODE
-                                       END
-              AND CUR_NODE.HQ = CTP_NODE.HQ
-               THEN F_TGK_UNICODE_AS('decode','SUB-子公司')
              WHEN CUR_NODE.HQ = CTP_NODE.HQ
-               THEN F_TGK_UNICODE_AS('decode','GIN-集团内')
-             ELSE F_TGK_UNICODE_AS('decode','GEX-集团外')
-           END = F_TGK_UNICODE_AS('decode','GEX-集团外')
+               THEN 0
+             ELSE 1
+           END = 1
        AND NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, R.COD_DEST2))) IS NOT NULL
        AND NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, NVL(PM6.PROFITCENTER_CODE, R.COD_DEST2))) <> 'ZZZZ'
 ),
-/* REVENUE_BG_MAP：完成收入利润中心映射后，再匹配利润中心事业部和账套事业部。 */
+/* REVENUE_KEY_AGG：先按利润中心维度汇总收入，再做事业部匹配，避免明细行参与事业部映射的连接扇出。 */
+REVENUE_KEY_AGG AS (
+    SELECT R.COD_SCENARIO
+         , R.COD_PERIODO
+         , R.COD_AZIENDA
+         , R.SRC_DETAIL
+         , R.CUST_CODE
+         , MAX(R.CUST_NAME) AS CUST_NAME
+         , R.GRP_SCOPE
+         , R.COD_AZI_CTP
+         , R.INCOME_PROFITCENTER_CODE
+         , R.MAPPED_PROFITCENTER_CODE
+         , R.INCOME_PC_MAP_STATUS
+         , SUM(R.REV_AMT) AS REV_AMT
+      FROM REVENUE_CALC R
+     WHERE R.CUST_CODE IS NOT NULL
+     GROUP BY R.COD_SCENARIO
+            , R.COD_PERIODO
+            , R.COD_AZIENDA
+            , R.SRC_DETAIL
+            , R.CUST_CODE
+            , R.GRP_SCOPE
+            , R.COD_AZI_CTP
+            , R.INCOME_PROFITCENTER_CODE
+            , R.MAPPED_PROFITCENTER_CODE
+            , R.INCOME_PC_MAP_STATUS
+),
+/* REVENUE_BG_MAP：完成收入利润中心映射后，再匹配利润中心事业部和账套事业部。
+   账套事业部按公司预聚合连接，一个收入行最多命中一个事业部，避免多事业部公司扇出放大金额。 */
 REVENUE_BG_MAP AS (
     SELECT R.COD_SCENARIO
          , R.COD_PERIODO
          , R.COD_AZIENDA
+         , R.SRC_DETAIL
          , R.CUST_CODE
          , R.CUST_NAME
          , R.COD_AZI_CTP
          , R.INCOME_PROFITCENTER_CODE
-         , R.INCOME_PROFITCENTER_NAME
          , R.MAPPED_PROFITCENTER_CODE
-         , R.MAPPED_PROFITCENTER_NAME
          , R.INCOME_PC_MAP_STATUS
          , R.GRP_SCOPE
          , PCR.COD_BG AS PROFITCENTER_BG_CODE
          , CASE
              WHEN PCR.COD_BG IS NOT NULL
-              AND ATS.COD_BG = PCR.COD_BG
+              AND ATS.SINGLE_BG = PCR.COD_BG
                THEN PCR.COD_BG
              ELSE NULL
            END AS BUSINESS_UNIT_CODE
          , CASE
              WHEN PCR.COD_BG IS NOT NULL
-              AND ATS.COD_BG = PCR.COD_BG
-               THEN F_TGK_GET_DIMNAME('D_BG', PCR.COD_BG)
-             ELSE NULL
-           END AS BUSINESS_UNIT_NAME
-         , CASE
-             WHEN PCR.COD_BG IS NOT NULL
-              AND ATS.COD_BG IS NOT NULL
-              AND ATS.COD_BG <> PCR.COD_BG
+              AND ATS.SINGLE_BG IS NOT NULL
+              AND ATS.SINGLE_BG <> PCR.COD_BG
                THEN '公司与利润中心事业部不一致'
              WHEN PCR.COD_BG IS NULL
                THEN '利润中心未映射事业部'
-             WHEN ATS.COD_BG IS NULL
+             WHEN ATS.SINGLE_BG IS NULL
                THEN '账套未映射事业部'
              ELSE '公司与利润中心已映射同一事业部'
            END AS BUSINESS_UNIT_MAP_STATUS
          , R.REV_AMT AS MANAGE_REV_AMT
-      FROM REVENUE_CALC R
+      FROM REVENUE_KEY_AGG R
       LEFT JOIN PCR_BG_MAP PCR
         ON PCR.COD_DEST2 = LTRIM(TRIM(R.MAPPED_PROFITCENTER_CODE), '0')
-      LEFT JOIN ATS_BG_MAP ATS
+      LEFT JOIN ATS_BG_CNT ATS
         ON ATS.COD_AZIENDA = R.COD_AZIENDA
-     WHERE NOT EXISTS (
-           SELECT 1
-             FROM ATS_BG_MAP ATS_DIFF
-            WHERE ATS_DIFF.COD_AZIENDA = R.COD_AZIENDA
-              AND PCR.COD_BG IS NOT NULL
-              AND ATS_DIFF.COD_BG IS NOT NULL
-              AND ATS_DIFF.COD_BG <> PCR.COD_BG
-     )
+     /* 利润中心未映射事业部时保留；已映射时仅当公司只对应一个事业部且与其一致才保留。 */
+     WHERE PCR.COD_BG IS NULL
+        OR ATS.COD_AZIENDA IS NULL
+        OR (ATS.BG_CNT = 1 AND ATS.SINGLE_BG = PCR.COD_BG)
 ),
 /* REVENUE_AGG：按映射结果汇总收入，参数事业部过滤在聚合前执行，并排除汇总后金额为0的记录。 */
 REVENUE_AGG AS (
     SELECT R.COD_SCENARIO
          , R.COD_PERIODO
          , R.COD_AZIENDA
+         , R.SRC_DETAIL
          , R.CUST_CODE
          , MAX(R.CUST_NAME) AS CUST_NAME
          , R.GRP_SCOPE
          , R.COD_AZI_CTP
          , R.INCOME_PROFITCENTER_CODE
-         , R.INCOME_PROFITCENTER_NAME
          , R.MAPPED_PROFITCENTER_CODE
-         , R.MAPPED_PROFITCENTER_NAME
          , R.BUSINESS_UNIT_CODE
-         , R.BUSINESS_UNIT_NAME
          , SUM(R.MANAGE_REV_AMT) AS MANAGE_REV_AMT
       FROM REVENUE_BG_MAP R
-     WHERE R.CUST_CODE IS NOT NULL
      GROUP BY R.COD_SCENARIO
             , R.COD_PERIODO
             , R.COD_AZIENDA
+            , R.SRC_DETAIL
             , R.CUST_CODE
             , R.GRP_SCOPE
             , R.COD_AZI_CTP
             , R.INCOME_PROFITCENTER_CODE
-            , R.INCOME_PROFITCENTER_NAME
             , R.MAPPED_PROFITCENTER_CODE
-            , R.MAPPED_PROFITCENTER_NAME
             , R.BUSINESS_UNIT_CODE
-            , R.BUSINESS_UNIT_NAME
     HAVING NVL(SUM(R.MANAGE_REV_AMT), 0) <> 0
 )
 SELECT R.COD_SCENARIO AS SCENARIO                                /* 场景 */
      , R.COD_PERIODO AS PERIODO                                  /* 期间 */
      , R.COD_AZIENDA AS COMPANY_CODE                             /* 公司 */
+     , R.SRC_DETAIL                                              /* 数据分类 */
      , R.CUST_CODE                                               /* 客商编码 */
      , R.CUST_NAME                                               /* 客商名称 */
      , R.GRP_SCOPE                                               /* 集团归属范围 */
      , R.COD_AZI_CTP AS CP_COMPANY_CODE                          /* 对方公司 */
      , R.INCOME_PROFITCENTER_CODE                                /* 收入利润中心编码 */
-     , R.INCOME_PROFITCENTER_NAME                                /* 收入利润中心名称 */
+     , F_TGK_GET_DIMNAME('DEST2', NVL(R.INCOME_PROFITCENTER_CODE, 'ZZZZ')) AS INCOME_PROFITCENTER_NAME  /* 收入利润中心名称 */
      , R.MAPPED_PROFITCENTER_CODE AS TURNOVER_PROFITCENTER_CODE  /* 映射后周转利润中心编码 */
-     , R.MAPPED_PROFITCENTER_NAME AS TURNOVER_PROFITCENTER_NAME  /* 映射后周转利润中心名称 */
+     , F_TGK_GET_DIMNAME('DEST2', R.MAPPED_PROFITCENTER_CODE) AS TURNOVER_PROFITCENTER_NAME  /* 映射后周转利润中心名称 */
      , R.BUSINESS_UNIT_CODE                                      /* 事业部编码 */
-     , R.BUSINESS_UNIT_NAME                                      /* 事业部名称 */
+     , CASE
+         WHEN R.BUSINESS_UNIT_CODE IS NOT NULL
+           THEN F_TGK_GET_DIMNAME('D_BG', R.BUSINESS_UNIT_CODE)
+       END AS BUSINESS_UNIT_NAME                                 /* 事业部名称 */
      , R.MANAGE_REV_AMT                                          /* 管理口径收入金额 */
   FROM REVENUE_AGG R
- WHERE NVL(R.MANAGE_REV_AMT, 0) <> 0
  ORDER BY R.COD_AZIENDA
         , R.CUST_CODE
         , R.INCOME_PROFITCENTER_CODE
