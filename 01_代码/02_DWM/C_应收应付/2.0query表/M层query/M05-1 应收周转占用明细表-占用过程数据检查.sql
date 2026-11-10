@@ -12,22 +12,6 @@
  *   ALTER BY 20261110 18:45 SHIQINGFENG.EX 新增原始利润中心编码与名称，置于映射后周转利润中心之前。
  *   ALTER BY 20261110 18:12 SHIQINGFENG.EX ARPM02利润中心改按AW_RUL_ARPPRC_000001映射：batch1公司+源利润中心 > batch2源利润中心 > 原值，复刻TOV。
  *   ALTER BY 20261110 10:46 SHIQINGFENG.EX 周转利润中心编码前新增二级性质字段NATURE_L2_NAME。
- *   ALTER BY 20261110 10:19 SHIQINGFENG.EX 新增UREB_AMT、SPC_DSV_DED_AMT和AR_AMT应收占用金额字段。
- *   ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增智动精工和模具周转占用来源，并增加SRC_DETAIL数据源标识列。
- *   ALTER BY 20261109 18:32 SHIQINGFENG.EX 取消事业部映射冲突判定，利润中心命中多个事业部时逐组出行。
- *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
- *   ALTER BY 20261109 17:35 SHIQINGFENG.EX 事业部参数改为圈定公司范围，展示不再按事业部裁剪，事业部列原样输出。
- *   ALTER BY 20261109 16:25 SHIQINGFENG.EX 最终展示只保留参数事业部，无事业部的记录不再展示。
- *   ALTER BY 20261109 16:15 SHIQINGFENG.EX 最终展示按事业部参数过滤，其他事业部整批排除。
- *   ALTER BY 20261109 16:05 SHIQINGFENG.EX 集团范围过滤条件改用解码函数比较。
- *   ALTER BY 20261109 11:12 SHIQINGFENG.EX ARPTOV_FLAG改取ARPM02的TOV_FLAG标识列，删除ARPTOV_RULE自算逻辑。
- *   ALTER BY 20261102 20:30 SHIQINGFENG.EX 统一字段别名 AS 写法，CASE 按 WHEN/ELSE 同列、THEN 对齐 WHEN 末字母、条件续行 AND 对齐 WHEN 末字母分行，并对齐行尾注释列，未修改业务逻辑。
- *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
- *   ALTER BY 20261102 17:36 SHIQINGFENG.EX 按规范补查询说明文件头（查询名称+源表），未修改业务主体。
- *   20261021 按TOV实际规则修正周转利润中心仅标准化一次，参数版仅在最终层限制事业部，修复事业部映射为空问题（原版本记录）。
- *   20261021 删除公司进数和锁定限制，改为全量事业部计算负净额并在最终层执行事业部展示筛选；完成SQL完整性静态检查（原版本记录）。
- *   20261021 按TOV实际规则改为ARPM02与IMOCC全量留痕，新增ARPTOV_FLAG、AR_AMT_FLAG和事业部映射状态，取消最终非零金额过滤（原版本记录）。
- *   20261020 新增 ARPM02 与 IMOCC 周转校验查询（原版本记录）。
  *******************************************************************************/
 WITH
 /* 当前期间有效的全部周转事业部范围：排除CXC事业部，供映射存在性判断使用。 */
