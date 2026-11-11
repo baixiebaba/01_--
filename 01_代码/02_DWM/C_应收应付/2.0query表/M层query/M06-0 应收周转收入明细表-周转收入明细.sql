@@ -58,7 +58,10 @@ SELECT
      , F_TGK_GET_DIMNAME('D_BG', B.D_BG)           AS D_BG_DESC                  /* 事业部名称 */
  /* 公司 / 客户 */
      , B.COD_AZIENDA                                                             /* 公司 */
-     , B.SRC_DETAIL                                                              /* 数据分类 */
+     , CASE WHEN B.SRC_DETAIL = 'ARPM02-账龄表' AND NVL(B.REV_AMT,0) <> 0 
+              THEN 'REVM01-收入模块M01'
+            ELSE B.SRC_DETAIL
+       END AS SRC_DETAIL                                                         /* 数据分类 */
      , B.CUST_CODE                                                               /* 客商编码 */
      , MAX(CASE WHEN B.COD_PERIODO = ${$Period.code} THEN B.CUST_NAME    END) AS CUST_NAME  /* 客商名称 */
      , B.CUST_HEAD_CODE                                                          /* 主户编码 */
@@ -137,7 +140,12 @@ SELECT
 ) DEST3_GERARCHIA_FLAT
     ON DEST3_GERARCHIA_FLAT.COD_DEST3 = B.COD_DEST3
  GROUP BY
-        B.COD_AZIENDA, B.SRC_DETAIL, B.D_BG, B.CUST_CODE, B.CUST_HEAD_CODE, B.CUST_BRANCH_CODE
+        B.COD_AZIENDA
+        , CASE WHEN B.SRC_DETAIL = 'ARPM02-账龄表' AND NVL(REV_AMT,0) <> 0 
+                THEN 'REVM01-收入模块M01'
+               ELSE B.SRC_DETAIL
+          END
+        , B.D_BG, B.CUST_CODE, B.CUST_HEAD_CODE, B.CUST_BRANCH_CODE
         , B.GRP_SCOPE, B.COD_AZI_CTP
         , B.D_CHANNEL, B.D_ONOFFLINE, B.COD_DEST2, B.COD_DEST3, B.D_SALE_DEPT
         , B.D_CHANNEL_BU, B.D_CC_CUSTGRP, B.COD_VALUTA
