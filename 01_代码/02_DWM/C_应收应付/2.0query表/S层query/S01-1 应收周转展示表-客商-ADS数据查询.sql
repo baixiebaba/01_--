@@ -152,6 +152,7 @@ SELECT T.COD_SCENARIO
    AND G.COD_GERARCHIA = '01'
  WHERE T.COD_SCENARIO = ${$Scenario.code}
    AND T.COD_PERIODO = ${$Period.code}
+   AND T.D_GRAN_CAL = 'ARTO_CUST'
    /* 公司和事业部范围由报表参数传入，保留 IN 写法支持多值参数。 */
    /* 金额全为 0 的记录不输出 */
    AND (
