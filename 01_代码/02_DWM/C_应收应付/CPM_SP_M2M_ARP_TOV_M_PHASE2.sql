@@ -612,7 +612,7 @@ BEGIN
         , NVL(CC.CRG_CUST_GROUP_CODE, 'ZZZZ') AS D_CC_CUSTGRP
         , 'CNY' AS COD_VALUTA
         , 0 AS AR_AMT
-        , GL_ORG_REV AS REV_AMT
+        , ROUND(GL_ORG_REV,2) AS REV_AMT
         , 0 AS F1_ODUE_AMT
         , 0 AS F2_EPAY_AMT
         , 0 AS F3_ECR_AMT
