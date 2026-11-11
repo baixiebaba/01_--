@@ -24,7 +24,9 @@ CUR_ARP AS (
                  , DATEUPD
                  , ROW_NUMBER() OVER (PARTITION BY COD_AZIENDA ORDER BY DATEUPD DESC NULLS LAST) AS RN
               FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
-             WHERE ARP_FLAG IS NOT NULL
+             WHERE COD_SCENARIO = ${$Scenario.code}
+               AND COD_PERIODO = ${$Period.code}
+               AND COD_AZIENDA IN (${$Entity.code})
            )
      WHERE RN = 1
 )
@@ -48,11 +50,15 @@ CUR_ARP AS (
      WHERE RN = 1
 )
 /* 触发器建好之前的 ARP_FLAG 没有日志，这类公司用主表审计字段补修改人和修改时间。 */
-SELECT NVL(C.COD_AZIENDA, F.COD_AZIENDA)                             AS COD_AZIENDA   /* 公司 */
-     , CASE WHEN C.COD_AZIENDA IS NULL THEN F.ARP_FLAG_NEW ELSE C.ARP_FLAG END AS ARP_FLAG  /* 最新ARP_FLAG，为空表示已清空 */
-     , NVL(F.USERUPD_NEW, C.USERUPD)                                 AS USERUPD      /* 修改人 */
-     , NVL(F.DATEUPD_NEW, C.DATEUPD)                                 AS DATEUPD      /* 修改时间 */
-  FROM CUR_ARP C
-  FULL OUTER JOIN FLIP_ARP F
-    ON F.COD_AZIENDA = C.COD_AZIENDA
- ORDER BY COD_AZIENDA
+SELECT A.COD_AZIENDA,CASE WHEN A.ARP_FLAG = 'Y' THEN '已锁定' ELSE '未锁定' END ARP_FLAG
+      ,A.USERUPD,A.DATEUPD
+  FROM (
+     SELECT NVL(C.COD_AZIENDA, F.COD_AZIENDA)                             AS COD_AZIENDA   /* 公司 */
+          , CASE WHEN C.COD_AZIENDA IS NULL THEN F.ARP_FLAG_NEW ELSE C.ARP_FLAG END AS ARP_FLAG  /* 最新ARP_FLAG，为空表示已清空 */
+          , NVL(F.USERUPD_NEW, C.USERUPD)                                 AS USERUPD      /* 修改人 */
+          , NVL(F.DATEUPD_NEW, C.DATEUPD)                                 AS DATEUPD      /* 修改时间 */
+     FROM CUR_ARP C
+     FULL OUTER JOIN FLIP_ARP F
+     ON F.COD_AZIENDA = C.COD_AZIENDA
+) A
+ ORDER BY A.DATEUPD DESC,A.COD_AZIENDA
