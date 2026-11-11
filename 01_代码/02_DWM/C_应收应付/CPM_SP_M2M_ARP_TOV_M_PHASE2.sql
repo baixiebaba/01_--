@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261110 19:06
-   * 本次修改：ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
-   * 上次修改：ALTER BY 20261110 19:03 SHIQINGFENG.EX GB科目与组织节点成员初始化进会话表，科目与DEST1改用独立会话表
+   * 最后更新时间：20261111 10:54
+   * 本次修改：ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
+   * 上次修改：ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
  * 修改历史：
+ *   ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
  *   ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
  *   ALTER BY 20261110 19:03 SHIQINGFENG.EX GB科目与组织节点成员初始化进会话表，科目与DEST1改用独立会话表
  *   ALTER BY 20261110 17:30 SHIQINGFENG.EX 账龄与收入来源利润中心改按AW_RUL_ARPPRC_000001映射
@@ -451,14 +452,20 @@ BEGIN
          ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为TOV_FLAG标识列 */
       AND A.TOV_FLAG = 'Y'
   ),
-  /* IMOCC来源：不提前映射D_BG，科目固定1122000000，保留来源国家名称和利润中心口径。 */
+  /* IMOCC来源：不提前映射D_BG，集团范围与收入来源一致，按当前公司和对方公司的组织节点关系判断。 */
   IMOCC_SOURCE AS (
     SELECT V_SCENARIO AS COD_SCENARIO
         , V_PERIODO AS COD_PERIODO
         , I.COMPANY_CODE AS COD_AZIENDA
         , '1122000000' AS COD_CONTO
         , 'ZAMOUNT' AS COD_CATEGORIA
-        , 'GEX-集团外' AS GRP_SCOPE
+        /* ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断 */
+        , CASE
+              WHEN CUR_NODE.SELF_NODE = CASE WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE) ELSE CTP_NODE.NODE END
+                AND CUR_NODE.HQ = CTP_NODE.HQ THEN 'SUB-子公司'
+              WHEN CUR_NODE.HQ = CTP_NODE.HQ THEN 'GIN-集团内'
+              ELSE 'GEX-集团外'
+          END AS GRP_SCOPE
         , TRIM(I.CUST_CODE) AS CUST_CODE
         , I.CUST_NAME
         , TRIM(I.CUST_CODE) AS CUST_HEAD_CODE
@@ -489,6 +496,14 @@ BEGIN
         /* ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类，标识国际营销占用来源 */
         , 'IMOCC-国际营销占用' AS SRC_DETAIL
       FROM DWD_FI_MR_AR_IMOCC_MI I
+      LEFT JOIN NODE_MAP CUR_NODE
+        ON CUR_NODE.COD_SCENARIO = V_SCENARIO
+       AND CUR_NODE.COD_PERIODO = V_PERIODO
+       AND CUR_NODE.ELEM = I.COMPANY_CODE
+      LEFT JOIN NODE_MAP CTP_NODE
+        ON CTP_NODE.COD_SCENARIO = V_SCENARIO
+       AND CTP_NODE.COD_PERIODO = V_PERIODO
+       AND CTP_NODE.ELEM = I.CP_COMPANY_CODE
     WHERE I.DT_MONTH = V_YEARMONTH
       AND I.COMPANY_CODE IN ('1740', '2080')
       AND TRIM(I.CP_COMPANY_CODE) IS NULL
@@ -597,18 +612,7 @@ BEGIN
         , NVL(CC.CRG_CUST_GROUP_CODE, 'ZZZZ') AS D_CC_CUSTGRP
         , 'CNY' AS COD_VALUTA
         , 0 AS AR_AMT
-        , (CASE WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0 ELSE R.ORG_REV END)
-          - (CASE
-                WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0
-                WHEN R.SRC_DETAIL = 'VBRP' OR R.SRC_SYSTEM IN ('SMS', 'GSMS') THEN R.POLICY_AMT / CA.CAMBIO_PERIODO
-                ELSE R.POLICY_AMT
-              END)
-          - (CASE
-                WHEN R.SRC_DETAIL = 'BSEG_FLJC' THEN 0
-                WHEN R.SRC_DETAIL = 'VBRP' OR R.SRC_SYSTEM IN ('SMS', 'GSMS')
-                  THEN (NVL(R.MAP_DIS1, 0) + NVL(R.MAP_DIS3, 0) + NVL(R.MAP_DIS4, 0) + NVL(R.MAP_DIS30, 0) + NVL(R.MAP_DIS34, 0)) / CA.CAMBIO_PERIODO
-                ELSE NVL(R.MAP_DIS1, 0) + NVL(R.MAP_DIS3, 0) + NVL(R.MAP_DIS4, 0) + NVL(R.MAP_DIS30, 0) + NVL(R.MAP_DIS34, 0)
-              END) AS REV_AMT
+        , GL_ORG_REV AS REV_AMT
         , 0 AS F1_ODUE_AMT
         , 0 AS F2_EPAY_AMT
         , 0 AS F3_ECR_AMT
@@ -642,6 +646,7 @@ BEGIN
             , 0-MAP_DIS4 AS MAP_DIS4
             , 0-MAP_DIS30 AS MAP_DIS30
             , 0-MAP_DIS34 AS MAP_DIS34
+            , 0-GL_ORG_REV AS GL_ORG_REV
           FROM AW_MR9_REVM01_000001
         WHERE COD_SCENARIO = V_SCENARIO
           AND COD_PERIODO = V_PERIODO
