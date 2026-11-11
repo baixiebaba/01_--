@@ -387,15 +387,15 @@ BEGIN
          , NULL AS TAX_RATE
          , T.COD_VALUTA
          , T.COD_VALUTA_ORIGINARIA
-         , 0-T.BCY_REV AS BCY_0_AMT
-         , 0-T.BCY_REV AS BCY_1_AMT
+         , ROUND(0-T.BCY_REV,2) AS BCY_0_AMT
+         , ROUND(0-T.BCY_REV,2) AS BCY_1_AMT
          , 0 AS BCY_2_AMT, 0 AS BCY_3_AMT, 0 AS BCY_4_AMT
          , 0 AS BCY_5_AMT, 0 AS BCY_6_AMT, 0 AS BCY_7_AMT
          , 0 AS BCY_8_AMT, 0 AS BCY_9_AMT, 0 AS BCY_10_AMT
          , 0 AS BCY_11_AMT, 0 AS BCY_12_AMT, 0 AS BCY_13_AMT
          , 0 AS BCY_14_AMT, 0 AS BCY_15_AMT
-         , 0-T.ORG_REV AS QCY_0_AMT
-         , 0-T.ORG_REV AS QCY_1_AMT
+         , ROUND(0-T.ORG_REV,2) AS QCY_0_AMT
+         , ROUND(0-T.ORG_REV,2) AS QCY_1_AMT
          , 0 AS QCY_2_AMT, 0 AS QCY_3_AMT, 0 AS QCY_4_AMT
          , 0 AS QCY_5_AMT, 0 AS QCY_6_AMT, 0 AS QCY_7_AMT
          , 0 AS QCY_8_AMT, 0 AS QCY_9_AMT, 0 AS QCY_10_AMT
