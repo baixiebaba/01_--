@@ -479,7 +479,7 @@ BEGIN
         , 'ZZZZ' AS D_ONOFFLINE
         , NVL(I.PROFITCENTER_CODE, 'ZZZZ') AS COD_DEST2
         , NVL(I.BUS_RANGE_CODE, 'ZZZZ') AS COD_DEST3
-        , 'ZZZZ' AS D_SALE_DEPT
+        , NVL(I.MARKETING_DEPT_CODE, 'ZZZZ') AS D_SALE_DEPT
         , 'ZZZZ' AS D_CHANNEL_BU
         , 'ZZZZ' AS D_CC_CUSTGRP
         , 'CNY' AS COD_VALUTA
@@ -948,14 +948,17 @@ BEGIN
         , 'ZZZZ' AS COD_AZI_CTP
         , 'ZZZZ' AS COUNTRY_NAME
         , NULL AS NATURE_L2_NAME
-        , 'ZZZZ' AS D_CHANNEL
-        , 'ZZZZ' AS D_ONOFFLINE
+        , D_CHANNEL AS D_CHANNEL
+        , D_ONOFFLINE AS D_ONOFFLINE
         , CASE
               WHEN P.COD_DEST2 = 'X00000002' THEN 'X00000002'
               ELSE '101008002'
           END AS COD_DEST2
-        , 'ZZZZ' AS COD_DEST3
-        , 'ZZZZ' AS D_SALE_DEPT
+        , COD_DEST3 AS COD_DEST3
+        , CASE
+              WHEN P.COD_DEST2 = 'X00000002' THEN 'BIPD2600.0135'
+              ELSE 'BIPD2600.0539'
+          END AS D_SALE_DEPT
         , 'ZZZZ' AS D_CHANNEL_BU
         , 'ZZZZ' AS D_CC_CUSTGRP
         , 'CNY' AS COD_VALUTA
@@ -978,6 +981,10 @@ BEGIN
             , COD_CONTO
             , COD_DEST2
             , BCY_AMT
+            , D_SALE_DEPT
+            , COD_DEST3
+            , D_CHANNEL
+            , D_ONOFFLINE
           FROM AW_MR8_CPRS01_000001
         WHERE COD_SCENARIO = V_SCENARIO
           AND COD_PERIODO = V_PERIODO

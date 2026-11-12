@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261027 18:46
- * 本次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- * 上次修改：20261014 MODIFY 替换MDG客户主数据及对方公司映射表为客商大表
+ * 最后更新时间：20261112 16:22
+ * 本次修改：ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称字段，按公司及119项目客户打标。
+ * 上次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
  *
  * 脚本名称  ：dwd_fi_mr_ar_imocc_mi.sql
  * 功能描述  ：装载国际营销应收占用明细。
@@ -11,6 +11,7 @@
  * 目标表    ：test.dwd_fi_mr_ar_imocc_mi
  *
  * 修改历史：
+ *   ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称字段，按公司及119项目客户打标。
  *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
  *   20261014 MODIFY 替换MDG客户主数据及对方公司映射表为客商大表
  *   20260917 ADD BY shiqingfeng.ex 新增
@@ -60,6 +61,8 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_ar_imocc_mi PARTITION (*)
     , bus_range_name           -- 业务范围名称
     , profitcenter_code        -- 利润中心编码
     , profitcenter_name        -- 利润中心名称
+    , marketing_dept_code      -- 业务管理单元编码
+    , marketing_dept_name      -- 业务管理单元名称
     , bcy_code                 -- 本位币币种
     , qcy_code                 -- 交易币币种
     , imocc_cny_amt            -- 国际营销应收占用金额-人民币
@@ -308,6 +311,40 @@ SELECT @dt_month AS dt_month
               THEN '海信商用显示-触控平板-会议'
             ELSE '缺省'
         END profitcenter_name
+     -- 业务管理单元：2080按119项目客户细分，其余公司（1740/8010）缺省。
+     -- ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称
+     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080' AND cust_name LIKE '%119项目%'
+              THEN 'BIPD2600.0135'
+            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080'
+              THEN 'BIPD2600.0539'
+            ELSE 'ZZZZ'
+        END AS marketing_dept_code
+     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080' AND cust_name LIKE '%119项目%'
+              THEN '商显大项目'
+            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
+                        THEN '2080'
+                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
+                        THEN '1740'
+                      ELSE '8010'
+                  END = '2080'
+              THEN '会议产品'
+            ELSE '缺省'
+        END AS marketing_dept_name
      , bcy_code
      , qcy_code
      , imocc_cny_amt
