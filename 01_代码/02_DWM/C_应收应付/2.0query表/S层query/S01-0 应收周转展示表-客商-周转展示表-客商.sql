@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 18:00
- * 本次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
- * 上次修改：ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
+ * 最后更新时间：20261112 16:39
+ * 本次修改：ALTER BY 20261112 16:39 SHIQINGFENG.EX 输出新增数据分类字段SRC_DETAIL，置于客商编码前。
+ * 上次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *
  * 查询名称  ：应收周转展示表-客商-周转展示表-客商
  * 源表      ：AW_MR7_ARPA01_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261112 16:39 SHIQINGFENG.EX 输出新增数据分类字段SRC_DETAIL，置于客商编码前。
  *   ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
  *   ALTER BY 20261103 11:41 SHIQINGFENG.EX 删除展示字段前的列字母注释，新增公司一级/二级分类编码及描述字段，未修改金额和过滤逻辑。
@@ -21,6 +22,7 @@ SRC AS (
          , T.COD_PERIODO
          , T.D_BG
          , T.COD_AZIENDA
+         , T.SRC_DETAIL
          , T.CUST_CODE
          , T.CUST_NAME
          , T.CUST_HEAD_CODE
@@ -130,6 +132,7 @@ SELECT
      , S.COD_AZIENDA AS COD_AZIENDA
      , F_TGK_GET_DIMNAME('AZIENDA', NVL(S.COD_AZIENDA, 'ZZZZ')) AS COD_AZIENDA_DESC
      , AZ.ATTRIBUTO1                     /* 是否基地 */
+     , S.SRC_DETAIL AS SRC_DETAIL        /* 数据分类 */
      , S.CUST_CODE AS CUST_CODE
      , S.CUST_NAME AS CUST_NAME 
      , S.CUST_HEAD_CODE AS CUST_HEAD_CODE
