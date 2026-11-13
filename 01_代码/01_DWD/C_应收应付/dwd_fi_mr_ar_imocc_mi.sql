@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261112 16:22
- * 本次修改：ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称字段，按公司及119项目客户打标。
- * 上次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
+ * 最后更新时间：20261113 17:20
+ * 本次修改：ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
+ * 上次修改：ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围编码与名称改为按公司与国家映射表取值，国家取不到时用S810客户主数据兜底。
  *
  * 脚本名称  ：dwd_fi_mr_ar_imocc_mi.sql
  * 功能描述  ：装载国际营销应收占用明细。
@@ -11,6 +11,8 @@
  * 目标表    ：test.dwd_fi_mr_ar_imocc_mi
  *
  * 修改历史：
+ *   ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
+ *   ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围编码与名称改为按公司与国家映射表取值，国家取不到时用S810客户主数据兜底。
  *   ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称字段，按公司及119项目客户打标。
  *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
  *   20261014 MODIFY 替换MDG客户主数据及对方公司映射表为客商大表
@@ -97,10 +99,20 @@ product_category_dim AS (
             , prdctgy
             , prdctgy_zh
 ),
--- 汇总客商大表，按S810客户编码去重并提供客商名称、国家、公司分类和对方公司。
-customer_dim AS (
-    SELECT NULLIF(LTRIM(TRIM(cust_s810_code), '0'), '') AS cust_s810_code
-         , MAX(cust_name) AS name1
+-- SAP客户主数据（S810），提供客商名称、国家及MDG客户编码。
+sap_customer_dim AS (
+    SELECT kunnr
+         , MAX(name1) AS name1
+         , MAX(land1) AS country_code
+         , MAX(NULLIF(TRIM(zkunnr_mdg), '')) AS mdg_cust_code
+      FROM ods.ods_slt_s810_kna1
+     WHERE mandt = '810'
+     GROUP BY kunnr
+),
+-- MDG客户主数据基本信息，提供名称、国家和公司一至三级分类。
+mdg_customer_dim AS (
+    SELECT cust_code AS mdg_cust_code
+         , MAX(cust_name) AS cust_name
          , MAX(country_code) AS country_code
          , MAX(country_name) AS country_name
          , MAX(com_1st_code) AS com_1st_code
@@ -109,17 +121,10 @@ customer_dim AS (
          , MAX(com_2nd_name) AS com_2nd_name
          , MAX(com_3rd_code) AS com_3rd_code
          , MAX(com_3rd_name) AS com_3rd_name
-         , MAX(
-               COALESCE(
-                   NULLIF(TRIM(cp_company_mr_code), '')
-                 , NULLIF(TRIM(cp_company_code), '')
-               )
-           ) AS cp_company_code
-      FROM dim.dim_fi_mr_customer_dd
-     WHERE NULLIF(LTRIM(TRIM(cust_s810_code), '0'), '') IS NOT NULL
-     GROUP BY NULLIF(LTRIM(TRIM(cust_s810_code), '0'), '')
+      FROM dw.dim_customer_base_info_dd
+     GROUP BY cust_code
 ),
--- 汇总S810科目文本，作为客商大表未匹配时的名称兜底。
+-- 汇总S810科目文本，SAP客户主数据未匹配时的名称兜底。
 s810_account_name_dim AS (
     SELECT NULLIF(LTRIM(TRIM(saknr), '0'), '') AS cust_s810_code
          , MAX(txt20) AS name1
@@ -134,6 +139,41 @@ payment_term_dim AS (
          , MAX(col_ztermc) AS zterm_c
       FROM ods.odsmf_cm_tab1065
      GROUP BY col_zterm
+),
+-- 业务范围主数据，按编码取名称；国家映射表只给编码、不带名称。
+bus_range_dim AS (
+    SELECT dim_code AS map_bus_range_code
+         , MAX(dim_name) AS map_bus_range_name
+      FROM ods.odsfima_v_dim_fi_mr_bus_range
+     GROUP BY dim_code
+),
+-- 国家业务范围映射，取参数月有效记录。
+country_busrange_dim AS (
+    SELECT country_code AS map_country_code
+         , MAX(bus_range_code) AS map_bus_range_code
+      FROM dim.dim_rule_fi_mr_ar_country_busrange_mapping
+     WHERE valid_fr <= @dt_month
+       AND COALESCE(valid_to, '999999') >= @dt_month
+     GROUP BY country_code
+),
+-- 按公司映射的业务范围，作为国家匹配不到时的兜底。
+company_busrange_dim AS (
+    SELECT company_code AS map_company_code
+         , MAX(bus_range_code) AS map_bus_range_code
+         , MAX(bus_range_name) AS map_bus_range_name
+      FROM dim.dim_rule_fi_mr_ar_busrange_mapping
+     WHERE batch_id = '3'
+       AND valid_fr <= @dt_month
+       AND COALESCE(valid_to, '999999') >= @dt_month
+     GROUP BY company_code
+),
+-- 国家编码对应中文名称。
+country_name_dim AS (
+    SELECT land1 AS country_code
+         , MAX(landx) AS country_name
+      FROM ods.odss810_t005t
+     WHERE spras = '1'
+     GROUP BY land1
 ),
 -- 读取参数月份ACT国际营销应收占用事实，先清理三类金额均为0的垃圾数据，再按业务维度汇总金额。
 imocc_source AS (
@@ -206,20 +246,20 @@ imocc_enriched AS (
          , CASE WHEN pt.zterm_c IS NULL THEN '其他' ELSE pt.zterm_c END AS cust_pay_term
          , a.extent AS data_scope_code
          , LTRIM(a.kunnr, '0') AS cust_code
-         , COALESCE(c.name1, s8.name1) AS cust_name
+         , COALESCE(mc.cust_name, kc.name1, s8.name1) AS cust_name
          , a.custfundcode AS cust_branch_code
          , a.custfundname AS cust_branch_name
-         , c.cp_company_code
-         , c.country_code
-         , c.country_name
-         , c.com_1st_code AS channel_l1_code
-         , c.com_1st_name AS channel_l1_name
-         , c.com_2nd_code AS channel_l2_code
-         , c.com_2nd_name AS channel_l2_name
-         , c.com_3rd_code AS channel_l3_code
-         , c.com_3rd_name AS channel_l3_name
-         , NULL AS bus_range_code
-         , NULL AS bus_range_name
+         -- MDG主数据无对方公司字段，客户大表停用后该列暂不赋值。
+         , NULL AS cp_company_code
+         -- ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG主数据
+         , COALESCE(mc.country_code, kc.country_code) AS country_code
+         , COALESCE(mc.country_name, kn.country_name) AS country_name
+         , mc.com_1st_code AS channel_l1_code
+         , mc.com_1st_name AS channel_l1_name
+         , mc.com_2nd_code AS channel_l2_code
+         , mc.com_2nd_name AS channel_l2_name
+         , mc.com_3rd_code AS channel_l3_code
+         , mc.com_3rd_name AS channel_l3_name
          , a.prdln AS src_profitcenter_code
          , p.prdctgy_zh AS src_profitcenter_name
          , NULL AS profitcenter_code
@@ -234,23 +274,33 @@ imocc_enriched AS (
         ON g.grp = a.grp
       LEFT JOIN product_category_dim p
         ON p.prdln = a.prdln
-      LEFT JOIN customer_dim c
-        ON c.cust_s810_code = NULLIF(LTRIM(TRIM(a.kunnr), '0'), '')
+      LEFT JOIN sap_customer_dim kc
+        ON kc.kunnr = a.kunnr
+      LEFT JOIN mdg_customer_dim mc
+        ON mc.mdg_cust_code = kc.mdg_cust_code
       LEFT JOIN s810_account_name_dim s8
         ON s8.cust_s810_code = NULLIF(LTRIM(TRIM(a.kunnr), '0'), '')
+      LEFT JOIN country_name_dim kn
+        ON kn.country_code = COALESCE(mc.country_code, kc.country_code)
       LEFT JOIN payment_term_dim pt
         ON pt.zterm = a.zterm
+),
+-- 按产品线与大区规则确定承接公司编码，供业务范围和业务管理单元共用。
+imocc_company AS (
+    SELECT e.*
+         , CASE WHEN e.product_line_code = '01A0' OR e.region_flag = 'B2B业务拓展部'
+                  THEN '2080'
+                WHEN e.product_line_code = '0207' AND e.region_flag = '产品线大区'
+                  THEN '1740'
+                ELSE '8010'
+           END AS company_code
+      FROM imocc_enriched e
 )
 SELECT @dt_month AS dt_month
      , LEFT(@dt_month, 4) AS `year`
      , RIGHT(@dt_month, 2) AS `month`
      , company_src_code
-     , CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-              THEN '2080'
-            WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-              THEN '1740'
-            ELSE '8010'
-       END AS company_code
+     , company_code
      , region_code
      , region_name
      , region_flag
@@ -277,71 +327,48 @@ SELECT @dt_month AS dt_month
      , channel_l2_name
      , channel_l3_code
      , channel_l3_name
-     , bus_range_code
-     , bus_range_name
-     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080' AND cust_name LIKE '%119项目%'
+     -- 业务范围：2080固定海外公共；1740本国用日立国内营销分公司公共，
+     -- 其余国家按国家业务范围映射取值，映射不到再回退按公司映射。
+     -- ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围按公司与国家映射表取值
+     , CASE WHEN company_code = '2080'
+              THEN '3000'
+            WHEN company_code = '1740' AND country_code = 'CN'
+              THEN '2200'
+            WHEN company_code = '1740'
+              THEN COALESCE(cb.map_bus_range_code, bc.map_bus_range_code)
+            ELSE bc.map_bus_range_code
+       END AS bus_range_code
+     , CASE WHEN company_code = '2080'
+              THEN '海外公共'
+            WHEN company_code = '1740' AND country_code = 'CN'
+              THEN '日立国内营销分公司公共'
+            WHEN company_code = '1740'
+              THEN COALESCE(br.map_bus_range_name, bc.map_bus_range_name)
+            ELSE bc.map_bus_range_name
+       END AS bus_range_name
+     , CASE WHEN company_code = '2080' AND cust_name LIKE '%119项目%'
               THEN 'X00000002'
-            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080'
+            WHEN company_code = '2080'
               THEN '101008002'
             ELSE 'ZZZZ'
         END AS profitcenter_code
-     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080' AND cust_name LIKE '%119项目%'
+     , CASE WHEN company_code = '2080' AND cust_name LIKE '%119项目%'
               THEN '商显大项目'
-            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080'
+            WHEN company_code = '2080'
               THEN '海信商用显示-触控平板-会议'
             ELSE '缺省'
         END profitcenter_name
      -- 业务管理单元：2080按119项目客户细分，其余公司（1740/8010）缺省。
      -- ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称
-     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080' AND cust_name LIKE '%119项目%'
+     , CASE WHEN company_code = '2080' AND cust_name LIKE '%119项目%'
               THEN 'BIPD2600.0135'
-            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080'
+            WHEN company_code = '2080'
               THEN 'BIPD2600.0539'
             ELSE 'ZZZZ'
         END AS marketing_dept_code
-     , CASE WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080' AND cust_name LIKE '%119项目%'
+     , CASE WHEN company_code = '2080' AND cust_name LIKE '%119项目%'
               THEN '商显大项目'
-            WHEN CASE WHEN product_line_code = '01A0' OR region_flag = 'B2B业务拓展部'
-                        THEN '2080'
-                      WHEN product_line_code = '0207' AND region_flag = '产品线大区'
-                        THEN '1740'
-                      ELSE '8010'
-                  END = '2080'
+            WHEN company_code = '2080'
               THEN '会议产品'
             ELSE '缺省'
         END AS marketing_dept_name
@@ -352,5 +379,11 @@ SELECT @dt_month AS dt_month
      , imocc_usd_amt
      , 'IMOCC' AS ods_src
      , NOW() AS load_dt
-  FROM imocc_enriched
+  FROM imocc_company c
+  LEFT JOIN country_busrange_dim cb
+    ON cb.map_country_code = c.country_code
+  LEFT JOIN company_busrange_dim bc
+    ON bc.map_company_code = c.company_code
+  LEFT JOIN bus_range_dim br
+    ON br.map_bus_range_code = cb.map_bus_range_code
   ;
