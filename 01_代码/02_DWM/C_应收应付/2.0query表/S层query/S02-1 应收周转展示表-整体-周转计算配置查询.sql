@@ -68,13 +68,15 @@ SELECT T.VALID_FR                                                             /*
      , T.COLUMN_NAME_10                                                       /* 字段10_字段名编码 */
      , T.COLUMN_FILTER_10                                                     /* 字段10_筛选规则 */
      , T.COLUMN_VALUE_10                                                      /* 字段10_筛选值 */
+     , T.DATEUPD
+     , T.USERUPD
   FROM AW_RUL_TOVCAL_000001 T
 /* 场景期间限定规则有效期：场景取前4位年份拼期间成6位年月，与过程 CPM_SP_S2S_TDAYS_M_PHASE2 的 V_YEARMONTH 口径一致。 */
  WHERE TRIM(T.VALID_FR) <= SUBSTR(${$Scenario.code}, 1, 4) || ${$Period.code}
    AND NVL(TRIM(T.VALID_TO), '999999') >= SUBSTR(${$Scenario.code}, 1, 4) || ${$Period.code}
    /* 事业部由报表参数传入，多值参数保留 IN 写法。 */
    AND TRIM(T.D_BG) IN (${$ANL_D_BG.code})
-   AND EXP_TYPE = 'APR1'
+   AND EXP_TYPE = 'ARP1'
  ORDER BY T.EXP_TYPE
         , T.D_BG
         , T.COD_AZIENDA
