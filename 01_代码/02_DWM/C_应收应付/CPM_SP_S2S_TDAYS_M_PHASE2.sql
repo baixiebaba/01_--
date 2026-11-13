@@ -9,9 +9,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261102 15:49
-   * 本次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-   * 上次修改：ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU维度改为配置驱动
+   * 最后更新时间：20261113 16:35
+   * 本次修改：ALTER BY 20261113 16:35 SHIQINGFENG.EX 目标公司为空的配置不再装载，删除与插入统一按运行参数的公司和事业部限定
+   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
    *
    * 过程名称  ：CPM_SP_S2S_TDAYS_M_PHASE2
    * 功能描述  ：周转计算配置驱动的S2S装载过程。
@@ -19,6 +19,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
    * 目标表    ：AW_RUL_TOVCAL_000001配置的TARGET_TABLE，当前业务目标为AW_MR7_ARPA01_000001。
    *
    * 修改历史：
+   *   ALTER BY 20261113 16:35 SHIQINGFENG.EX 目标公司为空的配置不再装载，删除与插入统一按运行参数的公司和事业部限定
    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU维度改为配置驱动
    ******************************************************************************/
@@ -31,9 +32,6 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
   V_SQL            CLOB;
   V_DELETE_SQL     VARCHAR2(32767);
   V_TARGET_OBJECT  VARCHAR2(261);
-  V_TARGET_SCOPE   VARCHAR2(4000);
-  V_TARGET_AZIENDA VARCHAR2(4000);
-  V_TARGET_BG      VARCHAR2(4000);
   V_SOURCE_OBJECT  VARCHAR2(261);
   V_CONFIG_COUNT   NUMBER := 0;
   V_INSERT_COUNT   NUMBER := 0;
@@ -232,8 +230,8 @@ BEGIN
     RAISE_APPLICATION_ERROR(-20014, 'P_PERIODO必须为01至12');
   END IF;
 
-  /* 第二阶段：初始化SESSION公司范围——按账套、事业部及有效规则算出实际来源公司，
-     与运行参数P_AZIENDA/P_BG、配置表目标维度COD_AZIENDA/D_BG不是同一层含义。 */
+  /* 第二阶段：初始化SESSION公司范围——按账套、事业部及有效规则算出实际公司范围，
+     既约束来源取数，也限定配置目标公司（目标公司不在范围内则该配置跳过）。 */
   V_ERROR_STAGE := '初始化SESSION公司范围';
   V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
 
@@ -349,60 +347,49 @@ BEGIN
       RAISE_APPLICATION_ERROR(-20015, '有效期配置非法，规则=' || V_ERROR_RULE);
     END IF;
 
-    /* 运行参数范围与配置目标维度分开判断： */
-    /* 具体配置公司必须属于本次SESSION实际公司范围；当前资料未确认配置公司的通配字面量， */
-    /* 因此仅将空配置公司作为目标ZZZZ，来源仍只允许读取SESSION_AZIENDA_LIST中的公司。 */
-    /* PL/SQL控制流不能直接使用SQL子查询；这里先按当前SESSION_ID计数， */
-    /* 保持配置R.COD_AZIENDA非空时仅命中SESSION_AZIENDA_LIST才处理，未命中则跳过。 */
-    IF TRIM(R.COD_AZIENDA) IS NOT NULL THEN
-      SELECT COUNT(*)
-        INTO V_SESSION_AZIENDA_COUNT
-        FROM SESSION_AZIENDA_LIST L
-       WHERE L.SESSION_ID = V_SESSION_ID
-         AND TRIM(L.ELEM) = TRIM(R.COD_AZIENDA);
-
-      IF V_SESSION_AZIENDA_COUNT = 0 THEN
-        CONTINUE;
-      END IF;
-    END IF;
-
-    /* P_BG是运行事业部范围；配置D_BG是目标事业部。 */
-    /* P_BG=ALL纳入所有有效配置目标事业部，空目标事业部输出ZZZZ；具体列表只匹配配置D_BG。 */
-    IF TRIM(R.D_BG) IS NOT NULL AND NOT LIST_MATCH(V_BG, R.D_BG) THEN
+    /* ALTER BY 20261113 16:35 SHIQINGFENG.EX 目标公司为空的配置直接排除，不再作为无公司限制的兜底配置装载。 */
+    IF TRIM(R.COD_AZIENDA) IS NULL THEN
       CONTINUE;
     END IF;
 
-    /* 目标公司、目标事业部先在PL/SQL中标准化。 */
-    /* 不能在静态INSERT的VALUES中直接调用过程内函数，否则低版本Oracle会报PLS-00231。 */
-    V_TARGET_AZIENDA := TARGET_AZIENDA_VALUE(R.COD_AZIENDA);
-    V_TARGET_BG := DIM_VALUE(R.D_BG);
+    /* 运行参数限定目标公司：目标公司必须属于本次SESSION实际公司范围，未命中则跳过。 */
+    SELECT COUNT(*)
+      INTO V_SESSION_AZIENDA_COUNT
+      FROM SESSION_AZIENDA_LIST L
+     WHERE L.SESSION_ID = V_SESSION_ID
+       AND TRIM(L.ELEM) = TRIM(R.COD_AZIENDA);
 
-    /* 第五阶段：按配置目标范围清理——场景、期间、来源、目标表、目标公司与事业部必须同时命中，
-       避免P_AZIENDA/P_BG=ALL时交叉放大删除范围；同一目标表本次只删一次。 */
-    V_TARGET_SCOPE := V_TARGET_OBJECT
-      || '|'
-      || V_TARGET_AZIENDA
-      || '|'
-      || V_TARGET_BG;
+    IF V_SESSION_AZIENDA_COUNT = 0 THEN
+      CONTINUE;
+    END IF;
 
-    /* 同一目标公司、目标事业部范围只在首次装载前删除一次。 */
-    /* 删除条件直接使用当前已筛选的配置目标维度，避免多层EXISTS动态拼接产生括号错误。 */
-    IF NOT V_TARGET_SEEN.EXISTS(V_TARGET_SCOPE) THEN
-      /* 删除范围值均来自过程参数或当前有效配置，拼接前统一转义单引号。 */
+    /* 运行参数限定目标事业部：具体列表只匹配配置D_BG；
+       配置D_BG为空视作ZZZZ，仅在P_BG=ALL时纳入，保证删除范围能完整覆盖插入范围。 */
+    IF NOT LIST_MATCH(V_BG, NVL(NULLIF(TRIM(R.D_BG), ''), 'ZZZZ')) THEN
+      CONTINUE;
+    END IF;
+
+    /* 第五阶段：按运行参数范围清理——删除与插入同口径：公司取本次SESSION实际公司范围，
+       事业部取运行参数P_BG；同一目标表本次只在首次装载前删除一次。 */
+    IF NOT V_TARGET_SEEN.EXISTS(V_TARGET_OBJECT) THEN
+      /* 删除范围值均来自过程参数，拼接前统一转义单引号；公司范围用SESSION表避免长清单拼接。 */
       /* 此处不使用USING绑定列表，避免当前Oracle版本对该动态DELETE绑定语法的解析错误。 */
       V_DELETE_SQL := 'DELETE FROM ' || V_TARGET_OBJECT
         || ' D WHERE D.COD_SCENARIO = ''' || REPLACE(V_SCENARIO, '''', '''''') || ''''
         || ' AND D.COD_PERIODO = ''' || REPLACE(V_PERIODO, '''', '''''') || ''''
         || ' AND D.PROVENIENZA = ''CPM_SP_S2S_TDAYS_M_PHASE2'''
-        || ' AND NVL(NULLIF(TRIM(D.COD_AZIENDA), ''''), ''ZZZZ'') = '''
-        || REPLACE(V_TARGET_AZIENDA, '''', '''''') || ''''
-        || ' AND NVL(NULLIF(TRIM(D.D_BG), ''''), ''ZZZZ'') = '''
-        || REPLACE(V_TARGET_BG, '''', '''''') || '''';
+        || ' AND D.COD_AZIENDA IN (SELECT L.ELEM FROM SESSION_AZIENDA_LIST L'
+        || ' WHERE L.SESSION_ID = ' || V_SESSION_ID || ')';
+      /* P_BG为具体清单时按清单限定事业部删除范围，P_BG=ALL时不限制事业部。 */
+      IF V_BG <> 'ALL' THEN
+        V_DELETE_SQL := V_DELETE_SQL
+          || ' AND D.D_BG IN (''' || REPLACE(V_BG, ',', ''',''') || ''')';
+      END IF;
       EXECUTE IMMEDIATE V_DELETE_SQL;
-      V_TARGET_SEEN(V_TARGET_SCOPE) := TRUE;
+      V_TARGET_SEEN(V_TARGET_OBJECT) := TRUE;
 
       INSERT INTO ZTAB_CPM_LOG (CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-      VALUES ('CPM_SP_S2S_TDAYS_M_PHASE2', '目标表删除完成', 'TARGET=' || V_TARGET_OBJECT || ';目标公司=' || V_TARGET_AZIENDA || ';目标事业部=' || V_TARGET_BG || ';来源=CPM_SP_S2S_TDAYS_M_PHASE2', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
+      VALUES ('CPM_SP_S2S_TDAYS_M_PHASE2', '目标表删除完成', 'TARGET=' || V_TARGET_OBJECT || ';删除范围=参数公司|事业部=' || P_BG || ';来源=CPM_SP_S2S_TDAYS_M_PHASE2', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
     END IF;
 
     /* 第六阶段：拼装动态取数装载SQL——内层按10组条件聚合18个金额，外层算6个周转天数。 */
@@ -413,6 +400,8 @@ BEGIN
 
     /* 直接动态写入目标表：参数和配置目标维度使用绑定变量，来源表、目标表及HIE表使用安全拼接。 */
     /* AGG先按来源类别、币种聚合18个金额；外层SELECT再计算6个周转天数。 */
+    /* ALTER BY 20261113 16:35 SHIQINGFENG.EX 来源公司不再强制等于目标公司，
+       仅受运行参数公司范围约束，配置筛选组可再按来源公司过滤，支持跨公司归集。 */
     V_SQL := 'INSERT INTO ' || V_TARGET_OBJECT || '('
       || 'OID, COD_SCENARIO, COD_PERIODO, D_BG, COD_CONTO, COD_AZIENDA, D_GRAN_CAL, COD_CATEGORIA'
       || ', D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU, D_CC_CUSTGRP, COD_VALUTA'
@@ -467,8 +456,7 @@ BEGIN
       || CHR(10) || '           SELECT L.ELEM'
       || CHR(10) || '             FROM SESSION_AZIENDA_LIST L'
       || CHR(10) || '            WHERE L.SESSION_ID = P.SESSION_ID'
-      || CHR(10) || '     )'
-      || CHR(10) || '     AND (P.TARGET_COD_AZIENDA = ''ZZZZ'' OR TRIM(S.COD_AZIENDA) = TRIM(P.TARGET_COD_AZIENDA))';
+      || CHR(10) || '     )';
 
     /* 同表读写边界：目标删除先于本目标首次写入；来源等于目标时排除本过程来源， */
     /* 避免同一过程前一条配置刚写入的结果被后一条配置再次读取并重复累加。 */
