@@ -2,8 +2,8 @@
  *                                  脚本说明
  *-----------------------------------------------------------------------------
  * 最后更新时间：20261116 14:19
- * 本次修改：ALTER BY 20261116 14:19 SHIQINGFENG.EX 账龄行项目按来源系统集中排列。
- * 上次修改：ALTER BY 20261116 14:08 SHIQINGFENG.EX 账龄侧改为直接读取ODS行项目核对。
+ * 本次修改：ALTER BY 20261116 14:19 SHIQINGFENG.EX 新增
+ * 上次修改：
  *
  * 脚本名称  ：账龄统驭科目余额校验.sql
  * 功能描述  ：按来源系统、公司、原始科目核对ODS统驭科目未清本位币与ODS总账余额差异，不含提前回款。
@@ -11,10 +11,7 @@
  * 目标表    ：无（校验查询，不落表）。
  *
  * 修改历史：
- *   ALTER BY 20261116 14:19 SHIQINGFENG.EX 账龄行项目按来源系统集中排列。
- *   ALTER BY 20261116 14:08 SHIQINGFENG.EX 账龄侧改为直接读取ODS行项目核对。
- *   ALTER BY 20261116 11:34 SHIQINGFENG.EX S700公司改为直接使用原始公司代码。
- *   ALTER BY 20261116 11:28 SHIQINGFENG.EX 新增统驭科目账龄与科目余额核对。
+ *   ALTER BY 20261116 14:19 SHIQINGFENG.EX 新增
  ******************************************************************************/
 -- 统计年月，格式 YYYYMM。以下语句必须在同一session中按顺序执行。
 SET @dt_month = '202608';
@@ -527,4 +524,5 @@ SELECT COALESCE(a.system_src, b.system_src) AS system_src
  WHERE ABS(COALESCE(a.aging_bcy_amt, 0) - COALESCE(b.balance_bcy_amt, 0)) > 0.005
  ORDER BY system_src
         , company_code
-        , acct_src_code;
+        , acct_src_code
+        ;
