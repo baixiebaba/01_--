@@ -7,9 +7,9 @@
     /*******************************************************************************
     *                              存储过程说明
     *-----------------------------------------------------------------------------
-    * 最后更新时间：20261117 18:15
-    * 本次修改：ALTER BY 20261117 18:15 SHIQINGFENG.EX 业务键纳入一二三性质，年初上月按性质匹配，聚合按性质拆行
-    * 上次修改：ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
+    * 最后更新时间：20261117 21:33
+    * 本次修改：ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入
+    * 上次修改：ALTER BY 20261117 21:03 SHIQINGFENG.EX 出库退货匹配去除一二三性质，多性质行按性质为空优先固定唯一落位行
     *
     * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,9 @@
     * 目标表    ：AW_MR9_ARPM02_000001
     *
     * 修改历史：
+    *   ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入
+    *   ALTER BY 20261117 21:03 SHIQINGFENG.EX 出库退货匹配去除一二三性质，多性质行按性质为空优先固定唯一落位行
+    *   ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货补充金额改三级匹配：优先1122、其次2204，均未命中按M01原值新增账龄为空独立行
     *   ALTER BY 20261117 18:15 SHIQINGFENG.EX 业务键纳入一二三性质，年初上月按性质匹配，聚合按性质拆行
     *   ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
     *   ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
@@ -199,9 +202,65 @@
           , A.MB_AGE_FLAG
           , A.IS_REC_MB
           , A.GRP_SCOPE
-          , A.NATURE_L1_NAME
-          , A.NATURE_L2_NAME
-          , A.NATURE_L3_NAME
+          /* 账龄调整副本性质为空时取同键账龄行的性质，使其与主来源聚合到同一行；同键多性质按空优先、编码排序取第一行。 */
+          /* ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入。 */
+          , CASE WHEN A.SRC_DETAIL = 'ZZT003_ADJ'
+                 THEN NVL(A.NATURE_L1_NAME
+                        , (SELECT MAX(C.NATURE_L1_NAME) KEEP (
+                                    DENSE_RANK FIRST ORDER BY
+                                      CASE WHEN C.NATURE_L1_NAME IS NULL THEN 0 ELSE 1 END
+                                    , C.NATURE_L1_NAME
+                                    , C.NATURE_L2_NAME
+                                    , C.NATURE_L3_NAME)
+                             FROM AW_MR9_ARPM01_000001 C
+                            WHERE C.COD_SCENARIO = A.COD_SCENARIO
+                              AND C.COD_PERIODO = A.COD_PERIODO
+                              AND C.COD_AZIENDA = A.COD_AZIENDA
+                              AND C.COD_CONTO = A.COD_CONTO
+                              AND NVL(C.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
+                              AND NVL(C.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
+                              AND C.SRC_DETAIL LIKE 'ORG%'
+                              AND NVL(C.LE_AGE_FLAG, '|') <> '|'))
+                 ELSE A.NATURE_L1_NAME
+            END AS NATURE_L1_NAME
+          , CASE WHEN A.SRC_DETAIL = 'ZZT003_ADJ'
+                 THEN NVL(A.NATURE_L2_NAME
+                        , (SELECT MAX(C.NATURE_L2_NAME) KEEP (
+                                    DENSE_RANK FIRST ORDER BY
+                                      CASE WHEN C.NATURE_L1_NAME IS NULL THEN 0 ELSE 1 END
+                                    , C.NATURE_L1_NAME
+                                    , C.NATURE_L2_NAME
+                                    , C.NATURE_L3_NAME)
+                             FROM AW_MR9_ARPM01_000001 C
+                            WHERE C.COD_SCENARIO = A.COD_SCENARIO
+                              AND C.COD_PERIODO = A.COD_PERIODO
+                              AND C.COD_AZIENDA = A.COD_AZIENDA
+                              AND C.COD_CONTO = A.COD_CONTO
+                              AND NVL(C.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
+                              AND NVL(C.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
+                              AND C.SRC_DETAIL LIKE 'ORG%'
+                              AND NVL(C.LE_AGE_FLAG, '|') <> '|'))
+                 ELSE A.NATURE_L2_NAME
+            END AS NATURE_L2_NAME
+          , CASE WHEN A.SRC_DETAIL = 'ZZT003_ADJ'
+                 THEN NVL(A.NATURE_L3_NAME
+                        , (SELECT MAX(C.NATURE_L3_NAME) KEEP (
+                                    DENSE_RANK FIRST ORDER BY
+                                      CASE WHEN C.NATURE_L1_NAME IS NULL THEN 0 ELSE 1 END
+                                    , C.NATURE_L1_NAME
+                                    , C.NATURE_L2_NAME
+                                    , C.NATURE_L3_NAME)
+                             FROM AW_MR9_ARPM01_000001 C
+                            WHERE C.COD_SCENARIO = A.COD_SCENARIO
+                              AND C.COD_PERIODO = A.COD_PERIODO
+                              AND C.COD_AZIENDA = A.COD_AZIENDA
+                              AND C.COD_CONTO = A.COD_CONTO
+                              AND NVL(C.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
+                              AND NVL(C.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
+                              AND C.SRC_DETAIL LIKE 'ORG%'
+                              AND NVL(C.LE_AGE_FLAG, '|') <> '|'))
+                 ELSE A.NATURE_L3_NAME
+            END AS NATURE_L3_NAME
           , A.D_CHANNEL
           /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU由ARPM01透传（列清单、目标列与MERGE值同步增加D_CHANNEL_BU）。 */
           , A.D_CHANNEL_BU
@@ -297,8 +356,10 @@
                 FROM SESSION_AZIENDA_LIST
                 WHERE SESSION_ID = V_SESSION_ID
         )
-        AND NVL(A.LE_AGE_FLAG,'|') <> '|'
-        AND SRC_DETAIL LIKE 'ORG%'
+        AND (
+             (NVL(A.LE_AGE_FLAG,'|') <> '|' AND SRC_DETAIL LIKE 'ORG%')
+             OR (SRC_DETAIL LIKE '%ADJ')
+             )
     ),
     /* 按用户口径计算ORG来源本位币账龄金额；非ORG来源保留原始BCY供补充金额使用。 */
     CURRENT_SOURCE AS (
@@ -479,6 +540,7 @@
     /* 无账龄标识补充来源：按业务键与一二三性质聚合ARPM01本位币金额，NULL业务键保留并按NVL语义关联。 */
     /* EPAY空科目固定为1122000000；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。 */
     /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 聚合键纳入一二三性质，补充金额跟随性质行不再跨行合并。 */
+    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货移出本包，改走ZTSO04_AGG三级匹配，本包只保留其余补充来源。 */
     SUPPLEMENT_AGG AS (
       SELECT S.COD_AZIENDA
           , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
@@ -491,8 +553,6 @@
           , S.NATURE_L1_NAME
           , S.NATURE_L2_NAME
           , S.NATURE_L3_NAME
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_CK%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS SHP_NINV_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_TH%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS RET_NTRF_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'OVERDUE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS OVERDUE_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'INV_SAMPLE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS INV_SAMPLE_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'EPAY%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS EPAY_AMT
@@ -508,9 +568,7 @@
                 WHERE SESSION_ID = V_SESSION_ID
         )
         AND (
-              S.SRC_DETAIL LIKE 'ZTSO04_CK%'
-            OR S.SRC_DETAIL LIKE 'ZTSO04_TH%'
-            OR S.SRC_DETAIL LIKE 'OVERDUE%'
+              S.SRC_DETAIL LIKE 'OVERDUE%'
             OR S.SRC_DETAIL LIKE 'INV_SAMPLE%'
             OR S.SRC_DETAIL LIKE 'EPAY%'
             OR S.ECLS_FLAG = 'Y'
@@ -528,6 +586,31 @@
               , S.NATURE_L1_NAME
               , S.NATURE_L2_NAME
               , S.NATURE_L3_NAME
+    ),
+    /* 出库退货补充金额：科目与性质均不参与匹配键，仅按公司、客商、利润中心聚合。 */
+    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增出库退货独立聚合，配套ZTSO04_TARGET三级匹配。 */
+    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 匹配键去除一二三性质。 */
+    ZTSO04_AGG AS (
+      SELECT S.COD_AZIENDA
+          , S.CUST_CODE
+          , S.COD_DEST2
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_CK%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS SHP_NINV_AMT
+          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_TH%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS RET_NTRF_AMT
+        FROM AW_MR9_ARPM01_000001 S
+      WHERE S.COD_SCENARIO = V_SCENARIO
+        AND S.COD_PERIODO = V_PERIODO
+        AND S.COD_AZIENDA IN (
+              SELECT ELEM
+                FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+        )
+        AND (
+              S.SRC_DETAIL LIKE 'ZTSO04_CK%'
+            OR S.SRC_DETAIL LIKE 'ZTSO04_TH%'
+        )
+      GROUP BY S.COD_AZIENDA
+              , S.CUST_CODE
+              , S.COD_DEST2
     ),
     /* 取当前期间每个业务键与性质组合的维度基准行，ORG来源优先，其他来源作为兜底。 */
     /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 去重分区键纳入一二三性质，性质拆行不再被坍缩为单行。 */
@@ -601,156 +684,177 @@
                                       THEN S.BCY_0_AMT
                                 ELSE S.QCY_0_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_0_AMT
                       ELSE 0
                   END) AS ORG_BCY_0_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_0_AMT ELSE 0 END) AS CALC_BCY_0_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_0_AMT ELSE 0 END) AS CALC_BCY_0_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_1_AMT
                                 ELSE S.QCY_1_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_1_AMT
                       ELSE 0
                   END) AS ORG_BCY_1_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_1_AMT ELSE 0 END) AS CALC_BCY_1_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_1_AMT ELSE 0 END) AS CALC_BCY_1_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_2_AMT
                                 ELSE S.QCY_2_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_2_AMT
                       ELSE 0
                   END) AS ORG_BCY_2_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_2_AMT ELSE 0 END) AS CALC_BCY_2_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_2_AMT ELSE 0 END) AS CALC_BCY_2_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_3_AMT
                                 ELSE S.QCY_3_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_3_AMT
                       ELSE 0
                   END) AS ORG_BCY_3_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_3_AMT ELSE 0 END) AS CALC_BCY_3_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_3_AMT ELSE 0 END) AS CALC_BCY_3_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_4_AMT
                                 ELSE S.QCY_4_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_4_AMT
                       ELSE 0
                   END) AS ORG_BCY_4_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_4_AMT ELSE 0 END) AS CALC_BCY_4_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_4_AMT ELSE 0 END) AS CALC_BCY_4_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_5_AMT
                                 ELSE S.QCY_5_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_5_AMT
                       ELSE 0
                   END) AS ORG_BCY_5_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_5_AMT ELSE 0 END) AS CALC_BCY_5_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_5_AMT ELSE 0 END) AS CALC_BCY_5_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_6_AMT
                                 ELSE S.QCY_6_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_6_AMT
                       ELSE 0
                   END) AS ORG_BCY_6_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_6_AMT ELSE 0 END) AS CALC_BCY_6_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_6_AMT ELSE 0 END) AS CALC_BCY_6_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_7_AMT
                                 ELSE S.QCY_7_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_7_AMT
                       ELSE 0
                   END) AS ORG_BCY_7_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_7_AMT ELSE 0 END) AS CALC_BCY_7_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_7_AMT ELSE 0 END) AS CALC_BCY_7_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_8_AMT
                                 ELSE S.QCY_8_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_8_AMT
                       ELSE 0
                   END) AS ORG_BCY_8_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_8_AMT ELSE 0 END) AS CALC_BCY_8_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_8_AMT ELSE 0 END) AS CALC_BCY_8_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_9_AMT
                                 ELSE S.QCY_9_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_9_AMT
                       ELSE 0
                   END) AS ORG_BCY_9_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_9_AMT ELSE 0 END) AS CALC_BCY_9_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_9_AMT ELSE 0 END) AS CALC_BCY_9_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_10_AMT
                                 ELSE S.QCY_10_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_10_AMT
                       ELSE 0
                   END) AS ORG_BCY_10_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_10_AMT ELSE 0 END) AS CALC_BCY_10_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_10_AMT ELSE 0 END) AS CALC_BCY_10_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_11_AMT
                                 ELSE S.QCY_11_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_11_AMT
                       ELSE 0
                   END) AS ORG_BCY_11_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_11_AMT ELSE 0 END) AS CALC_BCY_11_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_11_AMT ELSE 0 END) AS CALC_BCY_11_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_12_AMT
                                 ELSE S.QCY_12_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_12_AMT
                       ELSE 0
                   END) AS ORG_BCY_12_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_12_AMT ELSE 0 END) AS CALC_BCY_12_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_12_AMT ELSE 0 END) AS CALC_BCY_12_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_13_AMT
                                 ELSE S.QCY_13_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_13_AMT
                       ELSE 0
                   END) AS ORG_BCY_13_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_13_AMT ELSE 0 END) AS CALC_BCY_13_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_13_AMT ELSE 0 END) AS CALC_BCY_13_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_14_AMT
                                 ELSE S.QCY_14_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_14_AMT
                       ELSE 0
                   END) AS ORG_BCY_14_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_14_AMT ELSE 0 END) AS CALC_BCY_14_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_14_AMT ELSE 0 END) AS CALC_BCY_14_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_15_AMT
                                 ELSE S.QCY_15_AMT * S.CONVERSION_FACTOR
                             END
+                      WHEN S.SRC_DETAIL = 'ZZT003_ADJ' THEN S.BCY_15_AMT
                       ELSE 0
                   END) AS ORG_BCY_15_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.CALC_BCY_15_AMT ELSE 0 END) AS CALC_BCY_15_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_0_AMT ELSE 0 END) AS ORG_QCY_0_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_1_AMT ELSE 0 END) AS ORG_QCY_1_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_2_AMT ELSE 0 END) AS ORG_QCY_2_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_3_AMT ELSE 0 END) AS ORG_QCY_3_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_4_AMT ELSE 0 END) AS ORG_QCY_4_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_5_AMT ELSE 0 END) AS ORG_QCY_5_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_6_AMT ELSE 0 END) AS ORG_QCY_6_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_7_AMT ELSE 0 END) AS ORG_QCY_7_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_8_AMT ELSE 0 END) AS ORG_QCY_8_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_9_AMT ELSE 0 END) AS ORG_QCY_9_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_10_AMT ELSE 0 END) AS ORG_QCY_10_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_11_AMT ELSE 0 END) AS ORG_QCY_11_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_12_AMT ELSE 0 END) AS ORG_QCY_12_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_13_AMT ELSE 0 END) AS ORG_QCY_13_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_14_AMT ELSE 0 END) AS ORG_QCY_14_AMT
-          , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN S.QCY_15_AMT ELSE 0 END) AS ORG_QCY_15_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.CALC_BCY_15_AMT ELSE 0 END) AS CALC_BCY_15_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_0_AMT ELSE 0 END) AS ORG_QCY_0_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_1_AMT ELSE 0 END) AS ORG_QCY_1_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_2_AMT ELSE 0 END) AS ORG_QCY_2_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_3_AMT ELSE 0 END) AS ORG_QCY_3_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_4_AMT ELSE 0 END) AS ORG_QCY_4_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_5_AMT ELSE 0 END) AS ORG_QCY_5_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_6_AMT ELSE 0 END) AS ORG_QCY_6_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_7_AMT ELSE 0 END) AS ORG_QCY_7_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_8_AMT ELSE 0 END) AS ORG_QCY_8_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_9_AMT ELSE 0 END) AS ORG_QCY_9_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_10_AMT ELSE 0 END) AS ORG_QCY_10_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_11_AMT ELSE 0 END) AS ORG_QCY_11_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_12_AMT ELSE 0 END) AS ORG_QCY_12_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_13_AMT ELSE 0 END) AS ORG_QCY_13_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_14_AMT ELSE 0 END) AS ORG_QCY_14_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_15_AMT ELSE 0 END) AS ORG_QCY_15_AMT
           /* 补充金额在CURRENT_AGG中统一关联SUPPLEMENT_AGG，不在明细层重复汇总。 */
           , SUM(NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0)) AS CLOSING_RATE_BCY_AMT
           , SUM(NVL(S.CALC_POSTING_RATE_BCY_AMT, 0)) AS POSTING_RATE_BCY_AMT
+          /* 账龄调整副本金额已并入账龄行，不再单独输出币种明细段。 */
+          /* ALTER BY 20261117 21:33 SHIQINGFENG.EX 币种明细排除账龄调整副本。 */
           , LISTAGG(
-                NVL(S.ACCT_SRC_CODE, '') || ':'
-                || TO_CHAR(NVL(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                                        THEN ROUND(S.CALC_BCY_0_AMT,2)
-                                        ELSE ROUND(S.BCY_0_AMT,2)
-                                    END, 0)) || '\'
-                || NVL(S.COD_VALUTA_ORIGINARIA, '') || ':'
-                || TO_CHAR(NVL(ROUND(S.QCY_0_AMT,2), 0))
+                CASE WHEN S.SRC_DETAIL = 'ZZT003_ADJ'
+                     THEN NULL
+                     ELSE NVL(S.ACCT_SRC_CODE, '') || ':'
+                          || TO_CHAR(NVL(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
+                                                  THEN ROUND(S.CALC_BCY_0_AMT,2)
+                                                  ELSE ROUND(S.BCY_0_AMT,2)
+                                              END, 0)) || '\'
+                          || NVL(S.COD_VALUTA_ORIGINARIA, '') || ':'
+                          || TO_CHAR(NVL(ROUND(S.QCY_0_AMT,2), 0))
+                END
               , ';'
             ) WITHIN GROUP (ORDER BY S.ACCT_SRC_CODE, S.BCY_0_AMT) AS CURRENCY_ACCT_DETAIL
         FROM CURRENT_SOURCE S
@@ -762,18 +866,169 @@
               , S.NATURE_L2_NAME
               , S.NATURE_L3_NAME
     ),
+    /* 出库退货匹配目标：按公司、客商、利润中心判定科目，优先1122000000，未命中再试2204000000，均未命中为空走独立行。 */
+    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增三级匹配目标判定，维度键不含科目，性质为空视作恒等。 */
+    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 目标判定去除一二三性质。 */
+    ZTSO04_TARGET AS (
+      SELECT T.*
+          , CASE
+                WHEN EXISTS (
+                      SELECT 1
+                        FROM CURRENT_SOURCE_AGG A
+                        WHERE A.COD_AZIENDA = T.COD_AZIENDA
+                          AND A.COD_CONTO = '1122000000'
+                          AND NVL(A.CUST_CODE, '#') = NVL(T.CUST_CODE, '#')
+                          AND NVL(A.COD_DEST2, '#') = NVL(T.COD_DEST2, '#')
+                    )
+                  THEN '1122000000'
+                WHEN EXISTS (
+                      SELECT 1
+                        FROM CURRENT_SOURCE_AGG A
+                        WHERE A.COD_AZIENDA = T.COD_AZIENDA
+                          AND A.COD_CONTO = '2204000000'
+                          AND NVL(A.CUST_CODE, '#') = NVL(T.CUST_CODE, '#')
+                          AND NVL(A.COD_DEST2, '#') = NVL(T.COD_DEST2, '#')
+                    )
+                  THEN '2204000000'
+            END AS TARGET_CONTO
+        FROM ZTSO04_AGG T
+    ),
+    /* 出库退货落位行：同科目多性质行只取一行，优先性质为空，其次按性质编码排序，避免金额按行翻倍。 */
+    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 新增落位行固定逻辑，不分性质时金额仍只落唯一一行。 */
+    TARGET_ORG_ROW AS (
+      SELECT R.COD_AZIENDA
+          , R.COD_CONTO
+          , R.CUST_CODE
+          , R.COD_DEST2
+          , R.NATURE_L1_NAME
+          , R.NATURE_L2_NAME
+          , R.NATURE_L3_NAME
+        FROM (
+              SELECT A.COD_AZIENDA
+                  , A.COD_CONTO
+                  , A.CUST_CODE
+                  , A.COD_DEST2
+                  , A.NATURE_L1_NAME
+                  , A.NATURE_L2_NAME
+                  , A.NATURE_L3_NAME
+                  , ROW_NUMBER() OVER (
+                        PARTITION BY A.COD_AZIENDA
+                                    , A.COD_CONTO
+                                    , A.CUST_CODE
+                                    , A.COD_DEST2
+                        ORDER BY CASE WHEN A.NATURE_L1_NAME IS NULL
+                                      AND A.NATURE_L2_NAME IS NULL
+                                      AND A.NATURE_L3_NAME IS NULL THEN 1 ELSE 2 END
+                                , A.NATURE_L1_NAME
+                                , A.NATURE_L2_NAME
+                                , A.NATURE_L3_NAME
+                    ) AS RN
+                FROM CURRENT_SOURCE_AGG A
+              WHERE A.COD_CONTO IN ('1122000000', '2204000000')
+            ) R
+      WHERE R.RN = 1
+    ),
+    /* 出库退货最终落位：目标科目与落位行性质绑定，同键金额只落一行。 */
+    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 新增落位结果集，供CURRENT_AGG按唯一行关联。 */
+    ZTSO04_MATCH AS (
+      SELECT G.COD_AZIENDA
+          , G.CUST_CODE
+          , G.COD_DEST2
+          , G.TARGET_CONTO
+          , R.NATURE_L1_NAME AS TARGET_NATURE_L1
+          , R.NATURE_L2_NAME AS TARGET_NATURE_L2
+          , R.NATURE_L3_NAME AS TARGET_NATURE_L3
+          , G.SHP_NINV_AMT
+          , G.RET_NTRF_AMT
+        FROM ZTSO04_TARGET G
+        JOIN TARGET_ORG_ROW R
+          ON R.COD_AZIENDA = G.COD_AZIENDA
+         AND R.COD_CONTO = G.TARGET_CONTO
+         AND NVL(R.CUST_CODE, '#') = NVL(G.CUST_CODE, '#')
+         AND NVL(R.COD_DEST2, '#') = NVL(G.COD_DEST2, '#')
+      WHERE G.TARGET_CONTO IS NOT NULL
+    ),
+    /* 出库退货独立行：1122与2204均未命中时按M01原值生成新行，只带出库退货金额；同键多行任取一行。 */
+    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增独立行来源，维度字段直接取M01原本值。 */
+    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 独立行匹配键同步去除一二三性质。 */
+    ZTSO04_STANDALONE AS (
+      SELECT G.COD_AZIENDA
+          /* 科目取M01原本值；历史数据兜底回写前的空科目按1122000000落键，防止键丢失。 */
+          , NVL(M1.COD_CONTO, '1122000000') AS COD_CONTO
+          , M1.COD_CATEGORIA
+          , M1.CUST_CODE
+          , M1.CUST_NAME
+          , M1.CUST_HEAD_CODE
+          , M1.CUST_HEAD_NAME
+          , M1.CUST_BRANCH_CODE
+          , M1.CUST_BRANCH_NAME
+          , M1.COD_AZI_CTP
+          , M1.COUNTRY_CODE
+          , M1.COUNTRY_NAME
+          , M1.LE_AGE_FLAG
+          , M1.IS_REC_LG
+          , M1.ME_AGE_FLAG
+          , M1.IS_REC_ME
+          , M1.MB_AGE_FLAG
+          , M1.IS_REC_MB
+          , M1.GRP_SCOPE
+          , M1.NATURE_L1_NAME
+          , M1.NATURE_L2_NAME
+          , M1.NATURE_L3_NAME
+          , M1.D_CHANNEL
+          , M1.D_CHANNEL_BU
+          , M1.D_CC_CUSTGRP
+          , M1.D_ONOFFLINE
+          , M1.COD_DEST2
+          , M1.COD_DEST3
+          , M1.D_SALE_DEPT
+          , M1.TAX_RATE
+          , M1.COD_VALUTA
+          , M1.COD_VALUTA_ORIGINARIA
+          , M1.PAY_TERM_CODE
+          , M1.PAY_TERM_DESC
+          , M1.EXCHANGE_RATE_EVAL_FLAG
+          , G.SHP_NINV_AMT
+          , G.RET_NTRF_AMT
+        FROM (
+              SELECT M.*
+                  , ROW_NUMBER() OVER (
+                        PARTITION BY M.COD_AZIENDA
+                                    , M.CUST_CODE
+                                    , M.COD_DEST2
+                        ORDER BY M.OID
+                    ) AS RN
+                FROM AW_MR9_ARPM01_000001 M
+              WHERE M.COD_SCENARIO = V_SCENARIO
+                AND M.COD_PERIODO = V_PERIODO
+                AND M.COD_AZIENDA IN (
+                      SELECT ELEM
+                        FROM SESSION_AZIENDA_LIST
+                        WHERE SESSION_ID = V_SESSION_ID
+                )
+                AND M.SRC_DETAIL LIKE 'ZTSO04%'
+            ) M1
+        JOIN ZTSO04_TARGET G
+          ON G.COD_AZIENDA = M1.COD_AZIENDA
+         AND NVL(G.CUST_CODE, '#') = NVL(M1.CUST_CODE, '#')
+         AND NVL(G.COD_DEST2, '#') = NVL(M1.COD_DEST2, '#')
+      WHERE M1.RN = 1
+        AND G.TARGET_CONTO IS NULL
+    ),
     /* 当前主来源已按业务键与性质聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。 */
     /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 补充金额按业务键与一二三性质关联，性质为空视作恒等。 */
+    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货改按三级匹配目标关联，目标科目限定只落一行，其余补充来源关联不变。 */
+    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 出库退货关联改用固定落位行，匹配键不含一二三性质。 */
     CURRENT_AGG AS (
       SELECT A.*
-          , NVL(B.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
-          , NVL(B.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
           , NVL(B.OVERDUE_AMT, 0) AS OVERDUE_AMT
           , NVL(B.INV_SAMPLE_AMT, 0) AS INV_SAMPLE_AMT
           , NVL(B.EPAY_AMT, 0) AS EPAY_AMT
           , NVL(B.ECLS_AMT, 0) AS ECLS_AMT
           , NVL(B.UREB_AMT, 0) AS UREB_AMT
           , NVL(B.UFEE_AMT, 0) AS UFEE_AMT
+          , NVL(Z.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
+          , NVL(Z.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
         FROM CURRENT_SOURCE_AGG A
         LEFT JOIN SUPPLEMENT_AGG B
           ON B.COD_AZIENDA = A.COD_AZIENDA
@@ -783,6 +1038,14 @@
         AND NVL(B.NATURE_L1_NAME, 'ZZZZ') = NVL(A.NATURE_L1_NAME, 'ZZZZ')
         AND NVL(B.NATURE_L2_NAME, 'ZZZZ') = NVL(A.NATURE_L2_NAME, 'ZZZZ')
         AND NVL(B.NATURE_L3_NAME, 'ZZZZ') = NVL(A.NATURE_L3_NAME, 'ZZZZ')
+        LEFT JOIN ZTSO04_MATCH Z
+          ON Z.COD_AZIENDA = A.COD_AZIENDA
+        AND NVL(Z.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
+        AND NVL(Z.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
+        AND NVL(Z.TARGET_NATURE_L1, 'ZZZZ') = NVL(A.NATURE_L1_NAME, 'ZZZZ')
+        AND NVL(Z.TARGET_NATURE_L2, 'ZZZZ') = NVL(A.NATURE_L2_NAME, 'ZZZZ')
+        AND NVL(Z.TARGET_NATURE_L3, 'ZZZZ') = NVL(A.NATURE_L3_NAME, 'ZZZZ')
+        AND Z.TARGET_CONTO = A.COD_CONTO
     ),
     /* 年初历史结果：按设计业务键读取上年12期ARPM02本月余额。 */
     BY_HISTORY AS (
@@ -898,6 +1161,10 @@
       UNION
       SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
            , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM LM_HISTORY
+      /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 纳入出库退货独立行键，1122与2204均未命中的键不丢失。 */
+      UNION
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
+           , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM ZTSO04_STANDALONE
     ),
     /* 当前维度优先，当前缺失时依次回退到年初和上月维度。 */
     DIM_CANDIDATE AS (
@@ -933,6 +1200,18 @@
           , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
           , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
         FROM LM_HISTORY
+      /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增出库退货独立行维度兜底，优先级最低，年初上月维度存在时以其为准。 */
+      UNION ALL
+      SELECT 4 AS PRIORITY
+          , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
+          , CUST_HEAD_CODE, CUST_HEAD_NAME, CUST_BRANCH_CODE, CUST_BRANCH_NAME
+          , COD_AZI_CTP, COUNTRY_CODE, COUNTRY_NAME
+          , LE_AGE_FLAG, IS_REC_LG, ME_AGE_FLAG, IS_REC_ME, MB_AGE_FLAG, IS_REC_MB
+          , GRP_SCOPE, NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME
+          , D_CHANNEL, D_CHANNEL_BU, D_CC_CUSTGRP, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT
+          , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
+          , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
+        FROM ZTSO04_STANDALONE
     ),
     /* 当前金额按来源平铺，历史字段仅作为BY/LM回接值，不参与本月金额计算。 */
     /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 维度优先去重与年初上月回接均按一二三性质匹配，性质为空视作恒等。 */
@@ -1021,8 +1300,9 @@
           , NVL(A.ORG_QCY_13_AMT, 0) AS ORG_QCY_13_AMT
           , NVL(A.ORG_QCY_14_AMT, 0) AS ORG_QCY_14_AMT
           , NVL(A.ORG_QCY_15_AMT, 0) AS ORG_QCY_15_AMT
-          , NVL(A.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
-          , NVL(A.RET_NTRF_AMT, 0) AS RET_NTRF_AMT
+          /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货金额并入独立行来源，主来源命中取主来源，否则取独立行。 */
+          , NVL(A.SHP_NINV_AMT, NVL(S.SHP_NINV_AMT, 0)) AS SHP_NINV_AMT
+          , NVL(A.RET_NTRF_AMT, NVL(S.RET_NTRF_AMT, 0)) AS RET_NTRF_AMT
           , NVL(A.OVERDUE_AMT, 0) AS OVERDUE_AMT
           , NVL(A.INV_SAMPLE_AMT, 0) AS INV_SAMPLE_AMT
           , NVL(A.EPAY_AMT, 0) AS EPAY_AMT
@@ -1085,6 +1365,15 @@
         AND NVL(L.NATURE_L1_NAME, 'ZZZZ') = NVL(K.NATURE_L1_NAME, 'ZZZZ')
         AND NVL(L.NATURE_L2_NAME, 'ZZZZ') = NVL(K.NATURE_L2_NAME, 'ZZZZ')
         AND NVL(L.NATURE_L3_NAME, 'ZZZZ') = NVL(K.NATURE_L3_NAME, 'ZZZZ')
+        /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 关联出库退货独立行，其键与主来源不相交，仅独立行携带出库退货金额。 */
+        LEFT JOIN ZTSO04_STANDALONE S
+          ON S.COD_AZIENDA = K.COD_AZIENDA
+        AND S.COD_CONTO = K.COD_CONTO
+        AND NVL(S.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
+        AND NVL(S.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        AND NVL(S.NATURE_L1_NAME, 'ZZZZ') = NVL(K.NATURE_L1_NAME, 'ZZZZ')
+        AND NVL(S.NATURE_L2_NAME, 'ZZZZ') = NVL(K.NATURE_L2_NAME, 'ZZZZ')
+        AND NVL(S.NATURE_L3_NAME, 'ZZZZ') = NVL(K.NATURE_L3_NAME, 'ZZZZ')
     ),
     /* 生成最终字段：CL重分类税额按法人/管理单体标识分别处理。 */
     RESULT_FACT AS (
