@@ -1117,8 +1117,8 @@
           /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
           , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
                       THEN R.ORG_BCY_1_AMT * (1 + NVL(R.TAX_RATE, 0))
-                        + R.SHP_NINV_AMT - R.RET_NTRF_AMT
-                  ELSE R.ORG_BCY_1_AMT + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                        + R.SHP_NINV_AMT + R.RET_NTRF_AMT
+                  ELSE R.ORG_BCY_1_AMT + R.SHP_NINV_AMT + R.RET_NTRF_AMT
               END AS BCY_ADJ_INCL_1_AMT
           , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
                       THEN R.ORG_BCY_2_AMT * (1 + NVL(R.TAX_RATE, 0))
@@ -1179,12 +1179,12 @@
           , CASE
                 WHEN R.ME_AGE_FLAG = 'CL' AND R.IS_REC_ME = 'Y'
                   THEN R.ORG_BCY_0_AMT / NULLIF(1 + NVL(R.TAX_RATE, 0), 0)
-                      + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                      + R.SHP_NINV_AMT + R.RET_NTRF_AMT
                 WHEN R.ME_AGE_FLAG = 'CL' AND R.IS_REC_ME = 'N'
                   THEN R.ORG_BCY_0_AMT
-                      + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                      + R.SHP_NINV_AMT + R.RET_NTRF_AMT
                 ELSE R.ORG_BCY_0_AMT
-                      + R.SHP_NINV_AMT - R.RET_NTRF_AMT
+                      + R.SHP_NINV_AMT + R.RET_NTRF_AMT
               END AS BCY_ADJ_EXCL_0_AMT
           , R.OVERDUE_AMT AS OVERDUE_0_AMT
           , R.OVERDUE_AMT AS OVERDUE_1_AMT
