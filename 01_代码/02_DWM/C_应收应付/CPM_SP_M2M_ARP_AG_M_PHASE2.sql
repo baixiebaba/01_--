@@ -7,9 +7,9 @@
     /*******************************************************************************
     *                              存储过程说明
     *-----------------------------------------------------------------------------
-    * 最后更新时间：20261109 11:05
-    * 本次修改：ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
-    * 上次修改：ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
+    * 最后更新时间：20261117 18:15
+    * 本次修改：ALTER BY 20261117 18:15 SHIQINGFENG.EX 业务键纳入一二三性质，年初上月按性质匹配，聚合按性质拆行
+    * 上次修改：ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
     *
     * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,7 @@
     * 目标表    ：AW_MR9_ARPM02_000001
     *
     * 修改历史：
+    *   ALTER BY 20261117 18:15 SHIQINGFENG.EX 业务键纳入一二三性质，年初上月按性质匹配，聚合按性质拆行
     *   ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
     *   ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
     *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
@@ -475,8 +476,9 @@
               END AS CALC_POSTING_RATE_BCY_AMT
         FROM CURRENT_SOURCE_BASE S
     ),
-    /* 无账龄标识补充来源：按业务键聚合ARPM01本位币金额，NULL业务键保留并按NVL语义关联。 */
+    /* 无账龄标识补充来源：按业务键与一二三性质聚合ARPM01本位币金额，NULL业务键保留并按NVL语义关联。 */
     /* EPAY空科目固定为1122000000；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。 */
+    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 聚合键纳入一二三性质，补充金额跟随性质行不再跨行合并。 */
     SUPPLEMENT_AGG AS (
       SELECT S.COD_AZIENDA
           , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
@@ -486,6 +488,9 @@
               END AS COD_CONTO
           , S.CUST_CODE
           , S.COD_DEST2
+          , S.NATURE_L1_NAME
+          , S.NATURE_L2_NAME
+          , S.NATURE_L3_NAME
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_CK%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS SHP_NINV_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ZTSO04_TH%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS RET_NTRF_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'OVERDUE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS OVERDUE_AMT
@@ -520,8 +525,12 @@
                 END
               , S.CUST_CODE
               , S.COD_DEST2
+              , S.NATURE_L1_NAME
+              , S.NATURE_L2_NAME
+              , S.NATURE_L3_NAME
     ),
-    /* 取当前期间每个业务键的维度基准行，ORG来源优先，其他来源作为兜底。 */
+    /* 取当前期间每个业务键与性质组合的维度基准行，ORG来源优先，其他来源作为兜底。 */
+    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 去重分区键纳入一二三性质，性质拆行不再被坍缩为单行。 */
     CURRENT_DIM AS (
       SELECT COD_AZIENDA
           , COD_CONTO
@@ -566,6 +575,9 @@
                                 , S.COD_CONTO
                                 , S.CUST_CODE
                                 , S.COD_DEST2
+                                , S.NATURE_L1_NAME
+                                , S.NATURE_L2_NAME
+                                , S.NATURE_L3_NAME
                     ORDER BY CASE WHEN S.SRC_DETAIL LIKE 'ORG%' THEN 1 ELSE 2 END
                             , S.OID
                 ) AS RN
@@ -574,12 +586,16 @@
       WHERE S.RN = 1
     ),
     /* 当前期间按来源类别汇总，用于生成结果表的横向金额字段。 */
-    /* 先按业务键聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。 */
+    /* 先按业务键与一二三性质聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。 */
+    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 聚合键纳入一二三性质，按性质拆分的行不再被合并。 */
     CURRENT_SOURCE_AGG AS (
       SELECT S.COD_AZIENDA
           , S.COD_CONTO
           , S.CUST_CODE
           , S.COD_DEST2
+          , S.NATURE_L1_NAME
+          , S.NATURE_L2_NAME
+          , S.NATURE_L3_NAME
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
                       THEN CASE WHEN S.CONVERSION_FACTOR IS NULL
                                       THEN S.BCY_0_AMT
@@ -742,8 +758,12 @@
               , S.COD_CONTO
               , S.CUST_CODE
               , S.COD_DEST2
+              , S.NATURE_L1_NAME
+              , S.NATURE_L2_NAME
+              , S.NATURE_L3_NAME
     ),
-    /* 当前主来源已按业务键聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。 */
+    /* 当前主来源已按业务键与性质聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。 */
+    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 补充金额按业务键与一二三性质关联，性质为空视作恒等。 */
     CURRENT_AGG AS (
       SELECT A.*
           , NVL(B.SHP_NINV_AMT, 0) AS SHP_NINV_AMT
@@ -760,6 +780,9 @@
         AND NVL(B.COD_CONTO, '#') = NVL(A.COD_CONTO, '#')
         AND NVL(B.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
         AND NVL(B.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
+        AND NVL(B.NATURE_L1_NAME, 'ZZZZ') = NVL(A.NATURE_L1_NAME, 'ZZZZ')
+        AND NVL(B.NATURE_L2_NAME, 'ZZZZ') = NVL(A.NATURE_L2_NAME, 'ZZZZ')
+        AND NVL(B.NATURE_L3_NAME, 'ZZZZ') = NVL(A.NATURE_L3_NAME, 'ZZZZ')
     ),
     /* 年初历史结果：按设计业务键读取上年12期ARPM02本月余额。 */
     BY_HISTORY AS (
@@ -861,15 +884,20 @@
         )
         AND NVL(T.LE_AGE_FLAG,'|') <> '|'
     ),
-    /* 当前、年初、上月的业务键并集，支持当前月无数据但历史有余额的记录保留。 */
+    /* 当前、年初、上月的业务键与一二三性质组合并集，支持当前月无数据但历史有余额的记录保留。 */
+    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 键并集纳入一二三性质，性质拆分行各自成键不被合并。 */
     ALL_KEYS AS (
-      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM CURRENT_DIM
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
+           , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM CURRENT_DIM
       UNION
-      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM SUPPLEMENT_AGG
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
+           , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM SUPPLEMENT_AGG
       UNION
-      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM BY_HISTORY
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
+           , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM BY_HISTORY
       UNION
-      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM LM_HISTORY
+      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
+           , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM LM_HISTORY
     ),
     /* 当前维度优先，当前缺失时依次回退到年初和上月维度。 */
     DIM_CANDIDATE AS (
@@ -907,6 +935,7 @@
         FROM LM_HISTORY
     ),
     /* 当前金额按来源平铺，历史字段仅作为BY/LM回接值，不参与本月金额计算。 */
+    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 维度优先去重与年初上月回接均按一二三性质匹配，性质为空视作恒等。 */
     RESULT_BASE AS (
       SELECT V_SCENARIO AS COD_SCENARIO
           , V_PERIODO AS COD_PERIODO
@@ -1016,6 +1045,9 @@
                                     , C.COD_CONTO
                                     , C.CUST_CODE
                                     , C.COD_DEST2
+                                    , C.NATURE_L1_NAME
+                                    , C.NATURE_L2_NAME
+                                    , C.NATURE_L3_NAME
                         ORDER BY C.PRIORITY
                     ) AS RN
                 FROM DIM_CANDIDATE C
@@ -1026,21 +1058,33 @@
         AND D.COD_CONTO = K.COD_CONTO
         AND NVL(D.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
         AND NVL(D.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        AND NVL(D.NATURE_L1_NAME, 'ZZZZ') = NVL(K.NATURE_L1_NAME, 'ZZZZ')
+        AND NVL(D.NATURE_L2_NAME, 'ZZZZ') = NVL(K.NATURE_L2_NAME, 'ZZZZ')
+        AND NVL(D.NATURE_L3_NAME, 'ZZZZ') = NVL(K.NATURE_L3_NAME, 'ZZZZ')
         LEFT JOIN CURRENT_AGG A
           ON A.COD_AZIENDA = K.COD_AZIENDA
         AND A.COD_CONTO = K.COD_CONTO
         AND NVL(A.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
         AND NVL(A.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        AND NVL(A.NATURE_L1_NAME, 'ZZZZ') = NVL(K.NATURE_L1_NAME, 'ZZZZ')
+        AND NVL(A.NATURE_L2_NAME, 'ZZZZ') = NVL(K.NATURE_L2_NAME, 'ZZZZ')
+        AND NVL(A.NATURE_L3_NAME, 'ZZZZ') = NVL(K.NATURE_L3_NAME, 'ZZZZ')
         LEFT JOIN BY_HISTORY B
           ON B.COD_AZIENDA = K.COD_AZIENDA
         AND B.COD_CONTO = K.COD_CONTO
         AND NVL(B.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
         AND NVL(B.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        AND NVL(B.NATURE_L1_NAME, 'ZZZZ') = NVL(K.NATURE_L1_NAME, 'ZZZZ')
+        AND NVL(B.NATURE_L2_NAME, 'ZZZZ') = NVL(K.NATURE_L2_NAME, 'ZZZZ')
+        AND NVL(B.NATURE_L3_NAME, 'ZZZZ') = NVL(K.NATURE_L3_NAME, 'ZZZZ')
         LEFT JOIN LM_HISTORY L
           ON L.COD_AZIENDA = K.COD_AZIENDA
         AND L.COD_CONTO = K.COD_CONTO
         AND NVL(L.CUST_CODE, '#') = NVL(K.CUST_CODE, '#')
         AND NVL(L.COD_DEST2, '#') = NVL(K.COD_DEST2, '#')
+        AND NVL(L.NATURE_L1_NAME, 'ZZZZ') = NVL(K.NATURE_L1_NAME, 'ZZZZ')
+        AND NVL(L.NATURE_L2_NAME, 'ZZZZ') = NVL(K.NATURE_L2_NAME, 'ZZZZ')
+        AND NVL(L.NATURE_L3_NAME, 'ZZZZ') = NVL(K.NATURE_L3_NAME, 'ZZZZ')
     ),
     /* 生成最终字段：CL重分类税额按法人/管理单体标识分别处理。 */
     RESULT_FACT AS (
@@ -1246,6 +1290,9 @@
             , COD_CONTO
             , CUST_CODE
             , COD_DEST2
+            , NATURE_L1_NAME
+            , NATURE_L2_NAME
+            , NATURE_L3_NAME
           FROM (
             SELECT T.OID
                 , T.COD_SCENARIO
@@ -1254,6 +1301,9 @@
                 , T.COD_CONTO
                 , T.CUST_CODE
                 , T.COD_DEST2
+                , T.NATURE_L1_NAME
+                , T.NATURE_L2_NAME
+                , T.NATURE_L3_NAME
                 , ROW_NUMBER() OVER (
                       PARTITION BY T.COD_SCENARIO
                                   , T.COD_PERIODO
@@ -1261,6 +1311,9 @@
                                   , T.COD_CONTO
                                   , T.CUST_CODE
                                   , T.COD_DEST2
+                                  , T.NATURE_L1_NAME
+                                  , T.NATURE_L2_NAME
+                                  , T.NATURE_L3_NAME
                       ORDER BY T.DATEUPD DESC NULLS LAST, T.OID
                   ) AS RN
               FROM AW_MR9_ARPM02_000001 T
@@ -1282,6 +1335,10 @@
       AND M.COD_CONTO = R.COD_CONTO
       AND NVL(M.CUST_CODE, '#') = NVL(R.CUST_CODE, '#')
       AND NVL(M.COD_DEST2, '#') = NVL(R.COD_DEST2, '#')
+      /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 人工行OID复用按一二三性质匹配，性质为空视作恒等。 */
+      AND NVL(M.NATURE_L1_NAME, 'ZZZZ') = NVL(R.NATURE_L1_NAME, 'ZZZZ')
+      AND NVL(M.NATURE_L2_NAME, 'ZZZZ') = NVL(R.NATURE_L2_NAME, 'ZZZZ')
+      AND NVL(M.NATURE_L3_NAME, 'ZZZZ') = NVL(R.NATURE_L3_NAME, 'ZZZZ')
     ) S
       ON (T.OID = S.OID)
     WHEN MATCHED THEN UPDATE SET
