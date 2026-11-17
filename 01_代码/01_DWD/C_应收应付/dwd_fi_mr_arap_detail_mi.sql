@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 19:10
- * 本次修改：ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
- * 上次修改：ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射。
+ * 最后更新时间：20261117 15:26
+ * 本次修改：ALTER BY 20261117 15:26 SHIQINGFENG.EX 币种小数位修正扩展到六套SAP系统，TCURX统一暂取S810表。
+ * 上次修改：ALTER BY 20261117 15:00 SHIQINGFENG.EX S900系统新增币种小数位修正，零小数位币种的交易币按TCURX因子还原。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -18,6 +18,8 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261117 15:26 SHIQINGFENG.EX 币种小数位修正扩展到六套SAP系统，TCURX统一暂取S810表。
+ *   ALTER BY 20261117 15:00 SHIQINGFENG.EX S900系统新增币种小数位修正，零小数位币种的交易币按TCURX因子还原。
  *   ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
  *   ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射。
  *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射。
@@ -204,8 +206,10 @@ src_t001 AS (
     SELECT 'S810' AS system_src, bukrs, ktopl, waers
       FROM ods.odss810_t001
 ),
--- S610统一读取610客户端TCURX并按币种去重计算转换因子；currdec缺失或无效时因子为1。
-s610_tcurx_factor AS (
+-- 币种小数位因子：SAP零小数位币种（JPY/KRW/VND）在ODS按两位小数落地，需乘100还原；
+-- 六套SAP的TCURX内容一致，统一暂取S810的TCURX，各系统入湖后按需拆分替换。
+-- ALTER BY 20261117 15:26 SHIQINGFENG.EX 币种小数位修正扩展到六套SAP系统
+tcurx_factor AS (
     SELECT UPPER(TRIM(tx.currkey)) AS currkey
          , CASE
                WHEN MAX(CASE
@@ -228,7 +232,7 @@ s610_tcurx_factor AS (
       FROM ods.odss810_tcurx tx
      GROUP BY UPPER(TRIM(tx.currkey))
 ),
--- 聚合公司本位币配置，供凭证明细和总账余额按S610公司取得本位币。
+-- 聚合公司本位币配置，供凭证明细和总账余额按公司取得本位币。
 company_dim AS (
     SELECT system_src
          , bukrs
@@ -891,17 +895,10 @@ all_items AS (
          , b.zbd1t
          , b.augdt
          , b.shkzg
-         -- S610的dmbtr按公司本位币转换，wrbtr按凭证明细交易币waers转换。
-         , CASE
-               WHEN b.system_src = 'S610'
-                   THEN b.dmbtr * COALESCE(cf.conversion_factor, 1)
-               ELSE b.dmbtr
-           END AS dmbtr
-         , CASE
-               WHEN b.system_src = 'S610'
-                   THEN b.wrbtr * COALESCE(tf.conversion_factor, 1)
-               ELSE b.wrbtr
-           END AS wrbtr
+         -- dmbtr按公司本位币、wrbtr按凭证交易币，均按TCURX小数位因子还原。
+         -- ALTER BY 20261117 15:26 SHIQINGFENG.EX 六套SAP均按币种小数位因子还原金额
+         , b.dmbtr * COALESCE(cf.conversion_factor, 1) AS dmbtr
+         , b.wrbtr * COALESCE(tf.conversion_factor, 1) AS wrbtr
          , b.bstat
          , b.rstgr
          , b.zlsch
@@ -916,12 +913,11 @@ all_items AS (
       LEFT JOIN company_dim co
         ON co.system_src = b.system_src
        AND co.bukrs = b.bukrs
-      LEFT JOIN s610_tcurx_factor cf
-        ON b.system_src = 'S610'
-       AND cf.currkey = UPPER(TRIM(co.waers))
-      LEFT JOIN s610_tcurx_factor tf
-        ON b.system_src = 'S610'
-       AND tf.currkey = UPPER(TRIM(b.waers))
+      -- ALTER BY 20261117 15:26 SHIQINGFENG.EX 因子关联取消S610限制
+      LEFT JOIN tcurx_factor cf
+        ON cf.currkey = UPPER(TRIM(co.waers))
+      LEFT JOIN tcurx_factor tf
+        ON tf.currkey = UPPER(TRIM(b.waers))
 ),
 -- 按目标月份筛选有效科目映射，并按原始科目和系统聚合。
 acct_mapping AS (
@@ -2287,8 +2283,10 @@ src_t001 AS (
     SELECT 'S810' AS system_src, bukrs, ktopl, waers
       FROM ods.odss810_t001
 ),
--- S610统一读取610客户端TCURX并按币种去重计算转换因子；currdec缺失或无效时因子为1。
-s610_tcurx_factor AS (
+-- 币种小数位因子：SAP零小数位币种（JPY/KRW/VND）在ODS按两位小数落地，需乘100还原；
+-- 六套SAP的TCURX内容一致，统一暂取S810的TCURX，各系统入湖后按需拆分替换。
+-- ALTER BY 20261117 15:26 SHIQINGFENG.EX 币种小数位修正扩展到六套SAP系统
+tcurx_factor AS (
     SELECT UPPER(TRIM(tx.currkey)) AS currkey
          , CASE
                WHEN MAX(CASE
@@ -2311,7 +2309,7 @@ s610_tcurx_factor AS (
       FROM ods.odss810_tcurx tx
      GROUP BY UPPER(TRIM(tx.currkey))
 ),
--- 聚合公司本位币配置，供凭证明细和总账余额按S610公司取得本位币。
+-- 聚合公司本位币配置，供凭证明细和总账余额按公司取得本位币。
 company_dim AS (
     SELECT system_src
          , bukrs
@@ -2480,8 +2478,10 @@ balance_detail AS (
          + CASE WHEN @fiscal_month >= '10' THEN ROUND(IFNULL(g.hsl10, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '11' THEN ROUND(IFNULL(g.hsl11, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '12' THEN ROUND(IFNULL(g.hsl12, 0), 2) ELSE 0 END)
-         * CASE WHEN g.system_src = 'S610' THEN COALESCE(cf.conversion_factor, 1) ELSE 1 END AS bcy_amt
-         -- S610的tsl按余额记录交易币rtcur转换，不能复用本位币因子。
+         -- 本位币与交易币金额均按TCURX小数位因子还原。
+         -- ALTER BY 20261117 15:26 SHIQINGFENG.EX 六套SAP均按币种小数位因子还原金额
+         * COALESCE(cf.conversion_factor, 1) AS bcy_amt
+         -- tsl按余额记录交易币rtcur转换，不能复用本位币因子。
          , (ROUND(IFNULL(g.tslvt, 0), 2)
          + CASE WHEN @fiscal_month >= '01' THEN ROUND(IFNULL(g.tsl01, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '02' THEN ROUND(IFNULL(g.tsl02, 0), 2) ELSE 0 END
@@ -2495,7 +2495,7 @@ balance_detail AS (
          + CASE WHEN @fiscal_month >= '10' THEN ROUND(IFNULL(g.tsl10, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '11' THEN ROUND(IFNULL(g.tsl11, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '12' THEN ROUND(IFNULL(g.tsl12, 0), 2) ELSE 0 END)
-         * CASE WHEN g.system_src = 'S610' THEN COALESCE(tf.conversion_factor, 1) ELSE 1 END AS qcy_amt
+         * COALESCE(tf.conversion_factor, 1) AS qcy_amt
       FROM src_gl_balance g
      INNER JOIN gl_account_cfg c
         ON c.system_src = g.system_src
@@ -2504,12 +2504,11 @@ balance_detail AS (
       LEFT JOIN company_dim co
         ON co.system_src = g.system_src
        AND co.bukrs = g.company_code
-      LEFT JOIN s610_tcurx_factor cf
-        ON g.system_src = 'S610'
-       AND cf.currkey = UPPER(TRIM(co.waers))
-      LEFT JOIN s610_tcurx_factor tf
-        ON g.system_src = 'S610'
-       AND tf.currkey = UPPER(TRIM(g.qcy_code))
+      -- ALTER BY 20261117 15:26 SHIQINGFENG.EX 因子关联取消S610限制
+      LEFT JOIN tcurx_factor cf
+        ON cf.currkey = UPPER(TRIM(co.waers))
+      LEFT JOIN tcurx_factor tf
+        ON tf.currkey = UPPER(TRIM(g.qcy_code))
 ),
 -- 按余额粒度汇总，并保留至少一个币种非零的余额组合。
 balance_agg AS (
