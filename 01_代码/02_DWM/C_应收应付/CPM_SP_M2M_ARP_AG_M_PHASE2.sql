@@ -7,9 +7,9 @@
     /*******************************************************************************
     *                              存储过程说明
     *-----------------------------------------------------------------------------
-    * 最后更新时间：20261117 21:33
-    * 本次修改：ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入
-    * 上次修改：ALTER BY 20261117 21:03 SHIQINGFENG.EX 出库退货匹配去除一二三性质，多性质行按性质为空优先固定唯一落位行
+    * 最后更新时间：20261118 21:29
+    * 本次修改：ALTER BY 20261118 21:29 SHIQINGFENG.EX 补充来源仅在无账龄行时新增独立行，避免空性质行重复
+    * 上次修改：ALTER BY 20261118 21:26 SHIQINGFENG.EX 账龄调整副本ZZT003_ADJ重新纳入本包，按性质匹配账龄行并入槽位，匹配不到按独立行新增
     *
     * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,8 @@
     * 目标表    ：AW_MR9_ARPM02_000001
     *
     * 修改历史：
+    *   ALTER BY 20261118 21:29 SHIQINGFENG.EX 补充来源仅在无账龄行时新增独立行，避免空性质行重复
+    *   ALTER BY 20261118 21:26 SHIQINGFENG.EX 账龄调整副本ZZT003_ADJ重新纳入本包，按性质匹配账龄行并入槽位，匹配不到按独立行新增
     *   ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入
     *   ALTER BY 20261117 21:03 SHIQINGFENG.EX 出库退货匹配去除一二三性质，多性质行按性质为空优先固定唯一落位行
     *   ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货补充金额改三级匹配：优先1122、其次2204，均未命中按M01原值新增账龄为空独立行
@@ -356,9 +358,10 @@
                 FROM SESSION_AZIENDA_LIST
                 WHERE SESSION_ID = V_SESSION_ID
         )
+        /* ALTER BY 20261118 21:26 SHIQINGFENG.EX 账龄调整副本ZZT003_ADJ重新纳入本包，按性质匹配账龄行并入槽位，匹配不到按独立行新增。 */
         AND (
-             (NVL(A.LE_AGE_FLAG,'|') <> '|' AND SRC_DETAIL LIKE 'ORG%')
-             OR (SRC_DETAIL LIKE '%ADJ')
+             (NVL(A.LE_AGE_FLAG, '|') <> '|' AND SRC_DETAIL LIKE 'ORG%')
+             OR SRC_DETAIL = 'ZZT003_ADJ'
              )
     ),
     /* 按用户口径计算ORG来源本位币账龄金额；非ORG来源保留原始BCY供补充金额使用。 */
@@ -550,9 +553,6 @@
               END AS COD_CONTO
           , S.CUST_CODE
           , S.COD_DEST2
-          , S.NATURE_L1_NAME
-          , S.NATURE_L2_NAME
-          , S.NATURE_L3_NAME
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'OVERDUE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS OVERDUE_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'INV_SAMPLE%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS INV_SAMPLE_AMT
           , SUM(CASE WHEN S.SRC_DETAIL LIKE 'EPAY%' THEN NVL(S.BCY_0_AMT, 0) ELSE 0 END) AS EPAY_AMT
@@ -583,9 +583,6 @@
                 END
               , S.CUST_CODE
               , S.COD_DEST2
-              , S.NATURE_L1_NAME
-              , S.NATURE_L2_NAME
-              , S.NATURE_L3_NAME
     ),
     /* 出库退货补充金额：科目与性质均不参与匹配键，仅按公司、客商、利润中心聚合。 */
     /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增出库退货独立聚合，配套ZTSO04_TARGET三级匹配。 */
@@ -1035,9 +1032,6 @@
         AND NVL(B.COD_CONTO, '#') = NVL(A.COD_CONTO, '#')
         AND NVL(B.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
         AND NVL(B.COD_DEST2, '#') = NVL(A.COD_DEST2, '#')
-        AND NVL(B.NATURE_L1_NAME, 'ZZZZ') = NVL(A.NATURE_L1_NAME, 'ZZZZ')
-        AND NVL(B.NATURE_L2_NAME, 'ZZZZ') = NVL(A.NATURE_L2_NAME, 'ZZZZ')
-        AND NVL(B.NATURE_L3_NAME, 'ZZZZ') = NVL(A.NATURE_L3_NAME, 'ZZZZ')
         LEFT JOIN ZTSO04_MATCH Z
           ON Z.COD_AZIENDA = A.COD_AZIENDA
         AND NVL(Z.CUST_CODE, '#') = NVL(A.CUST_CODE, '#')
@@ -1147,14 +1141,30 @@
         )
         AND NVL(T.LE_AGE_FLAG,'|') <> '|'
     ),
+    /* 当前已有账龄行的业务键：补充来源命中这些键时金额挂到账龄行上，不再单独造行。 */
+    /* 只取当前账龄行，年初与上月历史行无法承接补充金额，仍需独立成键。 */
+    /* ALTER BY 20261118 21:29 SHIQINGFENG.EX 新增账龄行键判定，补充来源仅在无账龄行时新增独立行。 */
+    AGING_KEYS AS (
+      SELECT DISTINCT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM CURRENT_DIM
+    ),
     /* 当前、年初、上月的业务键与一二三性质组合并集，支持当前月无数据但历史有余额的记录保留。 */
     /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 键并集纳入一二三性质，性质拆分行各自成键不被合并。 */
     ALL_KEYS AS (
       SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
            , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM CURRENT_DIM
       UNION
-      SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
-           , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM SUPPLEMENT_AGG
+      /* ALTER BY 20261118 21:29 SHIQINGFENG.EX 补充来源键加无账龄行判定，已有账龄行的键不再造空性质独立行。 */
+      SELECT S.COD_AZIENDA, S.COD_CONTO, S.CUST_CODE, S.COD_DEST2
+           , '' AS NATURE_L1_NAME, '' AS NATURE_L2_NAME, '' AS NATURE_L3_NAME
+        FROM SUPPLEMENT_AGG S
+       WHERE NOT EXISTS (
+             SELECT 1
+               FROM AGING_KEYS K
+              WHERE K.COD_AZIENDA = S.COD_AZIENDA
+                AND K.COD_CONTO = S.COD_CONTO
+                AND NVL(K.CUST_CODE, '#') = NVL(S.CUST_CODE, '#')
+                AND NVL(K.COD_DEST2, '#') = NVL(S.COD_DEST2, '#')
+             )
       UNION
       SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
            , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM BY_HISTORY
