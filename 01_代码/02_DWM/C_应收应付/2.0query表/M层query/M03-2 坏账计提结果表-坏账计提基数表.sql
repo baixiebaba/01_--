@@ -56,6 +56,8 @@ SELECT COD_SCENARIO                                                       /* 场
        - BCY_ADJ_INCL_12_AMT - BCY_ADJ_INCL_13_AMT - BCY_ADJ_INCL_14_AMT - BCY_ADJ_INCL_15_AMT AS CHECK1  /* 校验：调整后含税总额减各分段合计 */
      , SPC_DSV_DED_AMT  /* 特殊调整项-直销垫资扣减金额 */
      , SPC_REB_DED_AMT  /* 特殊调整项-返利扣减金额 */
+     , INS_COV_DAYS     /* 保障天数 */
+     , INS_UNCOV_RATE   /* 未覆盖比率 */
      , BD_BASE_0_AMT    /* 坏账计提基数金额 */
      , BD_BASE_1_AMT    /* 坏账计提基数金额-1个月 */
      , BD_BASE_2_AMT    /* 坏账计提基数金额-2-3个月 */
