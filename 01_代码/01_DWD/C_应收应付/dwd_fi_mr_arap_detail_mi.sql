@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261117 15:26
- * 本次修改：ALTER BY 20261117 15:26 SHIQINGFENG.EX 币种小数位修正扩展到六套SAP系统，TCURX统一暂取S810表。
- * 上次修改：ALTER BY 20261117 15:00 SHIQINGFENG.EX S900系统新增币种小数位修正，零小数位币种的交易币按TCURX因子还原。
+ * 最后更新时间：20261118 14:45
+ * 本次修改：ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码统一保留前导零，修复科目余额行利润中心batch 4（公司+渠道分组）不命中。
+ * 上次修改：ALTER BY 20261117 15:26 SHIQINGFENG.EX 币种小数位修正扩展到六套SAP系统，TCURX统一暂取S810表。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -18,6 +18,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码统一保留前导零，修复科目余额行利润中心batch 4（公司+渠道分组）不命中。
  *   ALTER BY 20261117 15:26 SHIQINGFENG.EX 币种小数位修正扩展到六套SAP系统，TCURX统一暂取S810表。
  *   ALTER BY 20261117 15:00 SHIQINGFENG.EX S900系统新增币种小数位修正，零小数位币种的交易币按TCURX因子还原。
  *   ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
@@ -1311,12 +1312,13 @@ nf_final AS (
       FROM ar_nf_pick
 ),
 -- 读取目标月份有效的利润中心映射规则，并展开公司编码通配配置。
+-- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，不再去零，与规则表原值同口径比较。
 ar_profitcenter_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
          , NULLIF(LTRIM(TRIM(a.src_profitcenter_code), '0'), '') AS src_profitcenter_code
          , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '') AS acct_src_code
-         , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '') AS onoffline_code
+         , NULLIF(TRIM(a.onoffline_code), '') AS onoffline_code
          , MAX(a.profitcenter_code) AS profitcenter_code
          , MAX(a.profitcenter_name) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping a
@@ -1329,7 +1331,7 @@ ar_profitcenter_rule AS (
             , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '')
             , NULLIF(LTRIM(TRIM(a.src_profitcenter_code), '0'), '')
             , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
-            , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '')
+            , NULLIF(TRIM(a.onoffline_code), '')
 ),
 -- 电商零售类客户的渠道BU清单：客商类型规则库按渠道BU圈定客户范围，有效期与利润中心映射同口径。
 ecomm_channel_bu AS (
@@ -1459,10 +1461,11 @@ profitcenter_candidate AS (
                        )
                    )
       ) b
+    -- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，直接按原值匹配。
      INNER JOIN ar_profitcenter_rule r
         ON r.batch_id = 4
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
-       AND r.onoffline_code = NULLIF(LTRIM(TRIM(b.onoffline_code), '0'), '')
+       AND r.onoffline_code = NULLIF(TRIM(b.onoffline_code), '')
     UNION ALL
     SELECT b.fact_key
          , r.batch_id
@@ -2580,11 +2583,12 @@ gl_nf_by_company AS (
      GROUP BY b.cod_azienda
 ),
 -- 读取第二段可用的利润中心规则；非统驭余额无客商，支持batch 3（公司+科目）、batch 4（公司+渠道分组）、batch 5（公司）。
+-- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，不再去零，与规则表原值同口径比较。
 ar_profitcenter_balance_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
          , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '') AS acct_src_code
-         , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '') AS onoffline_code
+         , NULLIF(TRIM(a.onoffline_code), '') AS onoffline_code
          , MAX(a.profitcenter_code) AS profitcenter_code
          , MAX(a.profitcenter_name) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping a
@@ -2596,7 +2600,7 @@ ar_profitcenter_balance_rule AS (
      GROUP BY CAST(a.batch_id AS INT)
             , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '')
             , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
-            , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '')
+            , NULLIF(TRIM(a.onoffline_code), '')
 ),
 -- 按公司+科目匹配batch 3，未命中时按公司+渠道分组匹配batch 4，再未命中按公司匹配batch 5。
 profitcenter_balance_candidate AS (
@@ -2630,6 +2634,7 @@ profitcenter_balance_candidate AS (
       FROM balance_agg b
       LEFT JOIN gl_nf_by_company nf2
         ON nf2.company_code = b.company_code
+    -- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，直接按原值匹配，修复batch 4不命中。
      INNER JOIN ar_profitcenter_balance_rule r
         ON r.batch_id = 4
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
