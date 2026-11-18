@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261103 19:10
- * 本次修改：ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
- * 上次修改：ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射。
+ * 最后更新时间：20261118 21:55
+ * 本次修改：ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号对应业务优先级，1公司+渠道分组、2公司、3公司+科目、4新旧利润中心。
+ * 上次修改：ALTER BY 20261118 21:40 SHIQINGFENG.EX 利润中心映射按公司+渠道分组、公司、公司+科目、新旧利润中心四个优先级统一编号。
  *
  * 脚本名称  ：detail使用客户大表.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -16,6 +16,10 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号对应业务优先级，1公司+渠道分组、2公司、3公司+科目、4新旧利润中心。
+ *   ALTER BY 20261118 21:40 SHIQINGFENG.EX 利润中心映射按公司+渠道分组、公司、公司+科目、新旧利润中心四个优先级统一编号。
+ *   ALTER BY 20261118 21:30 SHIQINGFENG.EX 利润中心映射优先级改为公司+渠道分组→公司→公司+科目→新旧利润中心→收入利润中心，新增收入利润中心批次。
+ *   ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
  *   ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
  *   ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射。
  *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射。
@@ -1209,12 +1213,15 @@ nf_final AS (
       FROM ar_nf_pick
 ),
 -- 读取目标月份有效的利润中心映射规则，并展开公司编码通配配置。
+-- 批次号即业务优先级：1公司+渠道分组、2公司、3公司+科目、4新旧利润中心（仅电商零售类客户渠道BU范围）。
+-- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，不再去零，与规则表原值同口径比较。
+-- ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号直接对应业务优先级。
 ar_profitcenter_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
          , NULLIF(LTRIM(TRIM(a.src_profitcenter_code), '0'), '') AS src_profitcenter_code
          , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '') AS acct_src_code
-         , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '') AS onoffline_code
+         , NULLIF(TRIM(a.onoffline_code), '') AS onoffline_code
          , MAX(a.profitcenter_code) AS profitcenter_code
          , MAX(a.profitcenter_name) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping a
@@ -1222,12 +1229,12 @@ ar_profitcenter_rule AS (
         ON b.cod_azienda LIKE TRIM(a.company_code)
      WHERE NVL(a.valid_fr, '202401') <= @dt_month
        AND NVL(a.valid_to, '999999') >= @dt_month
-       AND CAST(a.batch_id AS INT) IN (1, 3, 4, 5)
+       AND CAST(a.batch_id AS INT) IN (1, 2, 3, 4)
      GROUP BY CAST(a.batch_id AS INT)
             , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '')
             , NULLIF(LTRIM(TRIM(a.src_profitcenter_code), '0'), '')
             , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
-            , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '')
+            , NULLIF(TRIM(a.onoffline_code), '')
 ),
 -- 电商零售类客户的渠道BU清单：客商类型规则库按渠道BU圈定客户范围，有效期与利润中心映射同口径。
 ecomm_channel_bu AS (
@@ -1238,85 +1245,10 @@ ecomm_channel_bu AS (
        AND NVL(valid_fr, '202401') <= @dt_month
        AND NVL(valid_to, '999999') >= @dt_month
 ),
--- 按渠道BU、公司、旧利润中心、科目和渠道分组生成利润中心候选。
+-- 按业务优先级生成利润中心候选：1公司+渠道分组→2公司→3公司+科目→4新旧利润中心（限电商零售类客户渠道BU范围）。
+-- ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心候选按业务优先级重排为四个批次。
 profitcenter_candidate AS (
-    -- ALTER BY 20261103 16:45 SHIQINGFENG.EX 电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库的渠道BU编码判定，命中后走batch_id=1旧利润中心→新利润中心映射。
-    SELECT b.fact_key
-         , r.batch_id
-         , r.profitcenter_code
-         , r.profitcenter_name
-      FROM (
-            SELECT MD5(
-                       CONCAT_WS(
-                           '|'
-                         , COALESCE(a.system_src, '')
-                         , COALESCE(a.ods_src, '')
-                         , COALESCE(a.company_code, '')
-                         , COALESCE(a.gjahr, '')
-                         , COALESCE(a.acct_cert_id, '')
-                         , COALESCE(a.acct_cert_item, '')
-                       )
-                   ) AS fact_key
-                 , a.src_profitcenter_code
-                 , bu.channel_bu_code
-              FROM normalized_items a
-              LEFT JOIN customer_supplier_dim ch
-                ON ch.cust_sap_code = CASE
-                                          WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
-                                              THEN a.cust_branch_code
-                                          ELSE a.cust_head_code
-                                      END
-               AND ch.cust_sap_client = a.system_src
-               AND ch.cust_supp_type = CASE
-                                          WHEN a.object_source = 'CUSTOMER' THEN 'C'
-                                          ELSE 'S'
-                                      END
-              LEFT JOIN (
-                    SELECT TRIM(com_3rd_code) AS com_3rd_code
-                         , MAX(channel_bu_code) AS channel_bu_code
-                      FROM dim.dim_rule_mrs_mr3_channel_bu_relation
-                     GROUP BY TRIM(com_3rd_code)
-              ) bu
-                ON bu.com_3rd_code = ch.com_3rd_code
-      ) b
-     INNER JOIN ar_profitcenter_rule r
-        ON r.batch_id = 1
-       AND b.channel_bu_code IN (
-              SELECT channel_bu_code
-                FROM ecomm_channel_bu
-           )
-       AND r.src_profitcenter_code = b.src_profitcenter_code
-    UNION ALL
-    SELECT b.fact_key
-         , r.batch_id
-         , r.profitcenter_code
-         , r.profitcenter_name
-      FROM (
-            SELECT MD5(
-                       CONCAT_WS(
-                           '|'
-                         , COALESCE(a.system_src, '')
-                         , COALESCE(a.ods_src, '')
-                         , COALESCE(a.company_code, '')
-                         , COALESCE(a.gjahr, '')
-                         , COALESCE(a.acct_cert_id, '')
-                         , COALESCE(a.acct_cert_item, '')
-                       )
-                   ) AS fact_key
-                 , a.system_src
-                 , a.ods_src
-                 , a.company_code
-                 , a.gjahr
-                 , a.acct_cert_id
-                 , a.acct_cert_item
-                 , a.acct_src_code
-              FROM normalized_items a
-      ) b
-     INNER JOIN ar_profitcenter_rule r
-        ON r.batch_id = 3
-       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
-       AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
-    UNION ALL
+    -- 优先级1：公司+渠道分组。
     SELECT b.fact_key
          , r.batch_id
          , r.profitcenter_code
@@ -1358,10 +1290,11 @@ profitcenter_candidate AS (
                    )
       ) b
      INNER JOIN ar_profitcenter_rule r
-        ON r.batch_id = 4
+        ON r.batch_id = 1
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
        AND r.onoffline_code = NULLIF(LTRIM(TRIM(b.onoffline_code), '0'), '')
     UNION ALL
+    -- 优先级2：公司。
     SELECT b.fact_key
          , r.batch_id
          , r.profitcenter_code
@@ -1387,10 +1320,90 @@ profitcenter_candidate AS (
               FROM normalized_items a
       ) b
      INNER JOIN ar_profitcenter_rule r
-        ON r.batch_id = 5
+        ON r.batch_id = 2
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+    UNION ALL
+    -- 优先级3：公司+科目。
+    SELECT b.fact_key
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM (
+            SELECT MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   ) AS fact_key
+                 , a.system_src
+                 , a.ods_src
+                 , a.company_code
+                 , a.gjahr
+                 , a.acct_cert_id
+                 , a.acct_cert_item
+                 , a.acct_src_code
+              FROM normalized_items a
+      ) b
+     INNER JOIN ar_profitcenter_rule r
+        ON r.batch_id = 3
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+       AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
+    UNION ALL
+    -- 优先级4：新旧利润中心，仅电商零售类客户渠道BU范围内的客户。
+    -- ALTER BY 20261103 16:45 SHIQINGFENG.EX 电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库的渠道BU编码判定。
+    SELECT b.fact_key
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM (
+            SELECT MD5(
+                       CONCAT_WS(
+                           '|'
+                         , COALESCE(a.system_src, '')
+                         , COALESCE(a.ods_src, '')
+                         , COALESCE(a.company_code, '')
+                         , COALESCE(a.gjahr, '')
+                         , COALESCE(a.acct_cert_id, '')
+                         , COALESCE(a.acct_cert_item, '')
+                       )
+                   ) AS fact_key
+                 , a.src_profitcenter_code
+                 , bu.channel_bu_code
+              FROM normalized_items a
+              LEFT JOIN customer_supplier_dim ch
+                ON ch.cust_sap_code = CASE
+                                          WHEN NULLIF(TRIM(a.cust_branch_code), '') IS NOT NULL
+                                              THEN a.cust_branch_code
+                                          ELSE a.cust_head_code
+                                      END
+               AND ch.cust_sap_client = a.system_src
+               AND ch.cust_supp_type = CASE
+                                          WHEN a.object_source = 'CUSTOMER' THEN 'C'
+                                          ELSE 'S'
+                                      END
+              LEFT JOIN (
+                    SELECT TRIM(com_3rd_code) AS com_3rd_code
+                         , MAX(channel_bu_code) AS channel_bu_code
+                      FROM dim.dim_rule_mrs_mr3_channel_bu_relation
+                     GROUP BY TRIM(com_3rd_code)
+              ) bu
+                ON bu.com_3rd_code = ch.com_3rd_code
+      ) b
+     INNER JOIN ar_profitcenter_rule r
+        ON r.batch_id = 4
+       AND b.channel_bu_code IN (
+              SELECT channel_bu_code
+                FROM ecomm_channel_bu
+           )
+       AND r.src_profitcenter_code = b.src_profitcenter_code
 ),
--- 按1→3→4→5业务优先级选取唯一利润中心，避免规则重复放大事实行。
+-- 按 batch_id 最小者唯一选取利润中心，避免规则重复放大事实行。
+-- ALTER BY 20261118 21:55 SHIQINGFENG.EX 优先级直接比较批次号。
 profitcenter_pick AS (
     SELECT c.fact_key
          , MAX(c.profitcenter_code) AS profitcenter_code
@@ -1487,11 +1500,14 @@ ar_mapping_base AS (
         ON cs.company_code = a.company_code
 ),
 -- 按有效期聚合三级性质映射规则。
+-- 系统号、客商、利润中心统一去前导0后参与匹配；规则表system_src为600/700形式，与数据源S600对齐时拼S前缀。
+-- ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0
 ar_nature_rule AS (
     SELECT CAST(batch_id AS INT) AS batch_id
+         , CONCAT('S', TRIM(system_src)) AS system_src
          , company_code
-         , cust_code
-         , profitcenter_code
+         , NULLIF(LTRIM(TRIM(cust_code), '0'), '') AS cust_code
+         , NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '') AS profitcenter_code
          , acct_src_code AS acct_map_code
          , acct_type
          , MAX(nature_l1_name) AS nature_l1_name
@@ -1501,9 +1517,10 @@ ar_nature_rule AS (
      WHERE NVL(valid_fr, '202401') <= @dt_month
        AND NVL(valid_to, '999999') >= @dt_month
      GROUP BY CAST(batch_id AS INT)
+            , CONCAT('S', TRIM(system_src))
             , company_code
-            , cust_code
-            , profitcenter_code
+            , NULLIF(LTRIM(TRIM(cust_code), '0'), '')
+            , NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
             , acct_src_code
             , acct_type
 ),
@@ -1517,9 +1534,10 @@ ar_nature_candidate AS (
       FROM ar_mapping_base b
      INNER JOIN ar_nature_rule r
         ON r.batch_id = 1
+       AND r.system_src = b.system_src
        AND r.company_code = b.company_code
        AND r.acct_map_code = b.acct_src_code
-       AND r.cust_code = b.cust_code
+       AND r.cust_code = NULLIF(LTRIM(TRIM(b.cust_code), '0'), '')
     UNION ALL
     SELECT b.fact_key
          , r.batch_id
@@ -1529,8 +1547,9 @@ ar_nature_candidate AS (
       FROM ar_mapping_base b
      INNER JOIN ar_nature_rule r
         ON r.batch_id = 2
+       AND r.system_src = b.system_src
        AND r.company_code = b.company_code
-       AND r.cust_code = b.cust_code
+       AND r.cust_code = NULLIF(LTRIM(TRIM(b.cust_code), '0'), '')
     UNION ALL
     SELECT b.fact_key
          , r.batch_id
@@ -1540,9 +1559,10 @@ ar_nature_candidate AS (
       FROM ar_mapping_base b
      INNER JOIN ar_nature_rule r
         ON r.batch_id = 3
+       AND r.system_src = b.system_src
        AND r.company_code = b.company_code
        AND r.acct_map_code = b.acct_src_code
-       AND r.profitcenter_code = b.profitcenter_code
+       AND r.profitcenter_code = NULLIF(LTRIM(TRIM(b.profitcenter_code), '0'), '')
     UNION ALL
     SELECT b.fact_key
          , r.batch_id
@@ -1552,6 +1572,7 @@ ar_nature_candidate AS (
       FROM ar_mapping_base b
      INNER JOIN ar_nature_rule r
         ON r.batch_id = 4
+       AND r.system_src = b.system_src
        AND r.company_code = b.company_code
        AND r.acct_map_code = b.acct_src_code
     UNION ALL
@@ -1563,8 +1584,9 @@ ar_nature_candidate AS (
       FROM ar_mapping_base b
      INNER JOIN ar_nature_rule r
         ON r.batch_id = 5
+       AND r.system_src = b.system_src
        AND r.acct_map_code = b.acct_src_code
-       AND r.cust_code = b.cust_code
+       AND NULLIF(LTRIM(TRIM(b.cust_code), '0'), '') LIKE r.cust_code
 ),
 -- 按最小批次优先原则确定三级性质。
 ar_nature_pick AS (
@@ -2474,12 +2496,15 @@ gl_nf_by_company AS (
        AND NVL(a.valid_to, '999999') >= @dt_month
      GROUP BY b.cod_azienda
 ),
--- 读取第二段可用的利润中心规则；非统驭余额无客商，支持batch 3（公司+科目）、batch 4（公司+渠道分组）、batch 5（公司）。
+-- 读取第二段可用的利润中心规则；非统驭余额无客商，支持公司+渠道分组、公司、公司+科目三个优先级。
+-- 批次号即业务优先级：1公司+渠道分组、2公司、3公司+科目。
+-- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，不再去零，与规则表原值同口径比较。
+-- ALTER BY 20261118 21:55 SHIQINGFENG.EX 余额段利润中心映射按规则表批次号直接对应业务优先级。
 ar_profitcenter_balance_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
          , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '') AS acct_src_code
-         , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '') AS onoffline_code
+         , NULLIF(TRIM(a.onoffline_code), '') AS onoffline_code
          , MAX(a.profitcenter_code) AS profitcenter_code
          , MAX(a.profitcenter_name) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping a
@@ -2487,14 +2512,51 @@ ar_profitcenter_balance_rule AS (
         ON b.cod_azienda LIKE TRIM(a.company_code)
      WHERE NVL(a.valid_fr, '202401') <= @dt_month
        AND NVL(a.valid_to, '999999') >= @dt_month
-       AND CAST(a.batch_id AS INT) IN (3, 4, 5)
+       AND CAST(a.batch_id AS INT) IN (1, 2, 3)
      GROUP BY CAST(a.batch_id AS INT)
             , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '')
             , NULLIF(LTRIM(TRIM(a.acct_src_code), '0'), '')
-            , NULLIF(LTRIM(TRIM(a.onoffline_code), '0'), '')
+            , NULLIF(TRIM(a.onoffline_code), '')
 ),
--- 按公司+科目匹配batch 3，未命中时按公司+渠道分组匹配batch 4，再未命中按公司匹配batch 5。
+-- 按业务优先级生成余额利润中心候选：1公司+渠道分组→2公司→3公司+科目。
+-- ALTER BY 20261118 21:55 SHIQINGFENG.EX 余额候选按业务优先级重排为三个批次。
 profitcenter_balance_candidate AS (
+    -- 优先级1：公司+渠道分组。
+    SELECT b.system_src
+         , b.company_code
+         , b.acct_src_code
+         , b.src_profitcenter_code
+         , b.bus_range_code
+         , b.qcy_code
+         , b.ods_src
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM balance_agg b
+      LEFT JOIN gl_nf_by_company nf2
+        ON nf2.company_code = b.company_code
+     INNER JOIN ar_profitcenter_balance_rule r
+        ON r.batch_id = 1
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+       AND r.onoffline_code = COALESCE(NULLIF(NULLIF(TRIM(nf2.onoffline_code), ''), 'NULL'), '020_OFF_002')
+    UNION ALL
+    -- 优先级2：公司。
+    SELECT b.system_src
+         , b.company_code
+         , b.acct_src_code
+         , b.src_profitcenter_code
+         , b.bus_range_code
+         , b.qcy_code
+         , b.ods_src
+         , r.batch_id
+         , r.profitcenter_code
+         , r.profitcenter_name
+      FROM balance_agg b
+     INNER JOIN ar_profitcenter_balance_rule r
+        ON r.batch_id = 2
+       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
+    UNION ALL
+    -- 优先级3：公司+科目。
     SELECT b.system_src
          , b.company_code
          , b.acct_src_code
@@ -2510,42 +2572,9 @@ profitcenter_balance_candidate AS (
         ON r.batch_id = 3
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
        AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
-    UNION ALL
-    -- ALTER BY 20261103 19:10 SHIQINGFENG.EX 新增batch 4：公司+渠道分组映射利润中心，渠道分组未命中规则时按默认零售渠道兜底，与输出列同口径。
-    SELECT b.system_src
-         , b.company_code
-         , b.acct_src_code
-         , b.src_profitcenter_code
-         , b.bus_range_code
-         , b.qcy_code
-         , b.ods_src
-         , r.batch_id
-         , r.profitcenter_code
-         , r.profitcenter_name
-      FROM balance_agg b
-      LEFT JOIN gl_nf_by_company nf2
-        ON nf2.company_code = b.company_code
-     INNER JOIN ar_profitcenter_balance_rule r
-        ON r.batch_id = 4
-       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
-       AND r.onoffline_code = COALESCE(NULLIF(NULLIF(TRIM(nf2.onoffline_code), ''), 'NULL'), '020_OFF_002')
-    UNION ALL
-    SELECT b.system_src
-         , b.company_code
-         , b.acct_src_code
-         , b.src_profitcenter_code
-         , b.bus_range_code
-         , b.qcy_code
-         , b.ods_src
-         , r.batch_id
-         , r.profitcenter_code
-         , r.profitcenter_name
-      FROM balance_agg b
-     INNER JOIN ar_profitcenter_balance_rule r
-        ON r.batch_id = 5
-       AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
 ),
--- 按余额粒度唯一选取利润中心，batch 3优先于batch 4、batch 4优先于batch 5，且不复制余额事实。
+-- 按余额粒度唯一选取利润中心，batch_id 最小者优先，且不复制余额事实。
+-- ALTER BY 20261118 21:55 SHIQINGFENG.EX 余额段优先级直接比较批次号。
 profitcenter_balance_pick AS (
     SELECT c.system_src
          , c.company_code
@@ -2626,10 +2655,12 @@ gl_bmu_profitcenter AS (
      GROUP BY NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
 ),
 -- 三级性质按公司+科目+利润中心取（batch 3）；科目余额无客商，客商批次 1/2/5 不适用。
+-- ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，利润中心去前导0
 gl_nature_by_prctr AS (
-    SELECT company_code
+    SELECT CONCAT('S', TRIM(system_src)) AS system_src
+         , company_code
          , acct_src_code
-         , profitcenter_code
+         , NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '') AS profitcenter_code
          , MAX(nature_l1_name) AS nature_l1_name
          , MAX(nature_l2_name) AS nature_l2_name
          , MAX(nature_l3_name) AS nature_l3_name
@@ -2637,13 +2668,15 @@ gl_nature_by_prctr AS (
      WHERE CAST(batch_id AS INT) = 3
        AND NVL(valid_fr, '202401') <= @dt_month
        AND NVL(valid_to, '999999') >= @dt_month
-     GROUP BY company_code
+     GROUP BY CONCAT('S', TRIM(system_src))
+            , company_code
             , acct_src_code
-            , profitcenter_code
+            , NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
 ),
 -- 三级性质按公司+科目兜底（batch 4）。
 gl_nature_by_company AS (
-    SELECT company_code
+    SELECT CONCAT('S', TRIM(system_src)) AS system_src
+         , company_code
          , acct_src_code
          , MAX(nature_l1_name) AS nature_l1_name
          , MAX(nature_l2_name) AS nature_l2_name
@@ -2652,7 +2685,8 @@ gl_nature_by_company AS (
      WHERE CAST(batch_id AS INT) = 4
        AND NVL(valid_fr, '202401') <= @dt_month
        AND NVL(valid_to, '999999') >= @dt_month
-     GROUP BY company_code
+     GROUP BY CONCAT('S', TRIM(system_src))
+            , company_code
             , acct_src_code
 )
 SELECT @dt_month
@@ -2774,11 +2808,13 @@ SELECT @dt_month
     ON bg.profitcenter_code = NULLIF(LTRIM(TRIM(COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)), '0'), '')
   -- ALTER BY 20261103 18:58 SHIQINGFENG.EX 三级性质按映射后利润中心（未命中回退源利润中心）取规则，再退公司+科目。
   LEFT JOIN gl_nature_by_prctr nt3
-    ON nt3.company_code = b.company_code
+    ON nt3.system_src = b.system_src
+   AND nt3.company_code = b.company_code
    AND nt3.acct_src_code = b.acct_src_code
-   AND nt3.profitcenter_code = COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)
+   AND nt3.profitcenter_code = NULLIF(LTRIM(TRIM(COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)), '0'), '')
   LEFT JOIN gl_nature_by_company nt4
-    ON nt4.company_code = b.company_code
+    ON nt4.system_src = b.system_src
+   AND nt4.company_code = b.company_code
    AND nt4.acct_src_code = b.acct_src_code
   -- ALTER BY 20261103 19:05 SHIQINGFENG.EX 渠道分组按公司取规则，未命中走默认零售渠道。
   LEFT JOIN gl_nf_by_company nf2

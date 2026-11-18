@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261102 16:10
- * 本次修改：ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
- * 上次修改：ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
+ * 最后更新时间：20261118 21:57
+ * 本次修改：ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
+ * 上次修改：ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
  *
  * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -17,6 +17,8 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
+ *   ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *   ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
  *   ALTER BY 20261102 15:18 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支客户范围改为排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支改为命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单，其余条件不变。
@@ -652,14 +654,15 @@ overdue_sample_src AS (
     HAVING SUM(COALESCE(s.overdue_adj_after_amt, 0)) <> 0
         OR SUM(COALESCE(s.inv_sample_amt, 0)) <> 0
 ),
--- OVERDUE：读取目标月份有效的batch_id=1利润中心映射，并按去前导0后的旧利润中心去重，避免放大金额。
+-- OVERDUE：读取目标月份有效的batch_id=4（旧利润中心→新利润中心）映射，并按去前导0后的旧利润中心去重，避免放大金额。
 overdue_profitcenter_rule AS (
     SELECT NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '') AS src_profitcenter_code
          , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
          , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
      -- ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE利润中心改用应收应付-利润中心映射表batch_id=1配置。
-     WHERE CAST(pm.batch_id AS INT) = 1
+     -- ALTER BY 20261118 21:57 SHIQINGFENG.EX 利润中心映射批次号改为batch_id=4，对应旧利润中心映射新利润中心。
+     WHERE CAST(pm.batch_id AS INT) = 4
        AND NVL(pm.valid_fr, '202401') <= @dt_month
        AND NVL(pm.valid_to, '999999') >= @dt_month
      GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
@@ -1086,13 +1089,14 @@ policy_sum AS (
             , s.material_group_code
             , s.ledger_status
 ),
--- POLICY：标准化前读取目标月份有效的batch_id=2利润中心映射；匹配前及映射后编码均去前导0。
+-- POLICY：标准化前读取目标月份有效的batch_id=4（旧利润中心→新利润中心）映射；匹配前及映射后编码均去前导0。
 policy_profitcenter_rule AS (
     SELECT NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '') AS src_profitcenter_code
          , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
          , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
-     WHERE CAST(pm.batch_id AS INT) = 2
+     -- ALTER BY 20261118 21:57 SHIQINGFENG.EX 利润中心映射批次号改为batch_id=4，对应旧利润中心映射新利润中心。
+     WHERE CAST(pm.batch_id AS INT) = 4
        AND NVL(pm.valid_fr, '202401') <= @dt_month
        AND NVL(pm.valid_to, '999999') >= @dt_month
      GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
@@ -1136,7 +1140,7 @@ policy_fact AS (
          , s.profitcenter_name AS src_profitcenter_name
          , s.material_group_code
          , s.material_group_name
-         -- ALTER BY 20261029 17:28 SHIQINGFENG.EX 利润中心映射优先级：batch_id=2 > batch_id=6 > 原始利润中心。
+         -- ALTER BY 20261029 17:28 SHIQINGFENG.EX 利润中心映射优先级：batch_id=4 > batch_id=6 > 原始利润中心。
          , COALESCE(r.profitcenter_code, r6.profitcenter_code, s.profitcenter_code) AS profitcenter_code
          , COALESCE(r.profitcenter_name, r6.profitcenter_name, s.profitcenter_name) AS profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
@@ -1290,11 +1294,13 @@ standard_fact AS (
     SELECT * FROM writeoff_fact
 ),
 -- 读取与DETAIL一致的三级性质规则；规则有效期按目标月份过滤。
+-- ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0
 ar_nature_rule AS (
     SELECT CAST(batch_id AS INT) AS batch_id
+         , CONCAT('S', TRIM(system_src)) AS system_src
          , company_code
-         , cust_code
-         , profitcenter_code
+         , NULLIF(LTRIM(TRIM(cust_code), '0'), '') AS cust_code
+         , NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '') AS profitcenter_code
          , acct_src_code
          , acct_type
          , MAX(nature_l1_name) AS nature_l1_name
@@ -1304,9 +1310,10 @@ ar_nature_rule AS (
      WHERE NVL(valid_fr, '202401') <= @dt_month
        AND NVL(valid_to, '999999') >= @dt_month
      GROUP BY CAST(batch_id AS INT)
+            , CONCAT('S', TRIM(system_src))
             , company_code
-            , cust_code
-            , profitcenter_code
+            , NULLIF(LTRIM(TRIM(cust_code), '0'), '')
+            , NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
             , acct_src_code
             , acct_type
 ),
@@ -1327,26 +1334,31 @@ ar_nature_candidate AS (
       LEFT JOIN ar_nature_rule r
         ON (
                (r.batch_id = 1
+                AND r.system_src = f.system_src
                 AND r.company_code = f.company_code
                 AND r.acct_src_code = f.acct_src_code
                 AND r.acct_type = f.acct_type_code
-                AND r.cust_code = f.cust_code)
+                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
             OR (r.batch_id = 2
+                AND r.system_src = f.system_src
                 AND r.company_code = f.company_code
-                AND r.cust_code = f.cust_code)
+                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
             OR (r.batch_id = 3
+                AND r.system_src = f.system_src
                 AND r.company_code = f.company_code
                 AND r.acct_src_code = f.acct_src_code
                 AND r.acct_type = f.acct_type_code
-                AND r.profitcenter_code = f.profitcenter_code)
+                AND r.profitcenter_code = NULLIF(LTRIM(TRIM(f.profitcenter_code), '0'), ''))
             OR (r.batch_id = 4
+                AND r.system_src = f.system_src
                 AND r.company_code = f.company_code
                 AND r.acct_src_code = f.acct_src_code
                 AND r.acct_type = f.acct_type_code)
             OR (r.batch_id = 5
+                AND r.system_src = f.system_src
                 AND r.acct_src_code = f.acct_src_code
                 AND r.acct_type = f.acct_type_code
-                AND r.cust_code = f.cust_code)
+                AND NULLIF(LTRIM(TRIM(f.cust_code), '0'), '') LIKE r.cust_code)
            )
      WHERE f.system_src NOT IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810')
        AND r.batch_id IS NOT NULL
