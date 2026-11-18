@@ -1,12 +1,125 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_M2M_REV_M (
+CREATE OR REPLACE PROCEDURE CPM_SP_M2M_REV_M(
   P_SCENARIO    IN VARCHAR2,
   P_PERIODO     IN VARCHAR2,  -- YYYYMM
   P_AZIENDA     IN VARCHAR2,
   SESSION_USER  IN VARCHAR2
 ) AS
 /******
+当前版本 ： V4.9  更新人：LIYIFAN1.EX  更新时间：20261118 14:58 更新完成
+上一版信息: V4.8  更新人：SHEXUANXUAN.EX  更新时间：20261107 11.01 更新完成
 
-修改日志：
+最后修改时间: 
+  20261118 14:58 LIYIFAN1.EX V4.9 新增「日立合并层成本分摊（BSFT）」（步骤 3-2，位置在「3 日立成本轧差」之后、END IF 之前）：
+            ① 待分摊五场景：①②总账内销/外销、③物料差异取老管报 TGK_GB_HISENSE.V_HITACH_ZXSLR_CONS
+              （按 MATNR 伪物料名区分内外销），④管法差、⑤手工调整取本表 TEMP（均要求物料为空）；
+            ② 因子池：①②③④ 全 050 节点各一张，⑤ 每个业务管理单元一张；剔除 AW_RUL_BAFRUL_000001 与
+              AW_RUL_RDEMAT_000001 的物料；「12-海外」判定走 V_REF_ED_D_SALE_DEPT（HIE=HISD，NODE=12）；
+            ③ 结果按 OID 汇总覆盖 OTH_ASSESS_COST；④⑤ 已分摊后插负数行冲销原行（COD_CONTO=S640100、
+              SRC_DETAIL=BSFT、PROVENIENZA=CPM_SP_BSFT_M_T0、COD_CATEGORIA 继承原行）；过程数据落 ZTAB_BSFT_BASE1；
+            ④ 配套：7 处 PROVENIENZA 白名单补 CPM_SP_BSFT_M_T0（V4.8 原行号 4172/4294/4433/6437/6737/6921/6950），
+              轧差取数排除该来源；日立段开头加「3-0 重跑清理」（删上一轮 GB_ZXSLR 与 BSFT 冲销行、OTH 归零）。
+            ★ 必须位于 PSI_COMB_COST = DOM_PSI_COST + OTH_ASSESS_COST 汇总之前；依赖先建 ZTAB_BSFT_BASE1（否则 ORA-00942）。
+            ★ 版内修正：④⑤ 待分摊的 ROWNUM 改 ROW_NUMBER() OVER（原与 GROUP BY 同层，ORA-00979）；
+              冲销行类别由固定 ZAMOUNT 改继承原行（原写法使 ⑤ 的 CADJ_COST 净不掉，合并成本翻倍）。
+  20261107 11.01 SHEXUANXUAN.EX 20261107 2910端到端合并成本逻辑，改成与1098一致
+  20261106 14:24 LICHENG.EX 修正 V4.6 文件头注释：说明文字里误写了注释结束符，把外层注释块提前闭合，
+            编译报 PLS-00103（第 19 行）。已改为纯文字表述，SQL 代码零改动，与 V4.6 逐字相同（除本节）。
+
+  20261106 14:20 LICHENG.EX STEP 7 加固：禁止谓词下推 + 强制 hash join（只加 hint / 等价改写，业务口径零变化）
+            背景：DEV 库（TGK_FIMA_DEV）7.0 的 MERGE 跑了 2689 秒、2.53 亿逻辑读、返回 0 行。
+            TEMP 表统计停在 11-03，A 视图估算 13 行、实际 COD_DEST3 LIKE '2%' 命中 58 万行（低估约 4.5 万倍），
+            优化器因此把 B 的「按物料分组聚合」推成逐行标量子查询（VIEW PUSHED PREDICATE + FILTER +
+            按 MATERIAL_CODE 回表），58 万行各跑一遍。生产库因统计较新走 hash join，10 秒跑完，所以只有 DEV 复现。
+            改动：① 7.0 —— CASE 里的 IN (SELECT ... ATSMAP) 改为预聚合 CTE「CTE_BG001_AZI」LEFT JOIN
+              （同一集合只算一次），B 加 NO_PUSH_PRED 提示，外层加 USE_HASH(A B) 提示；
+            ② 7.1/7.2 —— NEED_UPDATE_MC 加 NO_PUSH_PRED，主查询加 USE_HASH(T MC)；
+            ③ REV005_STEP_7 贵阳工厂端 / 广东 —— ALLOC_COST 加 NO_PUSH_PRED，末段加 USE_HASH(BL AC)。
+            7.3（无物料号）无「分组派生表 JOIN」结构，不加 hint，避免过度干预计划。
+            语义不变：CASE 判定由「COD_AZI_CTP IN 小集合」改成「LEFT JOIN 命中非空」，其余字段与过滤条件逐字保留。
+
+  20261101 15:40 LICHENG.EX 2910政策记账方式不同于内销，收入部分做特殊逻辑处理
+  20261030 19:17 LICHENG.EX REV005_STEP_6.0（抵消前对方公司处理）：OPTY061 取消对方公司置空
+            原条件 OR D_OPER_TYPE IN ('OPTY060','OPTY061') 收敛为仅 OPTY060 置空；OPTY061 行保留
+            COD_AZI_CTP / COD_AZI_CTP_ORG，后续「插入抵消数据」按 M.COD_AZI_CTP_ORG IS NOT NULL 正常生成抵消数。
+            仅动 STEP_6.0 这一条 UPDATE；STEP_1.2-1.5 政策分摊因子中 OPTY060/OPTY061/OPTY039 的排除不变。
+  20261029 10:59 LICHENG.EX 直接写死020_OFF_002
+  20261027 14:52 LICHENG.EX REV005_STEP_9（事业部 / 产销存打标）性能重构：两段 UPDATE 合并为一条 ROWID 驱动 MERGE
+            原写法两条 UPDATE 全表刷新：目标表整表扫 2 次、整表写 2 次（130+ 列宽表，undo/redo 翻倍），
+            且每个命中行都执行一次相关标量子查询，映射派生表（MAGPCR × SESSION_V_REF_AZIENDA → PCRMAP）
+            逐行重算，标量子查询缓存只按 (COD_AZIENDA / COD_AZIENDA+COD_DEST2) 命中，公司×利润中心组合
+            越多重算越多 —— 这是主要耗时；另有 SUBSTR(...)||LPAD(...) 每行重复计算且不可索引。
+            现改为：两个映射派生表在 USING 里各算一次（hash join），目标表只扫 1 次、只写 1 次，MERGE 按
+            ROWID 定位；有效期比较统一用 v_per0；UPDATE ... WHERE 只写「新旧值不同」的行。
+            语义逐行等价：公司命中才有 IS_PSC；公司+利润中心命中才有 COD_BG 与 IS_BG_PL='Y'；未命中一律为空。
+            两个 LEFT JOIN 派生表均按主键收敛，每个 ROWID 在 USING 内唯一，不会 ORA-30926 / 不放大行数。
+
+  20261026 21:42 LICHENG.EX REV005_STEP_6.0（抵消前对方公司处理）新增 REVM05 + REV_01_229 对方公司置空
+  20261026 21:42 LICHENG.EX REV005_STEP_6.0（抵消前对方公司处理）：对方公司置空新增一个分支 ——
+            SRC_DETAIL = 'REVM05' 且 D_ADJ_TYPE = 'REV_01_229' 的行，COD_AZI_CTP / COD_AZI_CTP_ORG 一并置空。
+            该类行由 REV005_STEP_2-3（研发费用品类间调整-事业部层）产出：插入时 COD_AZI_CTP 已写 NULL（L3126），
+            但 COD_AZI_CTP_ORG 仍带源行值（L3127），会被后续「插入抵消数据」的 COD_AZI_CTP_ORG IS NOT NULL 判定命中，
+            凭空生成抵消数；置空后即不参与抵消。
+            命中范围：全程序只有 STEP_2-3 产出 D_ADJ_TYPE = 'REV_01_229'；STEP_2-1 / 2-2 / 2-4 虽同为 REVM05 但
+            硬编码 REV_01_311 / REV_01_312 / REV_01_503，不受影响，故该分支零误伤。
+            写法：沿用同一条 UPDATE 加 OR 分支（继承公司会话 + PROVENIENZA 限制），不新增语句。
+
+  20261026 17:45 LICHENG.EX REV005_STEP_9 合并收入成本表新增事业部/产销存三个字段
+  20261026 17:45 LICHENG.EX REV005_STEP_9（事业部 / 产销存打标）：AW_MR9_REVM05_000001 新增三个字段，
+            不改 INSERT 结构，落表之后用两条 UPDATE 按【期间 + 公司 + PROVENIENZA】回刷本批数据，
+            不参与任何金额计算，不影响原有字段取值：
+            ① COD_BG（事业部编码）：本行 COD_AZIENDA 经 SESSION_V_REF_AZIENDA（HIE='01'）按层级展开后
+               命中 AW_RUL_MAGPCR_000001 —— NODE_ELEMENT_FLAG='N' 走 NODE（层级编码）、='E' 走 ELEM（具体公司码），
+               COMPANY_CODE 不能简单等值；有效期按 YYYYMM 卡（VALID_FR / VALID_TO）。
+               命中后取出该配置的 COD_BG，再用 AW_RUL_PCRMAP_000001（同期间有效）换出该事业部的利润中心范围；
+               本行 COD_DEST2 落在范围内 → 写 COD_BG，否则为空。
+            ② IS_BG_PL（是否事业部）：与 ① 同一判据，利润中心落在事业部范围内写 'Y'，否则为空。
+            ③ IS_PSC（是否产销存）：只看公司是否命中 AW_RUL_MAGPCR_000001，直接取该配置的 IS_PSC，
+               与利润中心无关（订单口径落在公司层）。
+            ★ 故意拆成两条 UPDATE：IS_PSC 是公司级，COD_BG / IS_BG_PL 是「公司 + 利润中心」级；
+              合在一条 SET (...) = (...) 里，公司没命中任何事业部时会连同 IS_PSC 一起被冲成空。
+            ★ 两段映射派生表都按主键收敛（GROUP BY AZI_CODE / AZI_CODE,PCR_CODE），标量子查询最多返回 1 行；
+              映射表配错也只会取到其中一条，不会 ORA-01427、不放大行数。
+            ★ 语句位置：本次 INSERT 的 COMMIT 之后、SESSION 表清理之前（要读 SESSION_V_REF_AZIENDA /
+              SESSION_AZIENDA_LIST）。重跑同期间自动覆盖，不需要另写历史回填脚本。
+            ★ 这里的 HIE 固定取 '01'（2S_MA 公司树），与 CPM_SP_FI_CO_M 读同一张 MAGPCR 的口径保持一致；
+              本程序其它位置用的 HIE='10'（中国区节点口径）是另一棵树，两者不能混用。
+  上一版信息:  V3.9  更新人：LIYIFAN1.EX  更新时间：20261023 16:08 更新完成
+  20261023 16:08 LIYIFAN1.EX 源2-3 研发费用品类间调整 对方公司放null
+  上一版信息:  V3.8  更新人：LICHENG.EX  更新时间：20261023 10:00 更新完成
+  20261023 10:00 LICHENG.EX REV005_STEP_1.2-1.5（政策分摊）①业务分类 D_OPER_TYPE 为 OPTY060/OPTY061/OPTY039 的收入行不作为分摊因子：
+            1.2 打标 A_STEP1 / A_STEP2_READY / A_STEP3 / B_STEP1_READY / B_STEP2_READY（各非空调+空调 共10处）
+            与 1.3 生成政策分摊数据（本月、上两月 共2处）同步加排除；
+            ②按【公司三级分类】D_CHANNEL 匹配的政策（A_STEP3、B_STEP2）不认 CUST_CODE=1001200、A012** 的收入行：
+            1.2 打标 4 处 + 1.3 本月分摊 A_STEP3/B_STEP2 分支 ON 条件同步排除，该类行既不进分摊分母也不接分摊；
+            整组因子被清空时政策不再打标，回落 1.4 段1「未分配政策」，金额不丢。
+  20261022 LIYIFAN1.EX REV005_STEP_2-4 古洛尼合并层还原
+  20261022 FENGJIANFENG.ex 20261022fjf_add REV005_STEP_999 二期新增维度处理
+  20261021 LIYIFAN1.EX  REV005_STEP_2-3 研发费用品类间调整-事业部层 
+  20261020 10:58 licheng.ex REV005_STEP_1（单体-收入、政策）：新增 1.6 段，公司 2910 的考核收入 ASSESSED_REV 取数。
+            公式：ASSESSED_REV = ORG_REV - POLICY_AMT + POLICY_CASH_PD
+                  （【收入金额(含折扣)-净收入】-【政策计提】+【政策兑现】），其余公司维持原 NULL 口径。
+            位置：置于汇率折算 MERGE 之后、STEP 2 之前，保证三个参与字段均取最终值。
+  20261019 licheng.ex 非国际营销机1098公司按以下逻辑取数
+  20261016 LIYIFAN1.EX 新增业务分类OPTY060、OPTY061
+  20261015 18:30 LICHENG.EX REV005_STEP_1（单体-收入、政策）：POLICY_CASH_PD 进数新增 SRC_DETAIL='ZTFI313A' 的数据。
+            ① 1.4 段2（COD_CONTO LIKE 'S60010%' 当期）CASE 名单由 ('VBRP','REVM01','ADJM01') 扩为 (...,'ZTFI313A')；
+            ② 1.5 段（科目非 S60010% 且非 S6001G5/S6001G5AD 的当期插入）POLICY_CASH_PD 由硬编码 0 改为 CASE，
+               当 M.SRC_DETAIL='ZTFI313A' 时取 NVL(MAP_DIS1,0)+NVL(MAP_DIS3,0)+NVL(MAP_DIS4,0)+NVL(MAP_DIS30,0)+NVL(MAP_DIS34,0)，其余仍为 0。
+               背景：ZTFI313A（TVS 销售明细收入）在 D2M 落 S600114/S600111，不匹配 'S60010%'，故实际从 1.5 段进数。
+
+  20261013 16:31 冰箱增加6015公司取数
+  20261005 11:52 限制这个范围在BG009_BU010事业部的账套范围里
+  20260929 15:42 licheng.ex 中国区事业部成本9月不上线
+  20260920 19：42 FENGJIANFENG.ex 20260915fjf_add 二期新增字段 ,维度，如果为空要补ZZZZ
+  20260916 16：41 LICHENG.ex REV005_STEP_2-2（插入线下O2O冲销数）①修改类别为GA00_CON_G05
+  20260915 17：49 FENGJIANFENG.ex 20260915fjf_add REV005_STEP_2-2（插入线下O2O冲销数）①修改类别 ②新增中国区相关取数字段；中国区专题原来做的删除，不要做删除 改成更新为0
+  20260914 FENGJIANFENG.ex 20260914fjf_add REV005_STEP_2-2（插入线下O2O冲销数）
+  20260908 10：41 开放 20260810-3 shiqingfeng.ex SXX补充逻辑【中国区专题】，开始测试
+  20260908 10：38 开放 20260810-1 shiqingfeng.ex 对方公司是中国区公司，不生成成本抵消数，开始测试
+  20260908 10：33 开放 20260817-2 CHENDONG3.ex  将中国区费用转政策的业务在产品公司还原的部分，对方公司置为空，以确保后续不参与抵消，开始测试
+
+
+
   20260716 shiqingfeng.ex 新增插入墨西哥利润调整
   20260730 SHQINGFENG.EX 新增 MA_SALE_COGS 字段
   20260804 SHIQINGFENG.EX 补充2900公司取数时排除ZZFT
@@ -22,7 +135,21 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_REV_M (
    20260817-1 CHENDONG3.ex  新增6012公司处理字段ASSESS_MANG_COST逻辑
    20260817-2 CHENDONG3.ex  将中国区费用转政策的业务在产品公司还原的部分，对方公司置为空，以确保后续不参与抵消
    20260818 shiqingfeng.ex 将政策的临时表修改为实体表，并增加session_id字段
+   20260819 SHIQNGFENG.EX 插入未实现金额修改为全单机
+   20260820 FENGJIANFENG.EX 20260820FJF_ADD 新增REV005_STEP_6_1（古洛尼赠品抵消数还原）
+   20260820-2 SHIQNGFENG.EX 新增公司三级分类更新逻辑与D表一致
+   20260825-1 SHIQINGFENG.EX  新增 落户纸号  Shipping_Order
+   20260826-1 SHIQINGFENG.EX  REV005_STEP_7（ 考核成本无物料分摊）,【BG001_BU030-显示事业部-广东】SXX20260825新增范围内公司 注意：贵阳、广东的事业部只能分别在自己的事业部范围内分摊
+   20260827 SHIQINGFENG.EX 取消补充2900公司取数时排除ZZFT
+   20250828 XIAOYACHAO.EX 工厂端外销收入成本增加公司6002
+   20260831 shiqingfeng.ex 月结不上取消逻辑  20260810-1 shiqingfeng.ex 对方公司是中国区公司，不生成成本抵消数
+   20260831 shiqingfeng.ex 月结不上取消逻辑  20260817-2 CHENDONG3.ex  将中国区费用转政策的业务在产品公司还原的部分，对方公司置为空，以确保后续不参与抵消
+   20260831 XIAOYACHAO.EX 工厂端成本6002公司特殊处理
+   20260902 XIAOYACHAO.EX 涉及万高端到端成本，工厂端成本逻辑更新
+   20260904 alter by shiqingfeng.ex 比例大于是10的数据进行去重
 
+   20260905 EDIT BY LC 20260905 中国区线上业务部分主营业务成本不取数8月不上线
+   20260907 修改人 shiqingfeng.ex 去掉所有锁定表限制，仅保留最上面参数session表限制
 
 
 
@@ -46,6 +173,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_REV_M (
   V_ERROR_COD          NUMBER;
   V_ERROR_MSG      VARCHAR2(4000);--错误信息
   V_SESSION_ID  NUMBER;
+  V_FLAG  NUMBER;
 BEGIN
 -- 获取当前 Session ID
     V_SESSION_ID := SYS_CONTEXT('USERENV', 'SESSIONID');
@@ -266,8 +394,34 @@ WHERE 1=2
 
 
 */
+
+
+DELETE
+   FROM AW_MR9_REVM01_000001_CON_TEMP T
+  WHERE --SUBSTR(T.COD_SCENARIO,1,4) || T.COD_PERIODO IN (v_per0, v_per1, v_per2)
+    1=1
+    AND (
+           (T.COD_SCENARIO = v_per0_ACT
+          AND T.COD_PERIODO = v_per0_per
+           )
+          OR
+           (T.COD_SCENARIO = v_per1_ACT
+          AND T.COD_PERIODO = v_per1_per
+          )
+          OR
+           (T.COD_SCENARIO = v_per2_ACT
+          AND T.COD_PERIODO = v_per2_per
+          )
+        )
+    AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                    WHERE SESSION_ID = V_SESSION_ID
+                    )
+    ;
 INSERT INTO AW_MR9_REVM01_000001_CON_TEMP(
 OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, D_PRC_GRP, COD_CONTO, D_SALE_DEPT, COD_DEST3, COD_CATEGORIA, D_PRO_CLASS, D_DATA_BLOCK, D_DIFF_TYPE, MATERIAL_CODE, MATERIAL_NAME, COD_DEST2, COD_DEST4, D_MARKET_PNT, D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_QUA_METHOD, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES, D_TECH_TYPE, D_MODEL_LCA, D_PRO_TYPE, SALE_MODEL_NAME, D_POL_CLASS, MODEL_NAME, CUST_CODE, MODEL_CODE, SALE_MODEL_CODE, CUST_NAME, D_CHANNEL, D_MODE, D_ONOFFLINE, D_ECOM_BU, CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME, CUST_TYPE_NAME, D_IND_C_TYPE, D_CNL_C_TYPE, COD_VALUTA, SHIP_QTY, COD_VALUTA_ORIGINARIA, ORDER_QTY, BILL_QTY, SALE_REV, DISCOUNT_3, DISCOUNT_4, DISCOUNT_5, DISCOUNT_6, TAX_RATE, EXCHANGE_RATE, ORG_QTY, MAP_QTY, ORG_REV, MAP_REV, MAP_REV1, MAP_DIS3, MAP_DIS4, MAP_DIS5, MAP_DIS6, POLICY_AMT, BATCH_ID, SOLD_TO_CODE, SOLD_TO_NAME, MATERIAL_GROUP_CODE, SRC_SYSTEM, SRC_DETAIL, SHOP_NAME, AGENCY_CODE, AGENCY_NAME, IS_MINILED_CODE, PROVENIENZA, USERUPD, DATEUPD, EN_VERSION, SALE_COGS, DISCOUNT_1, MAP_DIS1, DISCOUNT_30, DISCOUNT_34, MAP_DIS30, MAP_DIS34, NOTE, D_BU_TRAN, CUSTOMER_MODEL, ORDER_TYPE_CODE, ZCALASSET, CALC_RULE, STATUTORY_ACCT_CODE, MAP_ZUM, CN_CLASS_MARK_CODE, CN_CLASS_MARK_NAME, SALE_CERT_TYPE, CN_SALE_COGS, CN_ORG_REV, CN_MAP_ZUM, D_ADJ_TYPE, CHANGE_COEFFICIENT, GFCFY_AMOUNT, GFCFL_AMOUNT, D_OPER_TYPE, BCY_REV, BCY_COGE, BCY_COGS, MATERIAL_GROUP_NAME, ORG_GP, AVG_UNIT_COST, BAC_AZIENDA, BAC_SRC_AZIENDA, MAKTX_S810, BUS_SCE_CAT_CODE, BUS_SCE_CAT_NAME, IS_SMALL_B, IS_SALE, D_BUS_SCE_S, D_MINILED, INVOICE_CODE, ADJ_LEV_2, STD_QTY, ZA_SALE_COGS, AD_SALE_COGS, MA_SALE_COGS, CALC_RULE_1, SH_BF_SALE_COGS
+,SHIPPING_ORDER
+--20260920FJF_ADD 二期新增字段
+ ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
 )
 
  SELECT OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, D_PRC_GRP, COD_CONTO
@@ -285,7 +439,10 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
  , USERUPD, DATEUPD, EN_VERSION
  , SALE_COGS
  , DISCOUNT_1, MAP_DIS1, DISCOUNT_30, DISCOUNT_34, MAP_DIS30, MAP_DIS34, NOTE, D_BU_TRAN, CUSTOMER_MODEL, ORDER_TYPE_CODE, ZCALASSET, CALC_RULE, STATUTORY_ACCT_CODE, MAP_ZUM, CN_CLASS_MARK_CODE, CN_CLASS_MARK_NAME, SALE_CERT_TYPE, CN_SALE_COGS, CN_ORG_REV, CN_MAP_ZUM, D_ADJ_TYPE, CHANGE_COEFFICIENT, GFCFY_AMOUNT, GFCFL_AMOUNT, D_OPER_TYPE, BCY_REV, BCY_COGE, BCY_COGS, MATERIAL_GROUP_NAME, ORG_GP, AVG_UNIT_COST, BAC_AZIENDA, BAC_SRC_AZIENDA, MAKTX_S810, BUS_SCE_CAT_CODE, BUS_SCE_CAT_NAME, IS_SMALL_B, IS_SALE, D_BUS_SCE_S, D_MINILED, INVOICE_CODE, ADJ_LEV_2, STD_QTY, ZA_SALE_COGS, AD_SALE_COGS, MA_SALE_COGS, CALC_RULE_1, SH_BF_SALE_COGS
-   FROM TGK_FIMA_HISENSE.AW_MR9_REVM01_000001 T
+ , SHIPPING_ORDER
+ --20260920FJF_ADD 二期新增字段
+ ,nvl(D_EFF_CLASS,'ZZZZ') as D_EFF_CLASS,nvl(D_BU_SHOP,'ZZZZ') as D_BU_SHOP,nvl(D_EC_STORE,'ZZZZ') as D_EC_STORE,nvl(D_UNICUSTGRP,'ZZZZ') as D_UNICUSTGRP
+  FROM TGK_FIMA_HISENSE.AW_MR9_REVM01_000001 T
   WHERE --SUBSTR(T.COD_SCENARIO,1,4) || T.COD_PERIODO IN (v_per0, v_per1, v_per2)
     1=1
     AND (
@@ -341,12 +498,35 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
     COMMIT;
 
 
+--EDIT BY LC 20260905 8月不上线
     /*20260810-3 shiqingfeng.ex 20260810 SXX补充逻辑【中国区专题】：
                   如果公司范围是中国区公司【公司节点为200】
                   且科目范围为S6401开头
                   则限制业务分类范围在AW_RUL_CNMECL_000001-中国区-其他业务收入范围配置表范围内的才取成本数，其他公司直接取SALE_COGS
+    20260908 10：41 开放 20260810-3 shiqingfeng.ex SXX补充逻辑【中国区专题】，开始测试
     */
-    DELETE FROM AW_MR9_REVM01_000001_CON_TEMP T
+  --20260915fjf_add 中国区专题原来做的删除，不要做删除 改成更新为0
+  --20260929lc 中国区事业部成本不上线
+  /*UPDATE AW_MR9_REVM01_000001_CON_TEMP T
+  SET SALE_COGS = 0
+  WHERE 1=1
+  AND COD_AZIENDA IN (SELECT ELEM
+                              FROM SESSION_AZIENDA_LIST A
+                             WHERE SESSION_ID = V_SESSION_ID
+                               AND EXISTS (SELECT 1 FROM SESSION_V_REF_AZIENDA S WHERE SESSION_ID = V_SESSION_ID AND S.HIE = '10' AND S.NODE = '200' AND A.ELEM = S.ELEM)
+                        )
+  AND NOT EXISTS (SELECT D_OPER_TYPE
+                    FROM TGK_FIMA_HISENSE.AW_RUL_CNMECL_000001 OPER_MAP
+                   WHERE VALID_FR <= SUBSTR(P_SCENARIO,1,4)||P_PERIODO
+                     AND NVL(VALID_TO,'999999') >= SUBSTR(P_SCENARIO,1,4)||P_PERIODO
+                     AND OPER_MAP.D_OPER_TYPE = T.D_OPER_TYPE
+           UNION ALL
+           SELECT 'OPTY039' FROM DUAL
+           UNION ALL
+           SELECT 'OPTY040' FROM DUAL
+                  )
+  ;*/
+    /* DELETE FROM AW_MR9_REVM01_000001_CON_TEMP T
       WHERE 1=1
         AND (
                (T.COD_SCENARIO = v_per0_ACT
@@ -374,7 +554,7 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                      AND OPER_MAP.D_OPER_TYPE = T.D_OPER_TYPE
                   )
 
-  ;
+  ; */
     INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
     VALUES('CPM_SP_M2M_REV_M', '0.3 START', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '中国区-其他业务收入范围配置表范围内的才取成本',P_AZIENDA);
     COMMIT;
@@ -470,19 +650,19 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
     --插入公司对应的事业部关系进入临时表
     INSERT INTO TMP_TABLE_ENT(SESSION_ID,COD_CTP, COD_BU)
     SELECT V_SESSION_ID,COD_AZIENDA COD_CTP, 'BX' COD_BU
-    FROM AZIENDA
+    FROM TGK_FIMA_HISENSE.AZIENDA
     WHERE COD_AZIENDA LIKE '63%' OR COD_AZIENDA LIKE '67%'
     ;
 
     INSERT INTO TMP_TABLE_ENT(SESSION_ID,COD_CTP, COD_BU)
     SELECT V_SESSION_ID,COD_AZIENDA COD_CTP, 'KT' COD_BU
-    FROM AZIENDA
+    FROM TGK_FIMA_HISENSE.AZIENDA
     WHERE COD_AZIENDA LIKE '62%' OR COD_AZIENDA LIKE '68%'
     ;
 
     INSERT INTO TMP_TABLE_ENT(SESSION_ID,COD_CTP, COD_BU)
     SELECT V_SESSION_ID,COD_AZIENDA COD_CTP, 'SX' COD_BU
-    FROM AZIENDA
+    FROM TGK_FIMA_HISENSE.AZIENDA
     WHERE COD_AZIENDA LIKE '2%' OR COD_AZIENDA LIKE '163%'
     ;
     INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
@@ -545,6 +725,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                                                           AND T.COD_CONTO = 'ZAW_D2M_LOCK'
                                                        )*/
                                AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                               -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                               AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                           GROUP BY COD_AZIENDA, LTRIM(COD_DEST2,'0') , D_ONOFFLINE, CUST_CODE
                             HAVING ROUND(SUM(MAP_REV1),2) <> 0
 
@@ -596,6 +778,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                                                            AND T.COD_CONTO = 'ZAW_D2M_LOCK'
                                                        )*/
                                 AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                                -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                                AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                            GROUP BY COD_AZIENDA, LTRIM(D_SALE_DEPT,'0') , D_ONOFFLINE, CUST_CODE
                              HAVING ROUND(SUM(MAP_REV1),2) <> 0
                            ) A1
@@ -677,6 +861,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                                                                           AND T.COD_CONTO = 'ZAW_D2M_LOCK'
                                                                         )*/
                                               AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                                              -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                                              AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                                          GROUP BY COD_AZIENDA, COD_DEST2, D_ONOFFLINE, CUST_CODE, MATERIAL_CODE
 
                                           UNION ALL
@@ -733,6 +919,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                                                                          AND T.COD_CONTO = 'ZAW_D2M_LOCK'
                                                                       )*/
                                               AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                                              -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                                              AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                                          GROUP BY COD_AZIENDA, D_SALE_DEPT, D_ONOFFLINE, CUST_CODE, MATERIAL_CODE
                                         ) T
                                    WHERE T.REV <> 0
@@ -945,14 +1133,21 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                             --限制内销
                             AND COD_DEST3 LIKE '2%'
                             /*20260226 新增排除锁定公司*/
+                            /*
+                            20260907 修改人 shiqingfeng.ex 去掉所有锁定表限制，仅保留最上面参数session表限制
                             AND COD_AZIENDA NOT IN (SELECT COD_AZIENDA
                                                       FROM AW_RUL_DWMCRS_000001 T
                                                      WHERE REV05_FLAG = 'Y'
                                                        AND T.COD_SCENARIO = P_SCENARIO
                                                        AND T.COD_PERIODO = P_PERIODO
                                                        AND T.COD_CONTO = 'ZAW_D2M_LOCK'
-                                                   )
+                                                   )*/
                            AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                           -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                           AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
+                           -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 客户1001200/A012**不参与按公司三级分类(D_CHANNEL)的政策分摊
+                           AND NVL(TRIM(CUST_CODE),'|') <> '1001200'
+                           AND NVL(TRIM(CUST_CODE),'|') NOT LIKE 'A012%'
                           GROUP BY COD_AZIENDA, LTRIM(COD_DEST2,'0'), D_ONOFFLINE,
                                CASE WHEN (COD_AZIENDA = '1180' OR COD_AZIENDA LIKE '12%')
                                     THEN D_ECOM_BU
@@ -1008,6 +1203,11 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                                                     AND T.COD_CONTO = 'ZAW_D2M_LOCK'
                                                   )*/
                          AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                         -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                         AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
+                         -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 客户1001200/A012**不参与按公司三级分类(D_CHANNEL)的政策分摊
+                         AND NVL(TRIM(CUST_CODE),'|') <> '1001200'
+                         AND NVL(TRIM(CUST_CODE),'|') NOT LIKE 'A012%'
                     GROUP BY COD_AZIENDA, LTRIM(D_SALE_DEPT,'0'), D_ONOFFLINE,
                              CASE WHEN (COD_AZIENDA = '1180' OR COD_AZIENDA LIKE '12%')
                                   THEN D_ECOM_BU
@@ -1076,6 +1276,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                           --限制内销
                           AND COD_DEST3 LIKE '2%'
                           AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                          -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                          AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                      GROUP BY CASE WHEN COD_AZIENDA LIKE '67%' THEN '6700'
                                    WHEN COD_AZIENDA LIKE '68%' THEN '6800'
                                    WHEN COD_AZIENDA LIKE '26%' OR COD_AZIENDA LIKE '23%' THEN '2600'
@@ -1122,6 +1324,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                          --限制内销
                          AND COD_DEST3 LIKE '2%'
                          AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                         -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                         AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                         GROUP BY CASE
                                     WHEN COD_AZIENDA LIKE '67%' THEN '6700'
                                     WHEN COD_AZIENDA LIKE '68%' THEN '6800'
@@ -1303,6 +1507,11 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                               --限制内销
                               AND COD_DEST3 LIKE '2%'
                               AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                              -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                              AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
+                              -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 客户1001200/A012**不参与按公司三级分类(D_CHANNEL)的政策分摊
+                              AND NVL(TRIM(CUST_CODE),'|') <> '1001200'
+                              AND NVL(TRIM(CUST_CODE),'|') NOT LIKE 'A012%'
                          GROUP BY CASE WHEN COD_AZIENDA LIKE '67%' THEN '6700'
                                        WHEN COD_AZIENDA LIKE '68%' THEN '6800'
                                        WHEN COD_AZIENDA LIKE '26%' OR COD_AZIENDA LIKE '23%' THEN '2600'
@@ -1349,6 +1558,11 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                             --限制内销
                             AND COD_DEST3 LIKE '2%'
                             AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                            -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                            AND NVL(D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
+                            -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 客户1001200/A012**不参与按公司三级分类(D_CHANNEL)的政策分摊
+                            AND NVL(TRIM(CUST_CODE),'|') <> '1001200'
+                            AND NVL(TRIM(CUST_CODE),'|') NOT LIKE 'A012%'
                         GROUP BY CASE WHEN COD_AZIENDA LIKE '67%' THEN '6700'
                                       WHEN COD_AZIENDA LIKE '68%' THEN '6800'
                                       WHEN COD_AZIENDA LIKE '26%' OR COD_AZIENDA LIKE '23%' THEN '2600'
@@ -1499,6 +1713,156 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
   ------------------------------------------------------------------------------
   -- 1.3  生成政策分摊数据
   ------------------------------------------------------------------------------
+/*
+    --在每条收入明细上，生成对应的分摊数据
+    INSERT INTO TMP_TABLE_POLICY_ALLOC(SESSION_ID,OID,STEP_ID,GROUP_ID,MAP_REV1,POLICY_AMT,POLICY_ALC_AMT
+                                       ,BL,MAX_ABS_BL)
+    SELECT
+        V_SESSION_ID,OID, STEP_ID, GROUP_ID, MAP_REV1, POLICY_AMT
+        \*20260714 shiqingfeng.ex 如果组内任意一行的分摊比例绝对值>10，则整组不参与分摊*\
+        , POLICY_AMT*CASE WHEN MAX_ABS_BL > 10 THEN 0 ELSE BL END AS POLICY_ALC_AMT
+        , BL
+        , MAX_ABS_BL
+    FROM(
+      SELECT T2.*,
+             -- 组内最大绝对比例，用于判断整组是否排除
+             MAX(ABS(T2.BL)) OVER(PARTITION BY T2.STEP_ID, T2.GROUP_ID) AS MAX_ABS_BL
+       FROM
+       (
+          SELECT
+                A1.STEP_ID, A1.GROUP_ID, M.OID,
+                M.MAP_REV1,
+                A1.POLICY_AMT,
+                CASE
+                  WHEN ROUND(SUM(MAP_REV1) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID),2) <> 0
+                    THEN M.MAP_REV1/SUM(MAP_REV1) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID)
+                  WHEN ROUND(SUM(MAP_REV1) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID),2) = 0 AND M.MAP_REV1 > 0
+                    THEN (CASE WHEN M.MAP_REV1 > 0 THEN M.MAP_REV1 ELSE 0 END)/SUM(CASE WHEN M.MAP_REV1 > 0 THEN M.MAP_REV1 ELSE 0 END) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID)
+                END BL\*,
+                CASE
+                  WHEN ROUND(SUM(MAP_REV1) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID),2) <> 0
+                    THEN A1.POLICY_AMT*M.MAP_REV1/SUM(MAP_REV1) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID)
+                  WHEN ROUND(SUM(MAP_REV1) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID),2) = 0 AND M.MAP_REV1 > 0
+                    THEN A1.POLICY_AMT*(CASE WHEN M.MAP_REV1 > 0 THEN M.MAP_REV1 ELSE 0 END)/SUM(CASE WHEN M.MAP_REV1 > 0 THEN M.MAP_REV1 ELSE 0 END) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID)
+                END AS POLICY_ALC_AMT*\
+           FROM (
+                  SELECT OID, COD_SCENARIO, COD_PERIODO, COD_AZIENDA,
+                         (CASE WHEN COD_AZIENDA LIKE '62%' OR COD_AZIENDA LIKE '68%' THEN D_SALE_DEPT ELSE COD_DEST2 END) AS COD_DEST2,
+                         --【20260806 修改v2】1180/12**收入明细按D_ECOM_BU与政策匹配
+                         D_ONOFFLINE,
+                         CASE WHEN (COD_AZIENDA = '1180' OR COD_AZIENDA LIKE '12%')
+                              THEN D_ECOM_BU
+                              ELSE D_CHANNEL
+                          END AS D_CHANNEL,
+                         CUST_CODE, MATERIAL_CODE, COD_AZI_CTP,MAP_REV1
+                   FROM AW_MR9_REVM01_000001_CON_TEMP T
+                  WHERE --SUBSTR(T.COD_SCENARIO,1,4) || T.COD_PERIODO IN (v_per0, v_per1, v_per2)
+                    1=1
+                    AND (
+                           (T.COD_SCENARIO = v_per0_ACT
+                          AND T.COD_PERIODO = v_per0_per
+                           )
+                          OR
+                           (T.COD_SCENARIO = v_per1_ACT
+                          AND T.COD_PERIODO = v_per1_per
+                          )
+                          OR
+                           (T.COD_SCENARIO = v_per2_ACT
+                          AND T.COD_PERIODO = v_per2_per
+                          )
+                        )
+                    AND T.COD_CONTO LIKE 'S60010%'
+                    --AND T.COD_AZIENDA NOT LIKE '8%'
+                    --AND T.COD_AZIENDA NOT LIKE 'G%'
+                    AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                    WHERE SESSION_ID = V_SESSION_ID
+                                      AND ELEM NOT LIKE '8%'
+                                      AND ELEM NOT LIKE 'G%'
+                                      --AND INSTR(V_HITACHI_AZIENDA,ELEM) = 0
+                                      AND ELEM NOT IN(SELECT ELEM
+                                                        FROM SESSION_V_REF_AZIENDA
+                                                       WHERE 1=1
+                                                         AND SESSION_ID = V_SESSION_ID
+                                                         AND HIE = '10'
+                                                         AND NODE = '050')
+                                    )
+                    --AND INSTR(V_HITACHI_AZIENDA,T.COD_AZIENDA) = 0
+                    AND T.MAP_REV1 <> 0
+                    --剔除虚拟物料
+                    AND  NOT EXISTS (SELECT 1
+                                       FROM  TGK_FIMA_HISENSE.AW_RUL_REVEMA_000001 tT
+                                      WHERE TT.COD_CONTO='ZAW_DWD_LIST_ZHEKOU'
+                                        AND SUBSTR(P_SCENARIO,1,4) || P_PERIODO BETWEEN NVL(VALID_FR,'000000') AND NVL(VALID_TO,'999999')
+                                        AND TT.MATERIAL_CODE IS NOT NULL
+                                        AND T.MATERIAL_CODE = TT.MATERIAL_CODE
+                                      )
+                    --AND INSTR(V_MATERIAL, T.MATERIAL_CODE) = 0
+                    --剔除配件
+                    --AND INSTR(V_PRO_CLASS, SUBSTR(NVL(D_PRO_CLASS,'|'),1,5)) = 0
+                    AND NOT EXISTS
+                      (  SELECT 1
+                           FROM TGK_FIMA_HISENSE.AW_RUL_PROCLS_000001 A
+                          WHERE  a.D_PRO_CLASS =  SUBSTR(NVL(t.D_PRO_CLASS,'|'),1,5)
+                       )
+
+                    AND NVL(MATERIAL_GROUP_CODE,'|') NOT IN ('1100105','1100107')
+                    --限制内销
+                    AND COD_DEST3 LIKE '2%'
+                    AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                ) M
+
+           JOIN  (
+                SELECT COD_AZIENDA, COD_DEST2, D_ONOFFLINE, D_CHANNEL,
+                       CASE WHEN STEP_ID IN ('A_STEP3','B_STEP2') THEN NULL ELSE CUST_CODE END CUST_CODE,
+                       CASE WHEN STEP_ID IN ('A_STEP2') THEN MATERIAL_CODE ELSE NULL END MATERIAL_CODE,
+                       CASE WHEN STEP_ID IN ('B_STEP1','B_STEP2') THEN COD_AZIENDA_NEW ELSE NULL END COD_AZIENDA_NEW,
+                       SUM(POLICY_AMT) POLICY_AMT,
+                       STEP_ID,GROUP_ID
+                  FROM TMP_TABLE_POLICY
+                 WHERE SESSION_ID = V_SESSION_ID
+                   AND STEP_ID IS NOT NULL
+              GROUP BY COD_AZIENDA, COD_DEST2, D_ONOFFLINE, D_CHANNEL,
+                       CASE WHEN STEP_ID IN ('A_STEP3','B_STEP2') THEN NULL ELSE CUST_CODE END ,
+                       CASE WHEN STEP_ID IN ('A_STEP2') THEN MATERIAL_CODE ELSE NULL END ,
+                       CASE WHEN STEP_ID IN ('B_STEP1','B_STEP2') THEN COD_AZIENDA_NEW ELSE NULL END,
+                       STEP_ID,GROUP_ID
+                ) A1
+             ON ( SUBSTR(M.COD_SCENARIO,1,4) || M.COD_PERIODO IN (v_per0)
+                 \*M.COD_SCENARIO = v_per0_ACT AND M.COD_PERIODO = v_per0_per*\
+                 AND A1.STEP_ID IN ('A_STEP1') AND M.COD_AZIENDA = A1.COD_AZIENDA AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2 AND M.D_ONOFFLINE = A1.D_ONOFFLINE AND M.CUST_CODE = A1.CUST_CODE)
+             OR ( SUBSTR(M.COD_SCENARIO,1,4) || M.COD_PERIODO IN (v_per1, v_per2)
+                  \*(M.COD_SCENARIO = v_per1_ACT AND M.COD_PERIODO = v_per1_per
+                   OR M.COD_SCENARIO = v_per2_ACT AND M.COD_PERIODO = v_per2_per)*\
+                 AND A1.STEP_ID IN ('A_STEP2') AND M.COD_AZIENDA = A1.COD_AZIENDA AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2 AND M.D_ONOFFLINE = A1.D_ONOFFLINE AND M.CUST_CODE = A1.CUST_CODE AND M.MATERIAL_CODE = A1.MATERIAL_CODE)
+             OR ( SUBSTR(M.COD_SCENARIO,1,4) || M.COD_PERIODO IN (v_per0)
+                  \*M.COD_SCENARIO = v_per0_ACT AND M.COD_PERIODO = v_per0_per*\
+                  AND A1.STEP_ID IN ('A_STEP3') AND M.COD_AZIENDA = A1.COD_AZIENDA AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2 AND M.D_ONOFFLINE = A1.D_ONOFFLINE AND M.D_CHANNEL = A1.D_CHANNEL)
+             OR ( SUBSTR(M.COD_SCENARIO,1,4) || M.COD_PERIODO IN (v_per0)
+                  \*M.COD_SCENARIO = v_per0_ACT AND M.COD_PERIODO = v_per0_per*\
+                  AND A1.STEP_ID IN ('B_STEP1') AND M.COD_AZIENDA = A1.COD_AZIENDA_NEW AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2 AND M.D_ONOFFLINE = A1.D_ONOFFLINE AND M.D_CHANNEL = A1.D_CHANNEL AND M.CUST_CODE = A1.CUST_CODE)
+             OR ( SUBSTR(M.COD_SCENARIO,1,4) || M.COD_PERIODO IN (v_per0)
+                  \*M.COD_SCENARIO = v_per0_ACT AND M.COD_PERIODO = v_per0_per*\
+                  AND A1.STEP_ID IN ('B_STEP2') AND M.COD_AZIENDA = A1.COD_AZIENDA_NEW AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2 AND M.D_ONOFFLINE = A1.D_ONOFFLINE AND M.D_CHANNEL = A1.D_CHANNEL)
+      LEFT JOIN TMP_TABLE_ENT A2
+             ON (CASE WHEN M.COD_AZIENDA LIKE '63%' OR M.COD_AZIENDA LIKE '67%' THEN 'BX'
+                      WHEN M.COD_AZIENDA LIKE '62%' OR M.COD_AZIENDA LIKE '68%' THEN 'KT'
+                      WHEN M.COD_AZIENDA LIKE '2%' THEN 'SX'
+                      ELSE 'OTH'
+                  END) = A2.COD_BU
+            AND M.COD_AZI_CTP = A2.COD_CTP
+            AND A2.SESSION_ID = V_SESSION_ID
+          WHERE ((M.COD_AZI_CTP IS NULL OR M.COD_AZI_CTP = 'ZZZZ') OR (M.COD_AZI_CTP <> 'ZZZZ' AND A2.COD_CTP IS NULL))
+        ) T2
+      ) T
+  WHERE T.POLICY_AMT*BL <> 0
+  \*20260714 shiqingfeng.ex 如果组内任意一行的分摊比例绝对值>10，则整组不参与分摊*\
+  --AND T.MAX_ABS_BL <= 10
+;*/
+
+
+  ------------------------------------------------------------------------------
+  -- 1.3  生成政策分摊数据
+  ------------------------------------------------------------------------------
 
     --在每条收入明细上，生成对应的分摊数据
     INSERT INTO TMP_TABLE_POLICY_ALLOC(SESSION_ID,OID,STEP_ID,GROUP_ID,MAP_REV1,POLICY_AMT,POLICY_ALC_AMT
@@ -1531,7 +1895,7 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                   WHEN ROUND(SUM(MAP_REV1) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID),2) = 0 AND M.MAP_REV1 > 0
                     THEN A1.POLICY_AMT*(CASE WHEN M.MAP_REV1 > 0 THEN M.MAP_REV1 ELSE 0 END)/SUM(CASE WHEN M.MAP_REV1 > 0 THEN M.MAP_REV1 ELSE 0 END) OVER(PARTITION BY A1.STEP_ID, A1.GROUP_ID)
                 END AS POLICY_ALC_AMT*/
-           FROM 
+           FROM
            (
                 SELECT COD_AZIENDA, COD_DEST2, D_ONOFFLINE, D_CHANNEL,
                        CASE WHEN STEP_ID IN ('A_STEP3','B_STEP2') THEN NULL ELSE CUST_CODE END CUST_CODE,
@@ -1548,8 +1912,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                        CASE WHEN STEP_ID IN ('B_STEP1','B_STEP2') THEN COD_AZIENDA_NEW ELSE NULL END,
                        STEP_ID,GROUP_ID
                 ) A1
-           
-           
+
+
            JOIN (
                   SELECT OID, COD_SCENARIO, COD_PERIODO, COD_AZIENDA,
                          (CASE WHEN COD_AZIENDA LIKE '62%' OR COD_AZIENDA LIKE '68%' THEN D_SALE_DEPT ELSE COD_DEST2 END) AS COD_DEST2,
@@ -1585,22 +1949,24 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                                        FROM  TGK_FIMA_HISENSE.AW_RUL_REVEMA_000001 tT
                                       WHERE TT.COD_CONTO='ZAW_DWD_LIST_ZHEKOU'
                                         AND SUBSTR(P_SCENARIO,1,4) || P_PERIODO BETWEEN NVL(VALID_FR,'000000') AND NVL(VALID_TO,'999999')
-                                        AND TT.MATERIAL_CODE IS NOT NULL 
+                                        AND TT.MATERIAL_CODE IS NOT NULL
                                         AND T.MATERIAL_CODE = TT.MATERIAL_CODE
                                       )
                     --AND INSTR(V_MATERIAL, T.MATERIAL_CODE) = 0
                     --剔除配件
                     --AND INSTR(V_PRO_CLASS, SUBSTR(NVL(D_PRO_CLASS,'|'),1,5)) = 0
-                    AND NOT EXISTS 
-                      (  SELECT 1  
+                    AND NOT EXISTS
+                      (  SELECT 1
                            FROM TGK_FIMA_HISENSE.AW_RUL_PROCLS_000001 A
                           WHERE  a.D_PRO_CLASS =  SUBSTR(NVL(t.D_PRO_CLASS,'|'),1,5)
                        )
-                           
+
                     AND NVL(MATERIAL_GROUP_CODE,'|') NOT IN ('1100105','1100107')
                     --限制内销
                     AND COD_DEST3 LIKE '2%'
                     AND NVL(SRC_DETAIL,'|') <> 'REVM01'
+                    -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                    AND NVL(T.D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                 ) M
              ON (A1.STEP_ID = 'A_STEP1'
                  AND M.COD_AZIENDA = A1.COD_AZIENDA
@@ -1611,7 +1977,11 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                  AND M.COD_AZIENDA = A1.COD_AZIENDA
                  AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2
                  AND M.D_ONOFFLINE = A1.D_ONOFFLINE
-                 AND M.D_CHANNEL = A1.D_CHANNEL)
+                 AND M.D_CHANNEL = A1.D_CHANNEL
+                 -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 客户1001200/A012**不参与按公司三级分类(D_CHANNEL)的政策分摊
+                 AND NVL(TRIM(M.CUST_CODE),'|') <> '1001200'
+                 AND NVL(TRIM(M.CUST_CODE),'|') NOT LIKE 'A012%'
+                 )
              OR (A1.STEP_ID = 'B_STEP1'
                  AND M.COD_AZIENDA = A1.COD_AZIENDA_NEW
                  AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2
@@ -1622,7 +1992,11 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                  AND M.COD_AZIENDA = A1.COD_AZIENDA_NEW
                  AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2
                  AND M.D_ONOFFLINE = A1.D_ONOFFLINE
-                 AND M.D_CHANNEL = A1.D_CHANNEL)
+                 AND M.D_CHANNEL = A1.D_CHANNEL
+                 -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 客户1001200/A012**不参与按公司三级分类(D_CHANNEL)的政策分摊
+                 AND NVL(TRIM(M.CUST_CODE),'|') <> '1001200'
+                 AND NVL(TRIM(M.CUST_CODE),'|') NOT LIKE 'A012%'
+                 )
       LEFT JOIN TMP_TABLE_ENT A2
              ON (CASE WHEN M.COD_AZIENDA LIKE '63%' OR M.COD_AZIENDA LIKE '67%' THEN 'BX'
                       WHEN M.COD_AZIENDA LIKE '62%' OR M.COD_AZIENDA LIKE '68%' THEN 'KT'
@@ -1746,6 +2120,8 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
                                AND NVL(T.MATERIAL_GROUP_CODE,'|') NOT IN ('1100105','1100107')
                                AND T.COD_DEST3 LIKE '2%'
                                AND NVL(T.SRC_DETAIL,'|') <> 'REVM01'
+                               -- ALTER BY LICHENG.EX 20261023 10:00 REV005_STEP_1.2 业务分类OPTY060/OPTY061/OPTY039不作为政策分摊因子
+                               AND NVL(T.D_OPER_TYPE,'ZZZZ') NOT IN ('OPTY060','OPTY061','OPTY039')
                            ) M
                         ON M.COD_AZIENDA = A1.COD_AZIENDA
                        AND LTRIM(M.COD_DEST2,'0') = A1.COD_DEST2
@@ -1770,6 +2146,12 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
 
     INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
     VALUES('CPM_SP_M2M_REV_M', '1 单体-收入、政策', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '1.3 生成政策分摊数据-上两月',P_AZIENDA);
+    COMMIT;
+
+
+
+ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', '1 单体-收入、政策', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '1.3 生成政策分摊后的数据',P_AZIENDA);
     COMMIT;
 
     --把政策分摊数据进行汇总，为后续插入做准备
@@ -1827,24 +2209,25 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
 
     --插入未分配的政策分摊数据
     INSERT /*取消并发*/ INTO AW_MR9_REVM05_000001_TEMP(
-        OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_AZIENDA,COD_AZI_CTP_ORG,
-        COD_CATEGORIA, AGENCY_CODE, AGENCY_NAME, CUST_CODE, CUST_NAME,
-        D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_OPER_TYPE,
-        D_ECOM_BU, CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME,
-        CUST_TYPE_NAME, SOLD_TO_CODE, SOLD_TO_NAME, COD_DEST3, D_SALE_DEPT,D_DATA_BLOCK,D_DIFF_TYPE,
-        MATERIAL_CODE, MATERIAL_NAME, COD_DEST2, COD_DEST4, D_MARKET_PNT,
-        D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE,
-        D_PRO_SERIES, D_TECH_TYPE, IS_MINILED_CODE, D_PRO_CLASS, D_MODEL_LCA,
-        D_PRO_TYPE, SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME,
-        BATCH_ID, D_PRC_GRP, MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME,
-        D_POL_CLASS, MAP_QTY, ORG_REV, POLICY_AMT, POLICY_CASH_PD,D_ADJ_TYPE,
-        ASSESSED_REV, SALE_COGS, BEG_UNREAL_GP, END_UNREAL_GP, COMB_COST,
-        AVG_UNIT_COST, COMB_COST_AVG, PSI_COMB_COST, WTD_UNIT_COST,
-        DOM_PSI_COST, OTH_ASSESS_COST, PROVENIENZA,DATEUPD, USERUPD,
-        CN_CLASS_MARK_CODE,CN_CLASS_MARK_NAME,SALE_CERT_TYPE,CN_MAP_ZUM,
-        CN_ORG_REV,CN_SALE_COGS,CUSTOMER_MODEL,ORG_QTY,COD_DEST1,BILL_QTY
-       ,D_BUS_SCE_S
-       ,D_MINILED,MA_SALE_COGS
+    OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_AZIENDA,COD_AZI_CTP_ORG,
+    COD_CATEGORIA, AGENCY_CODE, AGENCY_NAME, CUST_CODE, CUST_NAME,
+    D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_OPER_TYPE,
+    D_ECOM_BU, CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME,
+    CUST_TYPE_NAME, SOLD_TO_CODE, SOLD_TO_NAME, COD_DEST3, D_SALE_DEPT,D_DATA_BLOCK,D_DIFF_TYPE,
+    MATERIAL_CODE, MATERIAL_NAME, COD_DEST2, COD_DEST4, D_MARKET_PNT,
+    D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE,
+    D_PRO_SERIES, D_TECH_TYPE, IS_MINILED_CODE, D_PRO_CLASS, D_MODEL_LCA,
+    D_PRO_TYPE, SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME,
+    BATCH_ID, D_PRC_GRP, MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME,
+    D_POL_CLASS, MAP_QTY, ORG_REV, POLICY_AMT, POLICY_CASH_PD,D_ADJ_TYPE,
+    ASSESSED_REV, SALE_COGS, BEG_UNREAL_GP, END_UNREAL_GP, COMB_COST,
+    AVG_UNIT_COST, COMB_COST_AVG, PSI_COMB_COST, WTD_UNIT_COST,
+    DOM_PSI_COST, OTH_ASSESS_COST, PROVENIENZA,DATEUPD, USERUPD,
+    CN_CLASS_MARK_CODE,CN_CLASS_MARK_NAME,SALE_CERT_TYPE,CN_MAP_ZUM,
+    CN_ORG_REV,CN_SALE_COGS,CUSTOMER_MODEL,ORG_QTY,COD_DEST1,BILL_QTY
+    ,D_BUS_SCE_S,D_MINILED,MA_SALE_COGS, SHIPPING_ORDER
+    --20260920FJF_ADD 二期新增字段
+    ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
 
     )
     SELECT
@@ -1865,9 +2248,12 @@ OID, COD_SCENARIO, COD_PERIODO, SHOP_CODE, COD_AZIENDA, COD_DEST1, COD_AZI_CTP, 
         M.CN_CLASS_MARK_CODE,M.CN_CLASS_MARK_NAME,M.SALE_CERT_TYPE,
         M.CN_MAP_ZUM,M.CN_ORG_REV,M.CN_SALE_COGS,M.CUSTOMER_MODEL,M.BILL_QTY as ORG_QTY,COD_DEST1,BILL_QTY
        ,M.D_BUS_SCE_S
-       ,M.D_MINILED,M.MA_SALE_COGS
+       ,M.D_MINILED,M.MA_SALE_COGS, SHIPPING_ORDER
+    --20260920FJF_ADD 二期新增字段
+    ,M.D_EFF_CLASS,M.D_BU_SHOP,M.D_EC_STORE,M.D_UNICUSTGRP
     FROM AW_MR9_REVM01_000001_CON_TEMP M
-    JOIN (SELECT *
+    JOIN (/*20260904 alter by shiqingfeng.ex 比例大于是10的数据进行去重*/
+        SELECT distinct COD_AZIENDA,COD_DEST2,D_ONOFFLINE,D_CHANNEL,CUST_CODE
             FROM TMP_TABLE_POLICY A11
            WHERE A11.SESSION_ID = V_SESSION_ID
              AND (A11.STEP_ID IS NULL
@@ -1940,7 +2326,10 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         CN_CLASS_MARK_CODE,CN_CLASS_MARK_NAME,SALE_CERT_TYPE,CN_MAP_ZUM,
         CN_ORG_REV,CN_SALE_COGS,CUSTOMER_MODEL,ORG_QTY,COD_DEST1,BILL_QTY
         ,D_BUS_SCE_S
-        ,D_MINILED,MA_SALE_COGS
+        ,D_MINILED,MA_SALE_COGS, SHIPPING_ORDER
+    --20260920FJF_ADD 二期新增字段
+    ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
+
     )
 
     SELECT
@@ -1955,7 +2344,8 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         D_PRO_TYPE, SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME,
         BATCH_ID, D_PRC_GRP, MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME,
         D_POL_CLASS,MAP_ZUM MAP_QTY, M.ORG_REV, A1.POLICY_ALC_AMT POLICY_AMT,
-        CASE WHEN M.SRC_DETAIL IN ('VBRP','REVM01','ADJM01') OR M.SRC_SYSTEM IN ('SMS','GSMS') THEN NVL(MAP_DIS1,0)+NVL(MAP_DIS3,0)+NVL(MAP_DIS4,0)+NVL(MAP_DIS30,0)+NVL(MAP_DIS34,0)
+        /*20261015 EDIT BY LC POLICY_CASH_PD  新增 SRC_DETAIL='ZTFI313A' 取数*/
+        CASE WHEN M.SRC_DETAIL IN ('VBRP','REVM01','ADJM01','ZTFI313A') OR M.SRC_SYSTEM IN ('SMS','GSMS') THEN NVL(MAP_DIS1,0)+NVL(MAP_DIS3,0)+NVL(MAP_DIS4,0)+NVL(MAP_DIS30,0)+NVL(MAP_DIS34,0)
              ELSE 0
          END AS POLICY_CASH_PD,
         D_ADJ_TYPE,
@@ -1964,7 +2354,9 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         M.CN_CLASS_MARK_CODE,M.CN_CLASS_MARK_NAME,M.SALE_CERT_TYPE,
         M.CN_MAP_ZUM,M.CN_ORG_REV,M.CN_SALE_COGS,M.CUSTOMER_MODEL,M.MAP_QTY AS ORG_QTY,COD_DEST1,BILL_QTY
        ,M.D_BUS_SCE_S
-       ,M.D_MINILED,M.MA_SALE_COGS
+       ,M.D_MINILED,M.MA_SALE_COGS, SHIPPING_ORDER
+     --20260920FJF_ADD 二期新增字段
+    ,M.D_EFF_CLASS,M.D_BU_SHOP,M.D_EC_STORE,M.D_UNICUSTGRP
     FROM AW_MR9_REVM01_000001_CON_TEMP M
   --LEFT JOIN， 要COPY所有记录
     LEFT JOIN (SELECT *
@@ -2020,7 +2412,9 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         CN_CLASS_MARK_CODE,CN_CLASS_MARK_NAME,SALE_CERT_TYPE,CN_MAP_ZUM,
         CN_ORG_REV,CN_SALE_COGS,CUSTOMER_MODEL,ORG_QTY,COD_DEST1,BILL_QTY
         ,D_BUS_SCE_S
-        ,D_MINILED,MA_SALE_COGS
+        ,D_MINILED,MA_SALE_COGS, SHIPPING_ORDER
+    --20260920FJF_ADD 二期新增字段
+    ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
     )
 
     SELECT
@@ -2041,7 +2435,9 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         M.CN_CLASS_MARK_CODE,M.CN_CLASS_MARK_NAME,M.SALE_CERT_TYPE,
         0 AS CN_MAP_ZUM,0 AS CN_ORG_REV,0 AS CN_SALE_COGS,M.CUSTOMER_MODEL,0 AS ORG_QTY,COD_DEST1,BILL_QTY
        ,M.D_BUS_SCE_S
-       ,M.D_MINILED,M.MA_SALE_COGS
+       ,M.D_MINILED,M.MA_SALE_COGS, SHIPPING_ORDER
+     --20260920FJF_ADD 二期新增字段
+    ,M.D_EFF_CLASS,M.D_BU_SHOP,M.D_EC_STORE,M.D_UNICUSTGRP
     FROM AW_MR9_REVM01_000001_CON_TEMP M
   --注意这里要用inner join， 只COPY匹配记录
     JOIN (SELECT *
@@ -2099,7 +2495,9 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         CN_ORG_REV,CN_SALE_COGS,CUSTOMER_MODEL,ORG_QTY,COD_DEST1,BILL_QTY
        ,D_BUS_SCE_S
        ,D_MINILED
-       ,STD_QTY,MA_SALE_COGS
+       ,STD_QTY,MA_SALE_COGS, SHIPPING_ORDER
+     --20260920FJF_ADD 二期新增字段
+    ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
 
     )
     SELECT
@@ -2121,7 +2519,9 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         M.CN_MAP_ZUM,M.CN_ORG_REV,M.CN_SALE_COGS,M.CUSTOMER_MODEL,M.BILL_QTY as ORG_QTY,COD_DEST1,BILL_QTY
        ,M.D_BUS_SCE_S
        ,M.D_MINILED
-       ,M.STD_QTY,M.MA_SALE_COGS
+       ,M.STD_QTY,M.MA_SALE_COGS, SHIPPING_ORDER
+     --20260920FJF_ADD 二期新增字段
+    ,M.D_EFF_CLASS,M.D_BU_SHOP,M.D_EC_STORE,M.D_UNICUSTGRP
     FROM AW_MR9_REVM01_000001_CON_TEMP M
     WHERE 1=1
       AND M.SRC_DETAIL IN ('POLICY_YT','ADJM01','REVM01')
@@ -2177,7 +2577,9 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         CN_ORG_REV,CN_SALE_COGS,CUSTOMER_MODEL,ORG_QTY,COD_DEST1,BILL_QTY
        ,D_BUS_SCE_S
        ,D_MINILED
-       ,STD_QTY,MA_SALE_COGS
+       ,STD_QTY,MA_SALE_COGS, SHIPPING_ORDER
+     --20260920FJF_ADD 二期新增字段
+    ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
     )
 
   SELECT
@@ -2201,7 +2603,9 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
         M.CN_MAP_ZUM,M.CN_ORG_REV,M.CN_SALE_COGS,M.CUSTOMER_MODEL,M.MAP_QTY AS ORG_QTY,COD_DEST1,BILL_QTY
        ,M.D_BUS_SCE_S
        ,M.D_MINILED
-       ,M.STD_QTY,M.MA_SALE_COGS
+       ,M.STD_QTY,M.MA_SALE_COGS, SHIPPING_ORDER
+     --20260920FJF_ADD 二期新增字段
+    ,M.D_EFF_CLASS,M.D_BU_SHOP,M.D_EC_STORE,M.D_UNICUSTGRP
     FROM AW_MR9_REVM01_000001_CON_TEMP M
     WHERE 1=1
       AND (
@@ -2297,8 +2701,8 @@ DELETE FROM TMP_TABLE_POLICY_ALLOC
 MERGE INTO AW_MR9_REVM05_000001_TEMP SS
 USING(
   SELECT AZIENDA.COD_VALUTA,CAMBIO_PERIODO,COD_AZIENDA
-  FROM AZIENDA
-  LEFT JOIN DATI_CAMBIO
+  FROM TGK_FIMA_HISENSE.AZIENDA
+  LEFT JOIN TGK_FIMA_HISENSE.DATI_CAMBIO
   ON AZIENDA.COD_VALUTA = DATI_CAMBIO.COD_VALUTA
  WHERE DATI_CAMBIO.COD_SCENARIO = P_SCENARIO
    AND DATI_CAMBIO.COD_PERIODO = P_PERIODO
@@ -2326,6 +2730,24 @@ WHEN MATCHED THEN UPDATE SET
   SS.POLICY_CASH_PD = NVL(SS.POLICY_CASH_PD,0) / C.CAMBIO_PERIODO;
  COMMIT;
 
+
+    ------------------------------------------------------------------------------
+    -- 1.6  2910 考核收入 ASSESSED_REV 计算（20261020 新增）
+    --   考核收入 = 【收入金额(含折扣)-净收入】-【政策计提】+【政策兑现】
+    --            = ORG_REV - POLICY_AMT + POLICY_CASH_PD
+    --   范围：仅公司 2910，其它公司维持原 NULL 口径不变
+    --   位置：置于汇率折算 MERGE 之后，ORG_REV/POLICY_AMT/POLICY_CASH_PD 均取最终值
+    ------------------------------------------------------------------------------
+    UPDATE AW_MR9_REVM05_000001_TEMP
+       SET ASSESSED_REV = NVL(ORG_REV,0) - NVL(POLICY_AMT,0) + NVL(POLICY_CASH_PD,0)
+     WHERE COD_SCENARIO = P_SCENARIO
+       AND COD_PERIODO = P_PERIODO
+       AND COD_AZIENDA = '2910'
+       AND PROVENIENZA = 'CPM_SP_M2M_REV_M'
+    ;
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', '1 单体-收入、政策', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '1.6 2910 考核收入 ASSESSED_REV=ORG_REV-POLICY_AMT+POLICY_CASH_PD',P_AZIENDA);
+    COMMIT;
 
   ------------------------------------------------------------------------------
   -- 2  插入合并层调整数据
@@ -2364,6 +2786,8 @@ WHEN MATCHED THEN UPDATE SET
     SOLD_TO_CODE,
     SOLD_TO_NAME,
     COD_DEST1
+  --20260920FJF_ADD 二期新增字段
+  ,D_EC_STORE,D_CHANNEL,D_ECOM_BU,D_MARKET_PNT,MODEL_CODE,MODEL_NAME,CN_CLASS_MARK_CODE,CN_CLASS_MARK_NAME
   )
   SELECT
     NEWID(),
@@ -2400,28 +2824,37 @@ WHEN MATCHED THEN UPDATE SET
     SOLD_TO_CODE,
     SOLD_TO_NAME,
     CASE WHEN COD_AZIENDA LIKE '17%' OR COD_AZIENDA = '6240' THEN COD_DEST1 ELSE 'ZZZZ' END AS COD_DEST1
+  --20260920FJF_ADD 二期新增字段
+  ,NVL(D_EC_STORE,'ZZZZ')AS D_EC_STORE --电商细分店铺
+  ,NVL(D_CHANNEL,'ZZZZ')AS D_CHANNEL--销售渠道
+  ,NVL(D_ECOM_BU,'ZZZZ')AS D_ECOM_BU--电商BU渠道细分
+  ,NVL(D_MARKET_PNT,'ZZZZ')AS D_MARKET_PNT--营销定位
+  ,NVL(MODEL_CODE,'ZZZZ')AS MODEL_CODE--产品型号
+  ,NVL(MODEL_NAME,'ZZZZ')AS MODEL_NAME--产品型号描述
+  ,NVL(CN_CLASS_MARK_CODE,'ZZZZ')AS CN_CLASS_MARK_CODE--中国区品线标记编码
+  ,NVL(CN_CLASS_MARK_NAME,'ZZZZ')AS CN_CLASS_MARK_NAME--中国区品线标记描述
 
-  FROM TGK_FIMA_HISENSE.AW_MR9_ADJM01_000001
-  WHERE COD_SCENARIO = P_SCENARIO
-    AND COD_PERIODO = P_PERIODO
-    AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
-                                    WHERE SESSION_ID = V_SESSION_ID
-                                    )
-    --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
-    AND COD_CONTO='ZAW_DWM_REV_MERG'
-    /*20260526 shqingfeng.ex 修改限制条件*/
-    AND COD_CATEGORIA IN ('GA00_CON_L2','GA00_CON')
-    --AND COD_CATEGORIA='ZFAMOUNT'
-    --AND D_ADJ_TYPE='REV_01_301'
-    AND NOT (NVL(SALE_COGS,0)=0 AND NVL(MAP_QTY,0)=0 AND NVL(ORG_REV,0)=0 AND NVL(POLICY_AMT,0)=0 AND NVL(POLICY_CASH_PD,0)=0)
-      /*20260226 新增排除锁定公司*/
-          /*AND COD_AZIENDA NOT IN (SELECT COD_AZIENDA
-                  FROM AW_RUL_DWMCRS_000001 T
-                 WHERE REV05_FLAG = 'Y'
-                   AND T.COD_SCENARIO = P_SCENARIO
-                   AND T.COD_PERIODO = P_PERIODO
-                   AND T.COD_CONTO = 'ZAW_D2M_LOCK'
-                   )*/
+FROM TGK_FIMA_HISENSE.AW_MR9_ADJM01_000001
+WHERE COD_SCENARIO = P_SCENARIO
+AND COD_PERIODO = P_PERIODO
+AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                WHERE SESSION_ID = V_SESSION_ID
+                )
+--AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
+AND COD_CONTO='ZAW_DWM_REV_MERG'
+/*20260526 shqingfeng.ex 修改限制条件*/
+AND COD_CATEGORIA IN ('GA00_CON_L2','GA00_CON')
+--AND COD_CATEGORIA='ZFAMOUNT'
+--AND D_ADJ_TYPE='REV_01_301'
+AND NOT (NVL(SALE_COGS,0)=0 AND NVL(MAP_QTY,0)=0 AND NVL(ORG_REV,0)=0 AND NVL(POLICY_AMT,0)=0 AND NVL(POLICY_CASH_PD,0)=0)
+  /*20260226 新增排除锁定公司*/
+    /*AND COD_AZIENDA NOT IN (SELECT COD_AZIENDA
+        FROM AW_RUL_DWMCRS_000001 T
+       WHERE REV05_FLAG = 'Y'
+         AND T.COD_SCENARIO = P_SCENARIO
+         AND T.COD_PERIODO = P_PERIODO
+         AND T.COD_CONTO = 'ZAW_D2M_LOCK'
+         )*/
   ;
 
   COMMIT;
@@ -2594,7 +3027,7 @@ WHEN MATCHED THEN UPDATE SET
                                     )
    --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
     AND D_OPER_TYPE IN (SELECT D_OPER_TYPE
-                    FROM AW_RUL_CNMECL_000001
+                    FROM TGK_FIMA_HISENSE.AW_RUL_CNMECL_000001
                    WHERE VALID_FR <= SUBSTR(P_SCENARIO,1,4)||P_PERIODO
                      AND NVL(VALID_TO,'999999') >= SUBSTR(P_SCENARIO,1,4)||P_PERIODO
                   )
@@ -2609,14 +3042,287 @@ WHEN MATCHED THEN UPDATE SET
   ;
 
   COMMIT;
-
-
-
-
     INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
     VALUES('CPM_SP_M2M_REV_M', 'REV005_STEP_2-1（插入中国区其他业务）完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '2  插入合并层调整数据',P_AZIENDA);
     COMMIT;
 
+  ------------------------------------------------------------------------------
+  -- REV005_STEP_2-2（插入线下O2O冲销数） --20260914fjf_add
+  ------------------------------------------------------------------------------
+
+INSERT INTO AW_MR9_REVM05_000001_TEMP
+(
+    OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_CATEGORIA, COD_AZIENDA,
+    AGENCY_CODE, AGENCY_NAME, CUSTOMER_MODEL, CUST_CODE, CUST_NAME,
+    D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_ECOM_BU,
+    CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME, CUST_TYPE_NAME,
+    SOLD_TO_CODE, SOLD_TO_NAME, COD_DEST3, D_SALE_DEPT, D_DATA_BLOCK, D_DIFF_TYPE,
+    D_ADJ_TYPE, MATERIAL_CODE, MATERIAL_NAME, COD_DEST2, COD_DEST4, D_MARKET_PNT,
+    D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES,
+    D_TECH_TYPE, D_PRO_CLASS, D_MODEL_LCA, D_PRO_TYPE, IS_MINILED_CODE,
+    SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME, BATCH_ID, D_PRC_GRP,
+    MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME, D_POL_CLASS, COD_AZI_CTP,
+    COD_AZI_CTP_ORG, ORG_QTY, BILL_QTY, MAP_QTY, ORG_REV, POLICY_AMT,
+    POLICY_CASH_PD, ASSESSED_REV, SALE_COGS,
+    CN_CLASS_MARK_CODE, CN_CLASS_MARK_NAME, SALE_CERT_TYPE, D_OPER_TYPE, COD_DEST1,CN_MAP_ZUM ,CN_ORG_REV ,CN_SALE_COGS
+  ,PROVENIENZA,DATEUPD,USERUPD
+)
+SELECT
+    SYS_GUID(), S.COD_SCENARIO, S.COD_PERIODO, 'REVM05', S.COD_CONTO, 'GA00_CON_G05', S.COD_AZIENDA,
+    S.AGENCY_CODE, S.AGENCY_NAME, S.CUSTOMER_MODEL, S.CUST_CODE, S.CUST_NAME,
+    S.D_CHANNEL, S.D_MODE, S.D_ONOFFLINE, S.D_CNL_C_TYPE, S.D_IND_C_TYPE, S.D_ECOM_BU,
+    S.CUST_UNITY_NAME, S.CREDIT_LEVEL_NAME, S.CUST_NATURE_NAME, S.CUST_TYPE_NAME,
+    S.SOLD_TO_CODE, S.SOLD_TO_NAME, S.COD_DEST3, S.D_SALE_DEPT, S.D_DATA_BLOCK, S.D_DIFF_TYPE,
+    'REV_01_312', S.MATERIAL_CODE, S.MATERIAL_NAME, S.COD_DEST2, S.COD_DEST4, S.D_MARKET_PNT,
+    S.D_PRO_SSER, S.D_SPEC_SEC, S.D_PRO_TYPE_S, S.D_PRO_STAGE, S.D_PRI_RANGE, S.D_PRO_SERIES,
+    S.D_TECH_TYPE, S.D_PRO_CLASS, S.D_MODEL_LCA, S.D_PRO_TYPE, S.IS_MINILED_CODE,
+    S.SALE_MODEL_CODE, S.SALE_MODEL_NAME, S.MODEL_CODE, S.MODEL_NAME, S.BATCH_ID, S.D_PRC_GRP,
+    S.MATERIAL_GROUP_CODE, S.SHOP_CODE, S.SHOP_NAME, S.D_POL_CLASS, S.COD_AZI_CTP,
+    S.COD_AZI_CTP_ORG, 0-S.ORG_QTY, 0-S.BILL_QTY, 0-S.MAP_QTY, 0-S.ORG_REV, 0-S.POLICY_AMT,
+    0-S.POLICY_CASH_PD, 0-S.ASSESSED_REV, 0-S.SALE_COGS,
+    S.CN_CLASS_MARK_CODE, S.CN_CLASS_MARK_NAME, S.SALE_CERT_TYPE, S.D_OPER_TYPE, S.COD_DEST1
+  --20260915fjf_add REV005_STEP_2-2（插入线下O2O冲销数）①修改类别 ②新增中国区相关取数字段
+  ,0-CN_MAP_ZUM as CN_MAP_ZUM
+  ,0-CN_ORG_REV as CN_ORG_REV
+  ,0-CN_SALE_COGS as CN_SALE_COGS
+  ,'CPM_SP_M2M_REV_M' as PROVENIENZA
+    ,SYSDATE as DATEUPD
+    ,SESSION_USER as USERUPD
+FROM AW_MR9_REVM05_000001_TEMP S
+WHERE COD_SCENARIO = P_SCENARIO
+AND COD_PERIODO = P_PERIODO
+AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID)
+AND (S.COD_AZIENDA = '1180' OR S.COD_AZIENDA LIKE '12%')
+AND S.D_OPER_TYPE = 'OPTY020';
+COMMIT;
+
+
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', 'REV005_STEP_2-2（插入线下O2O冲销数）完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '2  插入合并层调整数据',P_AZIENDA);
+    COMMIT;
+
+  ------------------------------------------------------------------------------
+  -- 20261021 LIYIFAN1.EX  REV005_STEP_2-3 研发费用品类间调整-事业部层 
+  ------------------------------------------------------------------------------
+
+/* REV005 研发费用品类间调整-事业部层：把单体层（类别 GA00_BF / 调整类型 REV_01_229）的收入行转成成本口径落事业部层 */
+INSERT INTO AW_MR9_REVM05_000001_TEMP
+(
+    OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_CATEGORIA, COD_AZIENDA,
+    AGENCY_CODE, AGENCY_NAME, CUSTOMER_MODEL, CUST_CODE, CUST_NAME,
+    D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_ECOM_BU,
+    CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME, CUST_TYPE_NAME,
+    SOLD_TO_CODE, SOLD_TO_NAME, COD_DEST3, D_SALE_DEPT, D_DATA_BLOCK, D_DIFF_TYPE,
+    D_ADJ_TYPE, MATERIAL_CODE, MATERIAL_NAME, COD_DEST2, COD_DEST4, D_MARKET_PNT,
+    D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES,
+    D_TECH_TYPE, D_PRO_CLASS, D_MODEL_LCA, D_PRO_TYPE, IS_MINILED_CODE,
+    SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME, BATCH_ID, D_PRC_GRP,
+    MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME, D_POL_CLASS, COD_AZI_CTP, COD_AZI_CTP_ORG,
+    ORG_QTY, BILL_QTY, MAP_QTY, ORG_REV, POLICY_AMT, POLICY_CASH_PD, ASSESSED_REV, SALE_COGS,
+    CN_CLASS_MARK_CODE, CN_CLASS_MARK_NAME, SALE_CERT_TYPE, D_OPER_TYPE, COD_DEST1,
+    CN_MAP_ZUM, CN_ORG_REV, CN_SALE_COGS,
+    PROVENIENZA, DATEUPD, USERUPD
+)
+SELECT
+    SYS_GUID()                        -- OID
+  , P_SCENARIO                        -- 场景
+  , P_PERIODO                         -- 期间
+  , 'REVM05'                          -- 源数据明细
+  , 'S640100AD'                       -- 科目
+  , 'GA00_CON_BG'                     -- 类别
+  , S.COD_AZIENDA                     -- 账套
+  , S.AGENCY_CODE
+  , S.AGENCY_NAME
+  , S.CUSTOMER_MODEL
+  , S.CUST_CODE
+  , S.CUST_NAME
+  , S.D_CHANNEL
+  , S.D_MODE
+  , S.D_ONOFFLINE
+  , S.D_CNL_C_TYPE
+  , S.D_IND_C_TYPE
+  , S.D_ECOM_BU
+  , S.CUST_UNITY_NAME
+  , S.CREDIT_LEVEL_NAME
+  , S.CUST_NATURE_NAME
+  , S.CUST_TYPE_NAME
+  , S.SOLD_TO_CODE
+  , S.SOLD_TO_NAME
+  , S.COD_DEST3
+  , S.D_SALE_DEPT
+  , S.D_DATA_BLOCK
+  , S.D_DIFF_TYPE
+  , S.D_ADJ_TYPE                      -- 调整类型：直接对应
+  , S.MATERIAL_CODE
+  , S.MATERIAL_NAME
+  , S.COD_DEST2                       -- 利润中心：直接对应（承接单体层 101001001 / 101006000 两行）
+  , S.COD_DEST4
+  , S.D_MARKET_PNT
+  , S.D_PRO_SSER
+  , S.D_SPEC_SEC
+  , S.D_PRO_TYPE_S
+  , S.D_PRO_STAGE
+  , S.D_PRI_RANGE
+  , S.D_PRO_SERIES
+  , S.D_TECH_TYPE
+  , S.D_PRO_CLASS
+  , S.D_MODEL_LCA
+  , S.D_PRO_TYPE
+  , S.IS_MINILED_CODE
+  , S.SALE_MODEL_CODE
+  , S.SALE_MODEL_NAME
+  , S.MODEL_CODE
+  , S.MODEL_NAME
+  , S.BATCH_ID
+  , S.D_PRC_GRP
+  , S.MATERIAL_GROUP_CODE
+  , S.SHOP_CODE
+  , S.SHOP_NAME
+  , S.D_POL_CLASS
+  , NULL COD_AZI_CTP  -- 20261023 LIYIFAN 对方公司放null
+  , S.COD_AZI_CTP_ORG
+  , NULL                              -- 销量-原始：放空
+  , NULL                              -- 销量-原始（日立用）：放空
+  , NULL                              -- 数量(处理后)：放空
+  , NULL                              -- 收入金额(含折扣)-净收入：放空
+  , S.POLICY_AMT                      -- 政策计提数据：直接对应
+  , S.POLICY_CASH_PD                  -- 政策兑现价差：直接对应
+  , NULL                              -- 考核收入：放空
+  , 0 - NVL(S.ORG_REV, 0)             -- 销售成本：ORG_REV * -1
+  , S.CN_CLASS_MARK_CODE
+  , S.CN_CLASS_MARK_NAME
+  , S.SALE_CERT_TYPE
+  , S.D_OPER_TYPE
+  , S.COD_DEST1                       -- 成本中心：直接对应
+  , NULL                              -- 销量-特殊处理后-中国区：放空
+  , NULL                              -- 收入金额(折扣后不含税)-本位币-中国区：放空
+  , 0 - NVL(S.ORG_REV, 0)             -- 成本金额-交易币-中国区：ORG_REV * -1
+  , 'CPM_SP_M2M_REV_M'                -- 来源
+  , S.DATEUPD                         -- 更新日期：直接对应
+  , S.USERUPD                         -- 更新用户：直接对应
+  FROM AW_MR9_REVM05_000001_TEMP S
+ WHERE S.COD_SCENARIO = P_SCENARIO
+   AND S.COD_PERIODO  = P_PERIODO
+   AND S.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID)
+   AND S.COD_CATEGORIA = 'GA00_BF'
+   AND S.D_ADJ_TYPE = 'REV_01_229';
+COMMIT;
+
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', 'REV005_STEP_2-3（研发费用品类间调整-事业部层）完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '2  插入合并层调整数据',P_AZIENDA);
+    COMMIT;
+
+  ------------------------------------------------------------------------------
+  -- 20261022 LIYIFAN1.EX REV005_STEP_2-4 古洛尼合并层还原
+  ------------------------------------------------------------------------------
+
+/* 取 D_ADJ_TYPE=REV_01_311 的冲销行，金额全部翻负，写成 REV_01_503 的还原行 */
+INSERT INTO AW_MR9_REVM05_000001_TEMP
+(
+    OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_CATEGORIA, COD_AZIENDA,
+    AGENCY_CODE, AGENCY_NAME, CUSTOMER_MODEL, CUST_CODE, CUST_NAME,
+    D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_ECOM_BU,
+    CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME, CUST_TYPE_NAME,
+    SOLD_TO_CODE, SOLD_TO_NAME, COD_DEST3, D_SALE_DEPT, D_DATA_BLOCK, D_DIFF_TYPE,
+    D_ADJ_TYPE, MATERIAL_CODE, MATERIAL_NAME, COD_DEST2, COD_DEST4, D_MARKET_PNT,
+    D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES,
+    D_TECH_TYPE, D_PRO_CLASS, D_MODEL_LCA, D_PRO_TYPE, IS_MINILED_CODE,
+    SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME, BATCH_ID, D_PRC_GRP,
+    MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME, D_POL_CLASS, COD_AZI_CTP, COD_AZI_CTP_ORG,
+    ORG_QTY, BILL_QTY, MAP_QTY, ORG_REV, POLICY_AMT, POLICY_CASH_PD, ASSESSED_REV, SALE_COGS,
+    CN_CLASS_MARK_CODE, CN_CLASS_MARK_NAME, SALE_CERT_TYPE, D_OPER_TYPE, COD_DEST1,
+    CN_MAP_ZUM, CN_ORG_REV, CN_SALE_COGS,
+    DATEUPD, USERUPD, PROVENIENZA
+)
+SELECT
+    SYS_GUID()                        -- OID
+  , P_SCENARIO                        -- 场景
+  , P_PERIODO                         -- 期间
+  , 'REVM05'                          -- 源数据明细
+  , S.COD_CONTO                       -- 科目：直接对应
+  , 'GA00_CON_G05'                    -- 类别
+  , S.COD_AZIENDA                     -- 账套
+  , S.AGENCY_CODE
+  , S.AGENCY_NAME
+  , S.CUSTOMER_MODEL
+  , S.CUST_CODE
+  , S.CUST_NAME
+  , S.D_CHANNEL
+  , S.D_MODE
+  --EDIT BY LC 20261029 直接写死020_OFF_002
+  , '020_OFF_002' AS D_ONOFFLINE
+  , S.D_CNL_C_TYPE
+  , S.D_IND_C_TYPE
+  , S.D_ECOM_BU
+  , S.CUST_UNITY_NAME
+  , S.CREDIT_LEVEL_NAME
+  , S.CUST_NATURE_NAME
+  , S.CUST_TYPE_NAME
+  , S.SOLD_TO_CODE
+  , S.SOLD_TO_NAME
+  , S.COD_DEST3
+  , S.D_SALE_DEPT
+  , S.D_DATA_BLOCK
+  , S.D_DIFF_TYPE
+  , 'REV_01_503'                      -- 调整类型：古洛尼智能生态业务还原
+  , S.MATERIAL_CODE
+  , S.MATERIAL_NAME
+  , S.COD_DEST2
+  , S.COD_DEST4
+  , S.D_MARKET_PNT
+  , S.D_PRO_SSER
+  , S.D_SPEC_SEC
+  , S.D_PRO_TYPE_S
+  , S.D_PRO_STAGE
+  , S.D_PRI_RANGE
+  , S.D_PRO_SERIES
+  , S.D_TECH_TYPE
+  , S.IS_MINILED_CODE
+  , S.D_PRO_CLASS
+  , S.D_MODEL_LCA
+  , S.D_PRO_TYPE
+  , S.SALE_MODEL_CODE
+  , S.SALE_MODEL_NAME
+  , S.MODEL_CODE
+  , S.MODEL_NAME
+  , S.BATCH_ID
+  , S.D_PRC_GRP
+  , S.MATERIAL_GROUP_CODE
+  , S.SHOP_CODE
+  , S.SHOP_NAME
+  , S.D_POL_CLASS
+  , S.COD_AZI_CTP
+  , S.COD_AZI_CTP_ORG
+  , 0 - NVL(S.ORG_QTY, 0)             -- 销量-原始
+  , 0 - NVL(S.BILL_QTY, 0)            -- 销量-原始（日立用）
+  , 0 - NVL(S.MAP_QTY, 0)             -- 数量(处理后)
+  , 0 - NVL(S.ORG_REV, 0)             -- 收入金额(含折扣)-净收入
+  , 0 - NVL(S.POLICY_AMT, 0)          -- 政策计提数据
+  , 0 - NVL(S.POLICY_CASH_PD, 0)      -- 政策兑现价差
+  , 0 - NVL(S.ASSESSED_REV, 0)        -- 考核收入
+  , 0 - NVL(S.SALE_COGS, 0)           -- 销售成本
+  , S.CN_CLASS_MARK_CODE
+  , S.CN_CLASS_MARK_NAME
+  , S.SALE_CERT_TYPE
+  , S.D_OPER_TYPE
+  , S.COD_DEST1
+  , 0 - NVL(S.CN_MAP_ZUM, 0)          -- 销量-特殊处理后-中国区
+  , 0 - NVL(S.CN_ORG_REV, 0)          -- 收入金额(折扣后不含税)-本位币-中国区
+  , 0 - NVL(S.CN_SALE_COGS, 0)        -- 成本金额-交易币-中国区
+  , S.DATEUPD
+  , S.USERUPD
+  , 'CPM_SP_M2M_REV_M'                -- 来源
+  FROM AW_MR9_REVM05_000001_TEMP S
+ WHERE S.COD_SCENARIO = P_SCENARIO
+   AND S.COD_PERIODO  = P_PERIODO
+   AND S.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID)
+   AND S.D_ADJ_TYPE  = 'REV_01_311'
+   AND S.D_OPER_TYPE = 'OPTY036';
+COMMIT;
+
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', 'REV005_STEP_2-4（古洛尼合并层还原）完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '2  插入合并层调整数据',P_AZIENDA);
+    COMMIT;
 
 
   ------------------------------------------------------------------------------
@@ -2633,7 +3339,7 @@ WITH
 
 -- CTE 1: L1级别的业务组列表（替代4处重复的 CASE WHEN V_ENTITY 子查询）
 CTE_L1_BU AS (
-    SELECT CASE WHEN V_ENTITY = 'BX' THEN 'CXC030'
+    SELECT DISTINCT CASE WHEN V_ENTITY = 'BX' THEN 'CXC030'
                 WHEN V_ENTITY = 'KT' THEN 'BG003_BU011'
                 WHEN V_ENTITY = 'SX' THEN 'BG001_BU001'
                 ELSE ''
@@ -2809,12 +3515,58 @@ WITH
     FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
     WHERE COD_BG IN ('BG001_BU001')
   ),
+-- CTE 2: 符合L1条件的公司集合（替代3处 COD_AZIENDA IN (SELECT ... ATSMAP WHERE COD_BG IN (SELECT ...))）
+CTE_L1_AZI AS (
+    SELECT A.COD_AZIENDA, A.COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+     WHERE A.COD_BG = 'BG001_BU001'
+),
+-- CTE 3: 同业务组公司对（用于排除"公司+CTP在同一BG"的情况）
+CTE_SAME_BG_PAIR AS (
+    SELECT A1.COD_AZIENDA AS COD_AZI_SELL, A2.COD_AZIENDA AS COD_AZI_BUY
+      FROM CTE_L1_AZI A1
+      INNER JOIN CTE_L1_AZI A2 ON A1.COD_BG = A2.COD_BG
+),
+-- CTE 4: 内销DEST3（HN）
+CTE_DEST3_HN AS (
+    SELECT ELEM
+      FROM SESSION_V_REF_DEST3_NONAME
+     WHERE SESSION_ID = V_SESSION_ID
+       AND NODE = 'HN'
+),
+excl_mat AS
+(
 
+    SELECT CASE WHEN M_LIST.ZDETAIL IS NULL THEN AW.MATERIAL_CODE
+                ELSE M_LIST.ZDETAIL
+           END AS ZDETAIL
+      FROM AW_MR9_REVM05_000001_TEMP AW
+      LEFT JOIN (SELECT ZSET, ZDETAIL
+                   FROM TGK_FIMA_HISENSE.ZTAB_MATNR_TJ) M_LIST
+             ON AW.MATERIAL_CODE = M_LIST.ZSET
+     WHERE AW.COD_SCENARIO = P_SCENARIO
+       AND AW.COD_PERIODO  = P_PERIODO
+       AND AW.MATERIAL_CODE IS NOT NULL
+       AND AW.ORG_QTY <> 0
+       AND AW.COD_AZIENDA IN (SELECT COD_AZIENDA FROM bg_azienda)
+       AND AW.COD_DEST3 IN (SELECT ELEM FROM CTE_DEST3_HN)
+       AND NOT EXISTS (
+           SELECT 1 FROM CTE_SAME_BG_PAIR P
+            WHERE P.COD_AZI_SELL = AW.COD_AZIENDA
+              AND P.COD_AZI_BUY  = NVL(AW.COD_AZI_CTP_ORG, '9999')
+       )
+     GROUP BY CASE WHEN M_LIST.ZDETAIL IS NULL THEN AW.MATERIAL_CODE
+                ELSE M_LIST.ZDETAIL
+           END
+     HAVING SUM(AW.ORG_QTY) <> 0
+)
+/*
   excl_mat AS (
-    SELECT CASE WHEN M_LIST.ZDETAIL IS NULL
+  \*20260819 SHIQNGFENG.EX 插入未实现金额修改为全单机*\
+    SELECT AW.MATERIAL_CODE\*CASE WHEN M_LIST.ZDETAIL IS NULL
                 THEN AW.MATERIAL_CODE
                 ELSE M_LIST.ZDETAIL
-           END AS MATERIAL_CODE
+           END AS MATERIAL_CODE*\
     FROM AW_MR9_REVM05_000001_TEMP AW
     LEFT JOIN TGK_FIMA_HISENSE.ZTAB_MATNR_TJ M_LIST
            ON AW.MATERIAL_CODE = M_LIST.ZSET
@@ -2833,14 +3585,14 @@ WITH
       AND AW.COD_DEST3 IN (
               SELECT ELEM FROM SESSION_V_REF_DEST3_NONAME WHERE SESSION_ID = V_SESSION_ID AND NODE = 'HN'
           )
-    GROUP BY
-      CASE WHEN M_LIST.ZDETAIL IS NULL
+    GROUP BY AW.MATERIAL_CODE
+      \*CASE WHEN M_LIST.ZDETAIL IS NULL
            THEN AW.MATERIAL_CODE
            ELSE M_LIST.ZDETAIL
-      END
+      END*\
     HAVING SUM(NVL(AW.BEG_UNREAL_GP, 0)) <> 0
         OR SUM(NVL(AW.END_UNREAL_GP, 0)) <> 0
-  )
+  )*/
 
 SELECT
   NEWID()                                              AS OID,
@@ -2894,6 +3646,7 @@ SELECT
       ), 'ZZZZ')                                       AS SALE_MODEL_CODE,   -- 销售型号
   NVL(MARA.sale_model_name,   'ZZZZ')                 AS SALE_MODEL_NAME
 
+
 FROM (
     SELECT MATERIAL_CODE,
            COD_SCENARIO,
@@ -2922,7 +3675,7 @@ FROM (
      --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
       AND D_BU         = 'BG001_BU001'
       AND COD_DEST3 IN (
-              SELECT ELEM FROM SESSION_V_REF_DEST3_NONAME WHERE SESSION_ID = V_SESSION_ID AND NODE = 'HN'
+              SELECT ELEM FROM CTE_DEST3_HN
           )
 
 
@@ -2932,7 +3685,7 @@ LEFT JOIN TGK_FIMA_HISENSE.DIM_FI_PRODUCT MARA
 
 WHERE NOT EXISTS (
     SELECT 1 FROM excl_mat e
-    WHERE e.MATERIAL_CODE = X1.MATERIAL_CODE
+    WHERE e.ZDETAIL = X1.MATERIAL_CODE
 )
 ;
 
@@ -2945,6 +3698,46 @@ COMMIT;
 
 
 
+
+SELECT COUNT(1)
+  INTO V_FLAG
+  FROM  SESSION_AZIENDA_LIST
+ WHERE SESSION_ID = V_SESSION_ID
+   AND (ELEM LIKE '17%' OR ELEM = '6240') ;
+
+IF V_FLAG > 0
+
+THEN
+
+    /* ----------------------------------------------------------------------
+       ALTER BY <你的域账号>.EX 20261116 17:25:00
+       3-0  重跑清理：日立段每次运行前先清掉上一轮产出的数据，保证跑几次结果都一样
+            · 删 GB_ZXSLR（轧差行）—— 不清的话第二次运行轧差会重复插一遍，差异翻倍
+            · 删 CPM_SP_BSFT_M_T0（分摊冲销行）—— 不清的话冲销行叠加
+            · OTH_ASSESS_COST 归零 —— 结果列全清，重算后即为最新结果
+            只动 本场景 + 本期间 + 050 节点公司；上游各步骤写入的原始行、以及
+            待分摊金额（SALE_COGS / DOM_PSI_COST / FAC_EXTERNAL_SALE_COST）一行不删。
+       ---------------------------------------------------------------------- */
+    DELETE FROM AW_MR9_REVM05_000001_TEMP
+     WHERE COD_SCENARIO = P_SCENARIO
+       AND COD_PERIODO  = P_PERIODO
+       AND COD_AZIENDA  IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                             WHERE SESSION_ID = V_SESSION_ID
+                               AND (ELEM LIKE '17%' OR ELEM = '6240'))
+       AND (PROVENIENZA = 'CPM_SP_BSFT_M_T0' OR SRC_DETAIL = 'GB_ZXSLR');
+
+    UPDATE AW_MR9_REVM05_000001_TEMP
+       SET OTH_ASSESS_COST = 0
+     WHERE COD_SCENARIO = P_SCENARIO
+       AND COD_PERIODO  = P_PERIODO
+       AND COD_AZIENDA  IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                             WHERE SESSION_ID = V_SESSION_ID
+                               AND (ELEM LIKE '17%' OR ELEM = '6240'));
+
+    DELETE FROM ZTAB_BSFT_BASE1
+     WHERE COD_SCENARIO = P_SCENARIO
+       AND COD_PERIODO  = P_PERIODO;
+    COMMIT;
 
 INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
     VALUES('CPM_SP_M2M_REV_M', '3  插入日立单位成本开始', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  插入日立单位成本开始',P_AZIENDA);
@@ -2970,12 +3763,12 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
                             MATNR,
                             MEINS,
                             BISMT,
-                            SUM(COST_MO) AS COST_MO,
+                            SUM(COST_MO2) AS COST_MO2,
                             SUM(MNG_SALE) AS MNG_SALE,
                             DECODE(SUM(MNG_SALE),
                                    0,
                                    0,
-                                   SUM(COST_MO) / SUM(MNG_SALE)) AS DWCB
+                                   SUM(COST_MO2) / SUM(MNG_SALE)) AS DWCB
                      --SELECT *
                        FROM TGK_GB_HISENSE.V_HITACH_ZXSLR_CONS T --合并成本
                       WHERE 1 = 1
@@ -3002,13 +3795,8 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
   WHEN MATCHED THEN
     UPDATE SET WTD_UNIT_COST = T.WTD_UNIT_COST;
 
-INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
-    VALUES('CPM_SP_M2M_REV_M', '3  插入日立单位成本结束', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  插入日立单位成本结束',P_AZIENDA);
-    COMMIT;
 
-    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
-    VALUES('CPM_SP_M2M_REV_M', '3  日立内外销成本及成本轧差处理开始', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  日立内外销成本及成本轧差处理开始',P_AZIENDA);
-    COMMIT;
+/*20260905 zhuangxinzhou错误修正原在轧差之后错误*/
 
 
   UPDATE AW_MR9_REVM05_000001_TEMP
@@ -3029,20 +3817,7 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
 
 
 
-  UPDATE AW_MR9_REVM05_000001_TEMP
-     SET DOM_PSI_COST = NVL(ORG_QTY, 0) * NVL(WTD_UNIT_COST, 0)
-   WHERE COD_SCENARIO = P_SCENARIO
-     AND COD_PERIODO = P_PERIODO
-     AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
-                          WHERE SESSION_ID = V_SESSION_ID
-                            AND NOT (ELEM LIKE '17%' OR ELEM = '6240')
-                        )
-     AND COD_DEST3 IN (SELECT ELEM
-                         FROM SESSION_V_REF_DEST3_NONAME
-                        WHERE  SESSION_ID = V_SESSION_ID AND HIE = '01'
-                          AND NODE = 'HN')
-     AND PROVENIENZA = 'CPM_SP_M2M_REV_M'
-  ;
+
 
 
 
@@ -3119,6 +3894,22 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
 */
 
 
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', '3  插入未实现数据和产销存单位成本', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  插入未实现数据和产销存单位成本',P_AZIENDA);
+    COMMIT;
+/*20260905*/
+
+
+INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', '3  插入日立单位成本结束', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  插入日立单位成本结束',P_AZIENDA);
+    COMMIT;
+
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', '3  日立内外销成本及成本轧差处理开始', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  日立内外销成本及成本轧差处理开始',P_AZIENDA);
+    COMMIT;
+
+
+
  /* 日立成本轧差处理：因为日立的老管报成本和现有成本两边不一致_fjf_add */
  INSERT /*取消并发*/ INTO AW_MR9_REVM05_000001_TEMP
   (
@@ -3156,9 +3947,10 @@ WITH SRC AS
   AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
                        WHERE SESSION_ID = V_SESSION_ID
                           AND (ELEM LIKE '17%' OR ELEM = '6240')
-                                    )
+                      )
   --AND (COD_AZIENDA LIKE '17%' OR COD_AZIENDA = '6240')
   AND COD_CONTO NOT LIKE '%AD'
+  AND NVL(PROVENIENZA,'|') <> 'CPM_SP_BSFT_M_T0'  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 轧差取数排除上一轮日立分摊冲销行 */
 )
 
 SELECT NEWID() AS OID, COD_SCENARIO, COD_PERIODO, 'GB_ZXSLR' AS SRC_DETAIL,'S640100'AS COD_CONTO, COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, AGENCY_CODE, AGENCY_NAME, CUST_CODE, CUST_NAME, D_SALE_DEPT
@@ -3199,7 +3991,7 @@ INNER JOIN
       (
         --取出两边系统的成本然后计算出成本差
         SELECT B.GJAHR AS COD_SCENARIO,B.POPER AS COD_PERIODO,B.MATNR AS MATERIAL_CODE
-          ,NVL(B.COST_MO,0) - NVL(A.TOTAL_COST,0) AS CY_COST
+          ,NVL(B.COST_MO2,0) - NVL(A.TOTAL_COST,0) AS CY_COST
         FROM(
             SELECT COD_SCENARIO, COD_PERIODO,  MATERIAL_CODE
               ,SUM(NVL(DOM_PSI_COST,0) + NVL(FAC_EXTERNAL_SALE_COST,0)) AS TOTAL_COST
@@ -3210,7 +4002,7 @@ INNER JOIN
           ) A
         LEFT JOIN
           ( --老管报合并成本
-            SELECT GJAHR,POPER,MATNR,SUM(NVL(COST_MO,0)) AS COST_MO,SUM(MNG_SALE) AS MNG_SALE
+            SELECT GJAHR,POPER,MATNR,SUM(NVL(COST_MO2,0)) AS COST_MO2,SUM(MNG_SALE) AS MNG_SALE
             FROM TGK_GB_HISENSE.V_HITACH_ZXSLR_CONS T --合并成本
             WHERE 1 = 1
             AND T.GJAHR = SUBSTR(P_SCENARIO ,1 ,4)
@@ -3219,8 +4011,8 @@ INNER JOIN
             HAVING SUM(MNG_SALE) <> 0
           ) B
         ON A.MATERIAL_CODE = B.MATNR
-        WHERE (NVL(B.COST_MO,0) - NVL(A.TOTAL_COST,0)) <> 0
-        AND NVL(B.COST_MO,0) <> 0
+        WHERE (NVL(B.COST_MO2,0) - NVL(A.TOTAL_COST,0)) <> 0
+        AND NVL(B.COST_MO2,0) <> 0
       )C
     ON SRC.MATERIAL_CODE = C.MATERIAL_CODE
   )D
@@ -3230,11 +4022,658 @@ ON T.OID = D.OID
     VALUES('CPM_SP_M2M_REV_M', '3  日立内外销成本及成本轧差处理结束', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  日立内外销成本及成本轧差处理结束',P_AZIENDA);
     COMMIT;
 
+    /* ======================================================================
+       ALTER BY LIYIFAN1.EX 20261116 16:24:00
+       新增「3-2  日立合并层成本分摊（BSFT）」（接在 3 日立成本轧差之后）
+       五场景待分摊 → 五个因子池 → 结果写 OTH_ASSESS_COST → ④⑤ 冲销原行
+       过程数据落 ZTAB_BSFT_BASE1（需先建表，否则本段 ORA-00942）
+       【公司范围判定】本段位于外层 IF V_FLAG > 0 内（V_FLAG = SESSION_AZIENDA_LIST 中 17%/6240 公司条数）：
+         · 参数不含 050 节点公司时进不来 —— V_FLAG 统计 SESSION_AZIENDA_LIST 中
+           ELEM LIKE '17%' OR ELEM = '6240' 的条数，为 0 则整段跳过；
+         · 只要进来，取数与接收一律按 SESSION_AZIENDA_LIST —— 该表在
+           P_AZIENDA LIKE '17%' 或 P_AZIENDA = '6240' 时整节点展开
+           （见 SESSION_AZIENDA_LIST / SESSION_V_REF_AZIENDA 装载处的 ((P_AZIENDA LIKE '17%' OR P_AZIENDA = '6240')
+           AND NODE = '050') 分支），所以只跑一家公司也按整个 050 节点分摊。
+       【重跑】日立段开头有「3-0 重跑清理」：先删上一轮 GB_ZXSLR 轧差行与 BSFT 冲销行、
+         OTH_ASSESS_COST 归零，再重算，所以第二次运行结果与第一次完全一致。
+       【不覆盖待分摊数】本段对 AW_MR9_REVM05_000001_TEMP 只做两类写：
+         ① 插负数冲销行（PROVENIENZA='CPM_SP_BSFT_M_T0'）；② 把分摊结果 SET 进
+         接收行 OTH_ASSESS_COST。待分摊金额一行不改，分摊前/过程/结果全部可在
+         ZTAB_BSFT_BASE1 查到。
+       ★ 本段必须位于本文件 PSI_COMB_COST = DOM_PSI_COST + OTH_ASSESS_COST 的汇总 UPDATE 之前，
+         否则分摊额不进产销存成本，日立合并成本（DOM+OTH+CADJ）随之少一块
+       ====================================================================== */
 
-    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
-    VALUES('CPM_SP_M2M_REV_M', '3  插入未实现数据和产销存单位成本', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '3  插入未实现数据和产销存单位成本',P_AZIENDA);
+    --------------------------------------------------------------------------
+    /* 3-2  日立合并层成本分摊（BSFT）开始 */
+    --------------------------------------------------------------------------
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK, COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', '3  日立合并层成本分摊（BSFT）开始', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO,
+           '3  日立合并层成本分摊（BSFT）开始', P_AZIENDA);
     COMMIT;
 
+    /* ----------------------------------------------------------------------
+       S1  清理已在日立段开头「3-0 重跑清理」完成，本段不再重复：
+            删上一轮 GB_ZXSLR 轧差行 / CPM_SP_BSFT_M_T0 冲销行 / OTH_ASSESS_COST 归零
+           分摊前金额 / 因子 / 分母 / 比例 / 结果全部落在 ZTAB_BSFT_BASE1：
+             COD_CATEGORIA = 'T0'  待分摊，每笔来源一行（OID = 源行 OID，AMT_T0 = 该笔金额）
+             COD_CATEGORIA = 'RS'  因子明细（OID = 接收行 OID，
+                                   FACTOR_AMT 因子 / FACTOR_SUM 分母 / RATE 比例 / ALLOC_AMT 分摊额）
+           对目标表只在 S9 写一次：把汇总分摊额 SET 进接收行 OTH_ASSESS_COST（覆盖不累加）。
+           ④⑤ 的原行金额保持不动，另插负数行冲销，分摊前 / 冲销 / 分摊后三方都留痕。
+       ---------------------------------------------------------------------- */
+
+    /* ----------------------------------------------------------------------
+       S2b  装载「12-海外」业务管理单元码表
+            源：V_REF_ED_D_SALE_DEPT（HIE='HISD'，NODE 为一级节点编码，12=海外，
+                含 12A 海外自营、12B 全球大客户运营），ELEM 为业务管理单元编码
+            ELEM 形如 1730.S0026，落表时把点号后半段抽成 POOL_ID 统一比对，
+            避免每处重复写 SUBSTR/INSTR
+       ---------------------------------------------------------------------- */
+    INSERT INTO ZTAB_BSFT_BASE1
+      (COD_SCENARIO, COD_PERIODO, COD_CATEGORIA, SCENE, POOL_ID, NUM,
+       COD_AZIENDA, D_SALE_DEPT, DATEUPD, USERUPD)
+    SELECT P_SCENARIO, P_PERIODO, 'MAP', '12',
+           CASE WHEN INSTR(X.ELEM, '.') > 0 THEN SUBSTR(X.ELEM, INSTR(X.ELEM, '.') + 1) ELSE X.ELEM END,
+           SUBSTR('000000' || ROWNUM, -5),
+           CASE WHEN INSTR(X.ELEM, '.') > 0 THEN SUBSTR(X.ELEM, 1, INSTR(X.ELEM, '.') - 1) END,
+           X.ELEM, SYSDATE, SESSION_USER
+      FROM (SELECT DISTINCT ELEM
+              FROM TGK_FIMA_HISENSE.V_REF_ED_D_SALE_DEPT
+             WHERE HIE = 'HISD'
+               AND NODE = '12') X;
+    COMMIT;
+
+    /* 码表为空时只告警不中断：否则①②④ 的接收范围会整体失真 */
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK, COD_AZIENDA)
+    SELECT 'CPM_SP_M2M_REV_M', '3  BSFT告警：12-海外码表为空', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO,
+           'V_REF_ED_D_SALE_DEPT(HIE=HISD,NODE=12) 取不到业务管理单元，①②④ 的接收范围将全部按「不在12-海外」处理',
+           P_AZIENDA
+      FROM DUAL
+     WHERE NOT EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1
+                        WHERE COD_SCENARIO = P_SCENARIO AND COD_PERIODO = P_PERIODO
+                          AND COD_CATEGORIA = 'MAP');
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S3  待分摊①②③：老管报 TGK_GB_HISENSE.V_HITACH_ZXSLR_CONS
+           ① 总账内销：MATNR IN ('总账成本_内销','总账成本_内销_solution')
+           ② 总账外销：MATNR = '总账成本_外销'
+           ①② 各只产 1 行（单行内联视图 + WHERE 过滤，不会放大）
+           需求里「SRC_DETAIL<>'BSFT'」是老管报视图没有的字段，该限制只作用于
+           新管报侧（④⑤ 与因子池），此处不适用
+       ---------------------------------------------------------------------- */
+    INSERT INTO ZTAB_BSFT_BASE1
+      (COD_SCENARIO, COD_PERIODO, COD_CATEGORIA, SCENE, POOL_ID, NUM,
+       COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, D_SALE_DEPT, MATERIAL_CODE,
+       AMT_T0, DATEUPD, USERUPD)
+    WITH OLD AS
+    (
+      SELECT MATNR, SUM(NVL(COST_MO2, 0)) AS COST_MO2
+        FROM TGK_GB_HISENSE.V_HITACH_ZXSLR_CONS
+       WHERE GJAHR = SUBSTR(P_SCENARIO, 1, 4)
+         AND POPER = P_PERIODO
+       GROUP BY MATNR
+    )
+    SELECT P_SCENARIO, P_PERIODO, 'T0', '01', '01', '00001',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           X.AMT, SYSDATE, SESSION_USER
+      FROM (SELECT NVL(SUM(CASE WHEN MATNR IN ('总账成本_内销', '总账成本_内销_solution')
+                                THEN COST_MO2 END), 0) AS AMT
+              FROM OLD) X
+     WHERE X.AMT <> 0;
+
+    INSERT INTO ZTAB_BSFT_BASE1
+      (COD_SCENARIO, COD_PERIODO, COD_CATEGORIA, SCENE, POOL_ID, NUM,
+       COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, D_SALE_DEPT, MATERIAL_CODE,
+       AMT_T0, DATEUPD, USERUPD)
+    WITH OLD AS
+    (
+      SELECT MATNR, SUM(NVL(COST_MO2, 0)) AS COST_MO2
+        FROM TGK_GB_HISENSE.V_HITACH_ZXSLR_CONS
+       WHERE GJAHR = SUBSTR(P_SCENARIO, 1, 4)
+         AND POPER = P_PERIODO
+       GROUP BY MATNR
+    )
+    SELECT P_SCENARIO, P_PERIODO, 'T0', '02', '02', '00001',
+           NULL, NULL, NULL, NULL, NULL, NULL,
+           X.AMT, SYSDATE, SESSION_USER
+      FROM (SELECT NVL(SUM(CASE WHEN MATNR = '总账成本_外销' THEN COST_MO2 END), 0) AS AMT
+              FROM OLD) X
+     WHERE X.AMT <> 0;
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S3-3  待分摊③ 物料差异
+             仅源表（老管报）有、新管报无的物料：
+             新管报该物料的「老管报来源成本合计」= 0
+             老管报来源判定：NVL(WTD_UNIT_COST,0) <> 0 OR SRC_DETAIL = 'GB_ZXSLR'
+             按 MATNR 唯一（OLD 已 GROUP BY MATNR），保留物料级明细便于事后核对
+       ---------------------------------------------------------------------- */
+    INSERT INTO ZTAB_BSFT_BASE1
+      (COD_SCENARIO, COD_PERIODO, COD_CATEGORIA, SCENE, POOL_ID, NUM,
+       COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, D_SALE_DEPT, MATERIAL_CODE,
+       AMT_T0, DATEUPD, USERUPD)
+    WITH OLD AS
+    (
+      SELECT MATNR, SUM(NVL(COST_MO2, 0)) AS COST_MO2
+        FROM TGK_GB_HISENSE.V_HITACH_ZXSLR_CONS
+       WHERE GJAHR = SUBSTR(P_SCENARIO, 1, 4)
+         AND POPER = P_PERIODO
+       GROUP BY MATNR
+    ),
+    SRCMAT AS
+    (
+      SELECT T.MATERIAL_CODE
+        FROM AW_MR9_REVM05_000001_TEMP T
+       WHERE T.COD_SCENARIO = P_SCENARIO
+         AND T.COD_PERIODO  = P_PERIODO
+         AND T.COD_AZIENDA  IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                 WHERE SESSION_ID = V_SESSION_ID
+                                   AND (ELEM LIKE '17%' OR ELEM = '6240'))
+         AND T.MATERIAL_CODE IS NOT NULL
+         AND (NVL(T.WTD_UNIT_COST, 0) <> 0 OR T.SRC_DETAIL = 'GB_ZXSLR')
+         AND NVL(T.SRC_DETAIL, '|') <> 'BSFT'
+       GROUP BY T.MATERIAL_CODE
+      HAVING SUM(NVL(T.DOM_PSI_COST, 0) + NVL(T.FAC_EXTERNAL_SALE_COST, 0)) <> 0
+    )
+    SELECT P_SCENARIO, P_PERIODO, 'T0', '03', '03',
+           SUBSTR('000000' || ROWNUM, -5),
+           NULL, NULL, NULL, NULL, NULL, O.MATNR,
+           O.COST_MO2, SYSDATE, SESSION_USER
+      FROM OLD O
+     WHERE O.MATNR NOT LIKE '%总账%'
+       AND O.COST_MO2 <> 0
+       AND NOT EXISTS (SELECT 1 FROM SRCMAT M WHERE M.MATERIAL_CODE = O.MATNR);
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S4-4  待分摊④ 管法差
+             新管报：物料为空、管法差异项有值且非 ZZZZ
+             按 OID 一行（OID 唯一，1:1），池 = 全 050 节点一张
+       ---------------------------------------------------------------------- */
+    INSERT INTO ZTAB_BSFT_BASE1
+      (COD_SCENARIO, COD_PERIODO, COD_CATEGORIA, SCENE, POOL_ID, NUM, OID,
+       COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, D_SALE_DEPT, MATERIAL_CODE,
+       AMT_T0, DATEUPD, USERUPD)
+    SELECT P_SCENARIO, P_PERIODO, 'T0', '04', '04',
+           SUBSTR('000000' || ROW_NUMBER() OVER (ORDER BY X.OID), -5), X.OID,
+           X.COD_AZIENDA, X.COD_DEST2, X.COD_DEST3, X.COD_DEST4, X.D_SALE_DEPT, NULL,
+           X.AMT_T0, SYSDATE, SESSION_USER
+      FROM (SELECT T.OID, T.COD_AZIENDA, T.COD_DEST2, T.COD_DEST3, T.COD_DEST4, T.D_SALE_DEPT,
+                   SUM(NVL(T.SALE_COGS, 0)) AS AMT_T0
+              FROM AW_MR9_REVM05_000001_TEMP T
+             WHERE T.COD_SCENARIO = P_SCENARIO
+               AND T.COD_PERIODO  = P_PERIODO
+               AND T.COD_AZIENDA  IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                       WHERE SESSION_ID = V_SESSION_ID
+                                         AND (ELEM LIKE '17%' OR ELEM = '6240'))
+               AND T.D_DIFF_TYPE IS NOT NULL
+               AND T.D_DIFF_TYPE <> 'ZZZZ'
+               AND NVL(T.SRC_DETAIL, '|') <> 'BSFT'
+               AND T.MATERIAL_CODE IS NULL
+             GROUP BY T.OID, T.COD_AZIENDA, T.COD_DEST2, T.COD_DEST3, T.COD_DEST4, T.D_SALE_DEPT
+            HAVING SUM(NVL(T.SALE_COGS, 0)) <> 0) X;
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S4-5  待分摊⑤ 手工调整兜底
+             新管报：物料为空、类别 GA00_CON%（手工调整）、业务管理单元不在 12-海外
+             每个业务管理单元一张池（跨公司，不带公司隔离）
+             与④用 D_DIFF_TYPE 互斥，防止同一行被两个池各摊一次
+             按源行逐笔写 T0（带 OID 与全部维度），池合计由 S5 按 POOL_ID 汇总，
+             这样过程表能看到「哪一笔待摊了多少」，不会被池汇总吃掉明细
+       ---------------------------------------------------------------------- */
+    INSERT INTO ZTAB_BSFT_BASE1
+      (COD_SCENARIO, COD_PERIODO, COD_CATEGORIA, SCENE, POOL_ID, NUM, OID,
+       COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, D_SALE_DEPT, MATERIAL_CODE,
+       AMT_T0, DATEUPD, USERUPD)
+    SELECT P_SCENARIO, P_PERIODO, 'T0', '05', NVL(X.D_SALE_DEPT, 'ZZZZ'),
+           SUBSTR('000000' || ROW_NUMBER() OVER (ORDER BY X.OID), -5), X.OID,
+           X.COD_AZIENDA, X.COD_DEST2, X.COD_DEST3, X.COD_DEST4, NVL(X.D_SALE_DEPT, 'ZZZZ'), NULL,
+           X.AMT_T0, SYSDATE, SESSION_USER
+      FROM (SELECT T.OID, T.COD_AZIENDA, T.COD_DEST2, T.COD_DEST3, T.COD_DEST4, T.D_SALE_DEPT,
+                   SUM(NVL(T.SALE_COGS, 0)) AS AMT_T0
+              FROM AW_MR9_REVM05_000001_TEMP T
+             WHERE T.COD_SCENARIO = P_SCENARIO
+               AND T.COD_PERIODO  = P_PERIODO
+               AND T.COD_AZIENDA  IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                       WHERE SESSION_ID = V_SESSION_ID
+                                         AND (ELEM LIKE '17%' OR ELEM = '6240'))
+               AND T.COD_CATEGORIA LIKE 'GA00_CON%'
+               AND NVL(T.SRC_DETAIL, '|') <> 'BSFT'
+               AND T.MATERIAL_CODE IS NULL
+               AND NVL(T.D_DIFF_TYPE, 'ZZZZ') = 'ZZZZ'
+               AND NOT EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1 H
+                                WHERE H.COD_SCENARIO = P_SCENARIO
+                                  AND H.COD_PERIODO  = P_PERIODO
+                                  AND H.COD_CATEGORIA = 'MAP'
+                                  AND H.POOL_ID = CASE WHEN INSTR(T.D_SALE_DEPT, '.') > 0
+                                                       THEN SUBSTR(T.D_SALE_DEPT, INSTR(T.D_SALE_DEPT, '.') + 1)
+                                                       ELSE NVL(T.D_SALE_DEPT, 'ZZZZ') END)
+             GROUP BY T.OID, T.COD_AZIENDA, T.COD_DEST2, T.COD_DEST3, T.COD_DEST4, T.D_SALE_DEPT
+            HAVING SUM(NVL(T.SALE_COGS, 0)) <> 0) X;
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S5  分摊因子池（5 段 UNION ALL，一段一个场景）
+           通用限制：050 节点 / 老管报来源成本<>0 / 非 BSFT / 物料不为空 /
+                     管法差异项为空或 ZZZZ / 物料不在剔除集合
+           ①②③④ 池金额取「单行内联视图 CROSS JOIN」，不产生笛卡尔积；
+           ⑤ 池汇总按 POOL_ID 唯一后等值 JOIN（1:N，不放大接收行）；
+           12-海外 判定一律 EXISTS / NOT EXISTS 半连接，不做 JOIN
+       ---------------------------------------------------------------------- */
+    INSERT INTO ZTAB_BSFT_BASE1
+      (COD_SCENARIO, COD_PERIODO, COD_CATEGORIA, SCENE, POOL_ID, NUM, OID,
+       COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, D_SALE_DEPT, MATERIAL_CODE,
+       AMT_T0, FACTOR_AMT, DATEUPD, USERUPD)
+    WITH CTE_AZI AS
+    (
+      SELECT ELEM FROM SESSION_AZIENDA_LIST
+       WHERE SESSION_ID = V_SESSION_ID
+         AND (ELEM LIKE '17%' OR ELEM = '6240')
+    ),
+    CTE_EXCL_MAT AS
+    (
+      SELECT MATERIAL_CODE
+        FROM TGK_FIMA_HISENSE.AW_RUL_BAFRUL_000001
+       WHERE COD_AZIENDA = '1730'
+         AND SUBSTR(P_SCENARIO, 1, 4) || P_PERIODO
+             BETWEEN NVL(VALID_FR, '000000') AND NVL(VALID_TO, '999999')
+      UNION
+      SELECT MATERIAL_CODE_R
+        FROM TGK_FIMA_HISENSE.AW_RUL_RDEMAT_000001
+       WHERE COMPANY_CODE_R = '050'
+    ),
+    BASE AS
+    (
+      SELECT T.OID, T.COD_AZIENDA, T.COD_DEST2, T.COD_DEST3, T.COD_DEST4,
+             T.D_SALE_DEPT, T.MATERIAL_CODE,
+             NVL(T.DOM_PSI_COST, 0)           AS DOM_AMT,
+             NVL(T.FAC_EXTERNAL_SALE_COST, 0) AS FAC_AMT,
+             CASE WHEN INSTR(T.D_SALE_DEPT, '.') > 0
+                  THEN SUBSTR(T.D_SALE_DEPT, INSTR(T.D_SALE_DEPT, '.') + 1)
+                  ELSE NVL(T.D_SALE_DEPT, 'ZZZZ') END AS DEPT_CODE
+        FROM AW_MR9_REVM05_000001_TEMP T
+       WHERE T.COD_SCENARIO = P_SCENARIO
+         AND T.COD_PERIODO  = P_PERIODO
+         AND T.COD_AZIENDA  IN (SELECT ELEM FROM CTE_AZI)
+         AND (NVL(T.WTD_UNIT_COST, 0) <> 0 OR T.SRC_DETAIL = 'GB_ZXSLR')
+         AND NVL(T.SRC_DETAIL, '|') <> 'BSFT'
+         AND T.MATERIAL_CODE IS NOT NULL
+         AND NVL(T.D_DIFF_TYPE, 'ZZZZ') = 'ZZZZ'
+         AND NOT EXISTS (SELECT 1 FROM CTE_EXCL_MAT X WHERE X.MATERIAL_CODE = T.MATERIAL_CODE)
+    )
+    /* ① 总账内销：DOM_PSI_COST 因子，接收方不在 12-海外 */
+    SELECT P_SCENARIO, P_PERIODO, 'RS', '01', '01', SUBSTR('000000' || ROWNUM, -5), B.OID,
+           B.COD_AZIENDA, B.COD_DEST2, B.COD_DEST3, B.COD_DEST4, B.D_SALE_DEPT, B.MATERIAL_CODE,
+           P.AMT_T0, B.DOM_AMT, SYSDATE, SESSION_USER
+      FROM BASE B
+     CROSS JOIN (SELECT NVL(SUM(AMT_T0), 0) AS AMT_T0 FROM ZTAB_BSFT_BASE1
+                  WHERE COD_SCENARIO = P_SCENARIO AND COD_PERIODO = P_PERIODO
+                    AND COD_CATEGORIA = 'T0' AND SCENE = '01') P
+     WHERE B.DOM_AMT <> 0
+       AND P.AMT_T0 <> 0
+       AND NOT EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1 H
+                        WHERE H.COD_SCENARIO = P_SCENARIO
+                          AND H.COD_PERIODO  = P_PERIODO
+                          AND H.COD_CATEGORIA = 'MAP'
+                          AND H.POOL_ID = B.DEPT_CODE)
+    UNION ALL
+    /* ② 总账外销：FAC_EXTERNAL_SALE_COST 因子，接收方在 12-海外 */
+    SELECT P_SCENARIO, P_PERIODO, 'RS', '02', '02', SUBSTR('000000' || ROWNUM, -5), B.OID,
+           B.COD_AZIENDA, B.COD_DEST2, B.COD_DEST3, B.COD_DEST4, B.D_SALE_DEPT, B.MATERIAL_CODE,
+           P.AMT_T0, B.FAC_AMT, SYSDATE, SESSION_USER
+      FROM BASE B
+     CROSS JOIN (SELECT NVL(SUM(AMT_T0), 0) AS AMT_T0 FROM ZTAB_BSFT_BASE1
+                  WHERE COD_SCENARIO = P_SCENARIO AND COD_PERIODO = P_PERIODO
+                    AND COD_CATEGORIA = 'T0' AND SCENE = '02') P
+     WHERE B.FAC_AMT <> 0
+       AND P.AMT_T0 <> 0
+       AND EXISTS     (SELECT 1 FROM ZTAB_BSFT_BASE1 H
+                        WHERE H.COD_SCENARIO = P_SCENARIO
+                          AND H.COD_PERIODO  = P_PERIODO
+                          AND H.COD_CATEGORIA = 'MAP'
+                          AND H.POOL_ID = B.DEPT_CODE)
+    UNION ALL
+    /* ③ 物料差异：DOM+FAC 因子，不分内外销 */
+    SELECT P_SCENARIO, P_PERIODO, 'RS', '03', '03', SUBSTR('000000' || ROWNUM, -5), B.OID,
+           B.COD_AZIENDA, B.COD_DEST2, B.COD_DEST3, B.COD_DEST4, B.D_SALE_DEPT, B.MATERIAL_CODE,
+           P.AMT_T0, B.DOM_AMT + B.FAC_AMT, SYSDATE, SESSION_USER
+      FROM BASE B
+     CROSS JOIN (SELECT NVL(SUM(AMT_T0), 0) AS AMT_T0 FROM ZTAB_BSFT_BASE1
+                  WHERE COD_SCENARIO = P_SCENARIO AND COD_PERIODO = P_PERIODO
+                    AND COD_CATEGORIA = 'T0' AND SCENE = '03') P
+     WHERE (B.DOM_AMT + B.FAC_AMT) <> 0
+       AND P.AMT_T0 <> 0
+    UNION ALL
+    /* ④ 管法差：DOM_PSI_COST 因子，接收方不在 12-海外 */
+    SELECT P_SCENARIO, P_PERIODO, 'RS', '04', '04', SUBSTR('000000' || ROWNUM, -5), B.OID,
+           B.COD_AZIENDA, B.COD_DEST2, B.COD_DEST3, B.COD_DEST4, B.D_SALE_DEPT, B.MATERIAL_CODE,
+           P.AMT_T0, B.DOM_AMT, SYSDATE, SESSION_USER
+      FROM BASE B
+     CROSS JOIN (SELECT NVL(SUM(AMT_T0), 0) AS AMT_T0 FROM ZTAB_BSFT_BASE1
+                  WHERE COD_SCENARIO = P_SCENARIO AND COD_PERIODO = P_PERIODO
+                    AND COD_CATEGORIA = 'T0' AND SCENE = '04') P
+     WHERE B.DOM_AMT <> 0
+       AND P.AMT_T0 <> 0
+       AND NOT EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1 H
+                        WHERE H.COD_SCENARIO = P_SCENARIO
+                          AND H.COD_PERIODO  = P_PERIODO
+                          AND H.COD_CATEGORIA = 'MAP'
+                          AND H.POOL_ID = B.DEPT_CODE)
+    UNION ALL
+    /* ⑤ 手工调整兜底：DOM+FAC 因子，接收方与源行同一业务管理单元 */
+    SELECT P.COD_SCENARIO, P.COD_PERIODO, 'RS', '05', P.POOL_ID, SUBSTR('000000' || ROWNUM, -5), B.OID,
+           B.COD_AZIENDA, B.COD_DEST2, B.COD_DEST3, B.COD_DEST4, B.D_SALE_DEPT, B.MATERIAL_CODE,
+           P.AMT_T0, B.DOM_AMT + B.FAC_AMT, SYSDATE, SESSION_USER
+      FROM BASE B
+    INNER JOIN (SELECT COD_SCENARIO, COD_PERIODO, POOL_ID, SUM(AMT_T0) AS AMT_T0
+                  FROM ZTAB_BSFT_BASE1
+                 WHERE COD_SCENARIO = P_SCENARIO AND COD_PERIODO = P_PERIODO
+                   AND COD_CATEGORIA = 'T0' AND SCENE = '05'
+                 GROUP BY COD_SCENARIO, COD_PERIODO, POOL_ID) P
+       ON P.POOL_ID = NVL(B.D_SALE_DEPT, 'ZZZZ')   /* ⑤ 池键用 D_SALE_DEPT 原值，不做点号剥离，与 T0 侧一致 */
+     WHERE (B.DOM_AMT + B.FAC_AMT) <> 0;
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S6  按池汇总分母
+           USING 已按 SCENE+POOL_ID 收敛，每个池只有 1 行，不会 ORA-30926
+       ---------------------------------------------------------------------- */
+    MERGE INTO ZTAB_BSFT_BASE1 A
+    USING (
+      SELECT COD_SCENARIO, COD_PERIODO, SCENE, POOL_ID, SUM(FACTOR_AMT) AS FACTOR_SUM
+        FROM ZTAB_BSFT_BASE1
+       WHERE COD_SCENARIO = P_SCENARIO
+         AND COD_PERIODO  = P_PERIODO
+         AND COD_CATEGORIA = 'RS'
+       GROUP BY COD_SCENARIO, COD_PERIODO, SCENE, POOL_ID
+    ) B
+    ON (A.COD_SCENARIO = B.COD_SCENARIO
+    AND A.COD_PERIODO  = B.COD_PERIODO
+    AND A.COD_CATEGORIA = 'RS'
+    AND A.SCENE        = B.SCENE
+    AND A.POOL_ID      = B.POOL_ID)
+    WHEN MATCHED THEN UPDATE SET A.FACTOR_SUM = B.FACTOR_SUM;
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S7  比例 + 分摊额
+           DECODE 防除零；因子合计为 0 的池标 N（未分摊，金额留在 T0 不动）
+       ---------------------------------------------------------------------- */
+    UPDATE ZTAB_BSFT_BASE1
+       SET RATE       = DECODE(NVL(FACTOR_SUM, 0), 0, 0, FACTOR_AMT / FACTOR_SUM),
+           ALLOC_AMT  = DECODE(NVL(FACTOR_SUM, 0), 0, 0,
+                               ROUND(FACTOR_AMT / FACTOR_SUM * AMT_T0, 2)),
+           IS_SUCCESS = DECODE(NVL(FACTOR_SUM, 0), 0, 'N', 'Y')
+     WHERE COD_SCENARIO = P_SCENARIO
+       AND COD_PERIODO  = P_PERIODO
+       AND COD_CATEGORIA = 'RS';
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S8  尾差配平
+           ROUND(,2) 必然留 1 分钱级残差，不收敛则池内已摊<>待摊，
+           PSI_COMB_COST 总额会漂。把差额挂到池内因子最大的那行
+       ---------------------------------------------------------------------- */
+    MERGE INTO ZTAB_BSFT_BASE1 A
+    USING (
+      SELECT SCENE, POOL_ID, NUM,
+             SUM(ALLOC_AMT) OVER (PARTITION BY SCENE, POOL_ID) AS SUM_ALLOC,
+             MAX(AMT_T0)    OVER (PARTITION BY SCENE, POOL_ID) AS SUM_T0,
+             ROW_NUMBER()   OVER (PARTITION BY SCENE, POOL_ID
+                                  ORDER BY FACTOR_AMT DESC NULLS LAST, NUM) AS RN
+        FROM ZTAB_BSFT_BASE1
+       WHERE COD_SCENARIO = P_SCENARIO
+         AND COD_PERIODO  = P_PERIODO
+         AND COD_CATEGORIA = 'RS'
+         AND NVL(FACTOR_SUM, 0) <> 0
+    ) B
+    ON (A.COD_SCENARIO = P_SCENARIO
+    AND A.COD_PERIODO  = P_PERIODO
+    AND A.COD_CATEGORIA = 'RS'
+    AND A.SCENE         = B.SCENE
+    AND A.POOL_ID       = B.POOL_ID
+    AND A.NUM           = B.NUM
+    AND B.RN            = 1)
+    WHEN MATCHED THEN UPDATE SET A.ALLOC_AMT = A.ALLOC_AMT + (B.SUM_T0 - B.SUM_ALLOC);
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S9  按接收行 OID 汇总写回 OTH_ASSESS_COST
+           多场景落到同一接收行的，在这里汇总后一次覆盖（需求注意事项 5）
+           USING 按 OID 唯一，ON 带场景+期间，不会 ORA-30926
+       ---------------------------------------------------------------------- */
+    MERGE INTO AW_MR9_REVM05_000001_TEMP A
+    USING (
+      SELECT OID, SUM(ALLOC_AMT) AS ALLOC_AMT
+        FROM ZTAB_BSFT_BASE1
+       WHERE COD_SCENARIO = P_SCENARIO
+         AND COD_PERIODO  = P_PERIODO
+         AND COD_CATEGORIA = 'RS'
+       GROUP BY OID
+      HAVING SUM(ALLOC_AMT) <> 0
+    ) B
+    ON (A.COD_SCENARIO = P_SCENARIO
+    AND A.COD_PERIODO  = P_PERIODO
+    AND A.OID          = B.OID)
+    WHEN MATCHED THEN UPDATE SET A.OTH_ASSESS_COST = B.ALLOC_AMT;
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S10-4  场景④ 冲销原行（管法差）
+              只在「已分摊」时冲：池 04 存在 RATE<>0 的接收方
+              从 TEMP 取原始行，不拿池汇总行（池汇总丢了维度）
+              成本字段取相反数，其他金额字段一律 0，维度同原行
+              COD_CATEGORIA 继承原行（不写死 ZAMOUNT）：原行 ZAMOUNT/ZFAMOUNT 时冲销行
+              经第 5 步归入 ENT_COST、原行 GA00_CON% 时归入 CADJ_COST，与原行同口径相抵
+
+              未写入的字段（写 NULL）：D_BUS_SCE_S / STD_QTY / MA_SALE_COGS /
+              SHIPPING_ORDER / ASSESS_NM_ALLOC_COST / ASSESS_MANG_* —— 这些字段
+              后续由步骤 9（事业部/产销存打标）与考核成本段按 PROVENIENZA 重算，
+              继承原值反而会和重算结果打架
+       ---------------------------------------------------------------------- */
+    INSERT INTO AW_MR9_REVM05_000001_TEMP
+    (
+      OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4,
+      AGENCY_CODE, AGENCY_NAME, CUST_CODE, CUST_NAME, D_SALE_DEPT,
+      D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_ECOM_BU, D_MARKET_PNT, D_PRO_SSER, D_SPEC_SEC,
+      D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES,
+      D_TECH_TYPE, D_PRO_CLASS, D_MODEL_LCA, D_PRO_TYPE, D_PRC_GRP, D_POL_CLASS, CUST_UNITY_NAME, CREDIT_LEVEL_NAME,
+      CUST_NATURE_NAME, CUST_TYPE_NAME, SOLD_TO_CODE,
+      SOLD_TO_NAME, MATERIAL_CODE, MATERIAL_NAME, IS_MINILED_CODE, SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE,
+      MODEL_NAME, BATCH_ID, MATERIAL_GROUP_CODE, SHOP_CODE,
+      SHOP_NAME, MAP_QTY, ORG_REV, POLICY_AMT, ASSESSED_REV, SALE_COGS, BEG_UNREAL_GP, END_UNREAL_GP, COMB_COST,
+      AVG_UNIT_COST, COMB_COST_AVG, PSI_COMB_COST, WTD_UNIT_COST,
+      OTH_ASSESS_COST, PROVENIENZA, USERUPD, DATEUPD, EN_VERSION, POLICY_CASH_PD, COD_CATEGORIA, CUSTOMER_MODEL,
+      FAC_EXTERNAL_SALE_REVENUE,
+      IM_SALE_COST, COD_AZI_CTP, MANG_COST, D_DATA_BLOCK, D_DIFF_TYPE, D_ADJ_TYPE, CN_CLASS_MARK_CODE,
+      CN_CLASS_MARK_NAME, SALE_CERT_TYPE, CN_SALE_COGS, CN_ORG_REV, CN_MAP_ZUM,
+      COD_AZI_CTP_ORG, D_OPER_TYPE, ELIM_COST, ELIM_REV, COMB_REV, MANG_REV, ENT_QTY, ENT_QTY_ADJ, ELIM_QTY,
+      CADJ_QTY, MANG_QTY, ENT_REV, ENT_REV_ADJ, CADJ_REV, ENT_COST,
+      ENT_COST_ADJ, CADJ_COST, CN_ELIM_QTY, CN_MANG_QTY, CN_ELIM_REV, CN_MANG_REV, CN_ELIM_COST, CN_MANG_COST,
+      BU_MANG_COST, FAC_MANG_COST, IM_MANG_COST, NOTE, ORG_QTY,
+      FAC_MANG_REV, IM_MANG_REV, FAC_CADJ_REV, CN_CADJ_REV, VAR_ALLOC_COST, COD_DEST1, BILL_QTY,
+      DOM_PSI_COST, FAC_EXTERNAL_SALE_COST, D_MINILED,
+      D_EFF_CLASS, D_BU_SHOP, D_EC_STORE, D_UNICUSTGRP, D_BRANCH, D_CHANNEL_BU
+    )
+    SELECT NEWID(), T.COD_SCENARIO, T.COD_PERIODO, 'BSFT', 'S640100', T.COD_AZIENDA, T.COD_DEST2, T.COD_DEST3,
+           NVL(T.COD_DEST4, 'ZZZZ'),
+           T.AGENCY_CODE, T.AGENCY_NAME, T.CUST_CODE, T.CUST_NAME, T.D_SALE_DEPT,
+           T.D_CHANNEL, T.D_MODE, T.D_ONOFFLINE, T.D_CNL_C_TYPE, T.D_IND_C_TYPE, T.D_ECOM_BU, T.D_MARKET_PNT,
+           T.D_PRO_SSER, T.D_SPEC_SEC,
+           T.D_PRO_TYPE_S, T.D_PRO_STAGE, T.D_PRI_RANGE, T.D_PRO_SERIES,
+           T.D_TECH_TYPE, T.D_PRO_CLASS, T.D_MODEL_LCA, T.D_PRO_TYPE, T.D_PRC_GRP, T.D_POL_CLASS, T.CUST_UNITY_NAME,
+           T.CREDIT_LEVEL_NAME,
+           T.CUST_NATURE_NAME, T.CUST_TYPE_NAME, T.SOLD_TO_CODE,
+           T.SOLD_TO_NAME, T.MATERIAL_CODE, T.MATERIAL_NAME, T.IS_MINILED_CODE, T.SALE_MODEL_CODE, T.SALE_MODEL_NAME,
+           T.MODEL_CODE,
+           T.MODEL_NAME, T.BATCH_ID, T.MATERIAL_GROUP_CODE, T.SHOP_CODE,
+           T.SHOP_NAME, 0, 0, 0, 0, -1 * NVL(T.SALE_COGS, 0), 0, 0, 0,
+           0, 0, 0, 0,
+           0, 'CPM_SP_BSFT_M_T0', SESSION_USER, SYSDATE, 0, 0, T.COD_CATEGORIA, T.CUSTOMER_MODEL,  /* 冲销行类别继承原行，见版本记录 20261118 14:58 */
+           0,
+           0, T.COD_AZI_CTP, 0, T.D_DATA_BLOCK, T.D_DIFF_TYPE, T.D_ADJ_TYPE, T.CN_CLASS_MARK_CODE,
+           T.CN_CLASS_MARK_NAME, T.SALE_CERT_TYPE, 0, 0, 0,
+           T.COD_AZI_CTP_ORG, T.D_OPER_TYPE, 0, 0, 0, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0, 0, 0,
+           0, 0, 0, T.NOTE, 0,
+           0, 0, 0, 0, 0, T.COD_DEST1, 0,
+           0, 0, T.D_MINILED,
+           T.D_EFF_CLASS, T.D_BU_SHOP, T.D_EC_STORE, T.D_UNICUSTGRP, T.D_BRANCH, T.D_CHANNEL_BU
+      FROM AW_MR9_REVM05_000001_TEMP T
+     WHERE T.COD_SCENARIO = P_SCENARIO
+       AND T.COD_PERIODO  = P_PERIODO
+       AND T.COD_AZIENDA  IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                               WHERE SESSION_ID = V_SESSION_ID
+                                 AND (ELEM LIKE '17%' OR ELEM = '6240'))
+       AND NVL(T.SRC_DETAIL, '|') <> 'BSFT'
+       AND NVL(T.SALE_COGS, 0) <> 0
+       AND T.D_DIFF_TYPE IS NOT NULL
+       AND T.D_DIFF_TYPE <> 'ZZZZ'
+       AND T.MATERIAL_CODE IS NULL
+       AND EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1 B
+                    WHERE B.COD_SCENARIO = P_SCENARIO
+                      AND B.COD_PERIODO  = P_PERIODO
+                      AND B.COD_CATEGORIA = 'RS'
+                      AND B.SCENE = '04'
+                      AND NVL(B.RATE, 0) <> 0);
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S10-5  场景⑤ 冲销原行（手工调整兜底）
+              所在池（业务管理单元）已分摊才冲
+              COD_CATEGORIA 继承原行：本段原行为 GA00_CON%，成本进 CADJ_COST，
+              冲销行必须同类别才能相抵（写死 ZAMOUNT 会让原行 CADJ_COST 净不掉，合并成本变 2 倍）
+       ---------------------------------------------------------------------- */
+    INSERT INTO AW_MR9_REVM05_000001_TEMP
+    (
+      OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4,
+      AGENCY_CODE, AGENCY_NAME, CUST_CODE, CUST_NAME, D_SALE_DEPT,
+      D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_ECOM_BU, D_MARKET_PNT, D_PRO_SSER, D_SPEC_SEC,
+      D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES,
+      D_TECH_TYPE, D_PRO_CLASS, D_MODEL_LCA, D_PRO_TYPE, D_PRC_GRP, D_POL_CLASS, CUST_UNITY_NAME, CREDIT_LEVEL_NAME,
+      CUST_NATURE_NAME, CUST_TYPE_NAME, SOLD_TO_CODE,
+      SOLD_TO_NAME, MATERIAL_CODE, MATERIAL_NAME, IS_MINILED_CODE, SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE,
+      MODEL_NAME, BATCH_ID, MATERIAL_GROUP_CODE, SHOP_CODE,
+      SHOP_NAME, MAP_QTY, ORG_REV, POLICY_AMT, ASSESSED_REV, SALE_COGS, BEG_UNREAL_GP, END_UNREAL_GP, COMB_COST,
+      AVG_UNIT_COST, COMB_COST_AVG, PSI_COMB_COST, WTD_UNIT_COST,
+      OTH_ASSESS_COST, PROVENIENZA, USERUPD, DATEUPD, EN_VERSION, POLICY_CASH_PD, COD_CATEGORIA, CUSTOMER_MODEL,
+      FAC_EXTERNAL_SALE_REVENUE,
+      IM_SALE_COST, COD_AZI_CTP, MANG_COST, D_DATA_BLOCK, D_DIFF_TYPE, D_ADJ_TYPE, CN_CLASS_MARK_CODE,
+      CN_CLASS_MARK_NAME, SALE_CERT_TYPE, CN_SALE_COGS, CN_ORG_REV, CN_MAP_ZUM,
+      COD_AZI_CTP_ORG, D_OPER_TYPE, ELIM_COST, ELIM_REV, COMB_REV, MANG_REV, ENT_QTY, ENT_QTY_ADJ, ELIM_QTY,
+      CADJ_QTY, MANG_QTY, ENT_REV, ENT_REV_ADJ, CADJ_REV, ENT_COST,
+      ENT_COST_ADJ, CADJ_COST, CN_ELIM_QTY, CN_MANG_QTY, CN_ELIM_REV, CN_MANG_REV, CN_ELIM_COST, CN_MANG_COST,
+      BU_MANG_COST, FAC_MANG_COST, IM_MANG_COST, NOTE, ORG_QTY,
+      FAC_MANG_REV, IM_MANG_REV, FAC_CADJ_REV, CN_CADJ_REV, VAR_ALLOC_COST, COD_DEST1, BILL_QTY,
+      DOM_PSI_COST, FAC_EXTERNAL_SALE_COST, D_MINILED,
+      D_EFF_CLASS, D_BU_SHOP, D_EC_STORE, D_UNICUSTGRP, D_BRANCH, D_CHANNEL_BU
+    )
+    SELECT NEWID(), T.COD_SCENARIO, T.COD_PERIODO, 'BSFT', 'S640100', T.COD_AZIENDA, T.COD_DEST2, T.COD_DEST3,
+           NVL(T.COD_DEST4, 'ZZZZ'),
+           T.AGENCY_CODE, T.AGENCY_NAME, T.CUST_CODE, T.CUST_NAME, T.D_SALE_DEPT,
+           T.D_CHANNEL, T.D_MODE, T.D_ONOFFLINE, T.D_CNL_C_TYPE, T.D_IND_C_TYPE, T.D_ECOM_BU, T.D_MARKET_PNT,
+           T.D_PRO_SSER, T.D_SPEC_SEC,
+           T.D_PRO_TYPE_S, T.D_PRO_STAGE, T.D_PRI_RANGE, T.D_PRO_SERIES,
+           T.D_TECH_TYPE, T.D_PRO_CLASS, T.D_MODEL_LCA, T.D_PRO_TYPE, T.D_PRC_GRP, T.D_POL_CLASS, T.CUST_UNITY_NAME,
+           T.CREDIT_LEVEL_NAME,
+           T.CUST_NATURE_NAME, T.CUST_TYPE_NAME, T.SOLD_TO_CODE,
+           T.SOLD_TO_NAME, T.MATERIAL_CODE, T.MATERIAL_NAME, T.IS_MINILED_CODE, T.SALE_MODEL_CODE, T.SALE_MODEL_NAME,
+           T.MODEL_CODE,
+           T.MODEL_NAME, T.BATCH_ID, T.MATERIAL_GROUP_CODE, T.SHOP_CODE,
+           T.SHOP_NAME, 0, 0, 0, 0, -1 * NVL(T.SALE_COGS, 0), 0, 0, 0,
+           0, 0, 0, 0,
+           0, 'CPM_SP_BSFT_M_T0', SESSION_USER, SYSDATE, 0, 0, T.COD_CATEGORIA, T.CUSTOMER_MODEL,  /* 冲销行类别继承原行，见版本记录 20261118 14:58 */
+           0,
+           0, T.COD_AZI_CTP, 0, T.D_DATA_BLOCK, T.D_DIFF_TYPE, T.D_ADJ_TYPE, T.CN_CLASS_MARK_CODE,
+           T.CN_CLASS_MARK_NAME, T.SALE_CERT_TYPE, 0, 0, 0,
+           T.COD_AZI_CTP_ORG, T.D_OPER_TYPE, 0, 0, 0, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0,
+           0, 0, 0, 0, 0, 0, 0, 0,
+           0, 0, 0, T.NOTE, 0,
+           0, 0, 0, 0, 0, T.COD_DEST1, 0,
+           0, 0, T.D_MINILED,
+           T.D_EFF_CLASS, T.D_BU_SHOP, T.D_EC_STORE, T.D_UNICUSTGRP, T.D_BRANCH, T.D_CHANNEL_BU
+      FROM AW_MR9_REVM05_000001_TEMP T
+     WHERE T.COD_SCENARIO = P_SCENARIO
+       AND T.COD_PERIODO  = P_PERIODO
+       AND T.COD_AZIENDA  IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                               WHERE SESSION_ID = V_SESSION_ID
+                                 AND (ELEM LIKE '17%' OR ELEM = '6240'))
+       AND NVL(T.SRC_DETAIL, '|') <> 'BSFT'
+       AND NVL(T.SALE_COGS, 0) <> 0
+       AND T.COD_CATEGORIA LIKE 'GA00_CON%'
+       AND T.MATERIAL_CODE IS NULL
+       AND NVL(T.D_DIFF_TYPE, 'ZZZZ') = 'ZZZZ'
+       AND NOT EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1 H
+                        WHERE H.COD_SCENARIO = P_SCENARIO
+                          AND H.COD_PERIODO  = P_PERIODO
+                          AND H.COD_CATEGORIA = 'MAP'
+                          AND H.POOL_ID = CASE WHEN INSTR(T.D_SALE_DEPT, '.') > 0
+                                               THEN SUBSTR(T.D_SALE_DEPT, INSTR(T.D_SALE_DEPT, '.') + 1)
+                                               ELSE NVL(T.D_SALE_DEPT, 'ZZZZ') END)
+       AND EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1 B
+                    WHERE B.COD_SCENARIO = P_SCENARIO
+                      AND B.COD_PERIODO  = P_PERIODO
+                      AND B.COD_CATEGORIA = 'RS'
+                      AND B.SCENE = '05'
+                      AND B.POOL_ID = NVL(T.D_SALE_DEPT, 'ZZZZ')
+                      AND NVL(B.RATE, 0) <> 0);
+    COMMIT;
+
+    /* ----------------------------------------------------------------------
+       S11  未分摊告警 + 结束日志
+            因子合计为 0 的池，金额静默留在 T0（需求：未分摊不冲销，
+            金额停在此处，靠这条日志和对账 SQL 暴露）
+       ---------------------------------------------------------------------- */
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK, COD_AZIENDA)
+    SELECT 'CPM_SP_M2M_REV_M', '3  BSFT告警：池未分摊', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO,
+           'SCENE=' || A.SCENE || ' POOL=' || A.POOL_ID || ' 待分摊金额=' || TO_CHAR(A.AMT_T0), P_AZIENDA
+      FROM (SELECT SCENE, POOL_ID, SUM(AMT_T0) AS AMT_T0
+              FROM ZTAB_BSFT_BASE1
+             WHERE COD_SCENARIO = P_SCENARIO AND COD_PERIODO = P_PERIODO
+               AND COD_CATEGORIA = 'T0'
+             GROUP BY SCENE, POOL_ID) A
+     WHERE A.AMT_T0 <> 0
+       AND NOT EXISTS (SELECT 1 FROM ZTAB_BSFT_BASE1 B
+                        WHERE B.COD_SCENARIO = P_SCENARIO AND B.COD_PERIODO = P_PERIODO
+                          AND B.COD_CATEGORIA = 'RS'
+                          AND B.SCENE = A.SCENE AND B.POOL_ID = A.POOL_ID
+                          AND NVL(B.FACTOR_SUM, 0) <> 0);
+
+    INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK, COD_AZIENDA)
+    SELECT 'CPM_SP_M2M_REV_M', '3  日立合并层成本分摊（BSFT）结束', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO,
+           'T0待摊=' || TO_CHAR(NVL(SUM(CASE WHEN COD_CATEGORIA = 'T0' THEN AMT_T0 END), 0)) ||
+           ' 已摊='   || TO_CHAR(NVL(SUM(CASE WHEN COD_CATEGORIA = 'RS' THEN ALLOC_AMT END), 0)) ||
+           ' 差额='   || TO_CHAR(NVL(SUM(CASE WHEN COD_CATEGORIA = 'T0' THEN AMT_T0 END), 0)
+                              - NVL(SUM(CASE WHEN COD_CATEGORIA = 'RS' THEN ALLOC_AMT END), 0)),
+           P_AZIENDA
+      FROM ZTAB_BSFT_BASE1
+     WHERE COD_SCENARIO = P_SCENARIO
+       AND COD_PERIODO  = P_PERIODO;
+    COMMIT;
+
+END IF;
+
+/*除日立以外*/
+  UPDATE AW_MR9_REVM05_000001_TEMP
+     SET DOM_PSI_COST = NVL(ORG_QTY, 0) * NVL(WTD_UNIT_COST, 0)
+   WHERE COD_SCENARIO = P_SCENARIO
+     AND COD_PERIODO = P_PERIODO
+     AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                          WHERE SESSION_ID = V_SESSION_ID
+                            AND NOT (ELEM LIKE '17%' OR ELEM = '6240')
+                        )
+     AND COD_DEST3 IN (SELECT ELEM
+                         FROM SESSION_V_REF_DEST3_NONAME
+                        WHERE  SESSION_ID = V_SESSION_ID AND HIE = '01'
+                          AND NODE = 'HN')
+     AND PROVENIENZA = 'CPM_SP_M2M_REV_M'
+  ;
+ COMMIT;
   ------------------------------------------------------------------------------
   -- 4  插入无物料总账成本分摊数据及小B国补, OTH_ASSESS_COST, FAC_CADJ_REV, CN_CADJ_REV
   ------------------------------------------------------------------------------
@@ -3389,7 +4828,7 @@ UPDATE AW_MR9_REVM05_000001_TEMP t
                                 'GA00_REV_KH',
                                 'GA00_AF',
                                 'GA00_PA_IN',
-                                'GA00_PA_OUT') THEN
+                                'GA00_PA_OUT','GA00_ALC_CN') THEN
                            NVL(SALE_COGS, 0)
                           ELSE
                            0
@@ -3408,7 +4847,7 @@ UPDATE AW_MR9_REVM05_000001_TEMP t
     --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
         --对于收入直接调整数据也要做相同逻辑处理
      AND PROVENIENZA IN
-         ('CPM_SP_M2M_REV_M', 'INPUT_DEFORM', 'CPM_SP_ZZFT_M_T0')
+         ('CPM_SP_M2M_REV_M', 'INPUT_DEFORM', 'CPM_SP_ZZFT_M_T0', 'CPM_SP_BSFT_M_T0')  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 步骤5：日立分摊冲销行参与 ENT/CADJ 计算 */
         --排除返利价差科目余额, 不进入到管理口径，被政策分摊和政策兑现数据替换
      AND (COD_CONTO NOT IN ('S600111') OR COD_AZIENDA = '2023')
         /*20260226 新增排除锁定公司*/
@@ -3493,6 +4932,22 @@ SELECT distinct CASE
                    aw.COD_AZI_CTP
                 END AS COD_AZI_CTP,
                 AW.OID
+
+
+        --20260920FJF_ADD 二期新增字段
+      , CASE WHEN nvl(aw.D_EFF_CLASS,'|') = '|' OR aw.D_EFF_CLASS = 'ZZZZ' OR MARA.ee_level_code <> aw.D_EFF_CLASS
+           THEN NVL(MARA.ee_level_code,'ZZZZ')
+           ELSE NVL(aw.D_EFF_CLASS,'ZZZZ')
+        END AS D_EFF_CLASS
+      , CASE WHEN nvl(aw.D_BU_SHOP,'|') = '|' OR aw.D_BU_SHOP = 'ZZZZ' OR CUST_INFO.bu_code <> aw.D_BU_SHOP
+           THEN NVL(CUST_INFO.bu_code,'ZZZZ')
+           ELSE NVL(aw.D_BU_SHOP,'ZZZZ')
+        END AS D_BU_SHOP
+
+       , CASE WHEN nvl(aw.D_UNICUSTGRP,'|') = '|' OR aw.D_UNICUSTGRP = 'ZZZZ' OR CUST_INFO.cust_unity_code <> aw.D_UNICUSTGRP
+           THEN NVL(CUST_INFO.cust_unity_code,'ZZZZ')
+           ELSE NVL(aw.D_UNICUSTGRP,'ZZZZ')
+        END AS D_UNICUSTGRP
   FROM (SELECT OID,
                COD_AZI_CTP,
                model_code,
@@ -3504,6 +4959,8 @@ SELECT distinct CASE
                COD_AZIENDA,
                CUST_CODE,
                MATERIAL_CODE
+         --20260920FJF_ADD 二期新增字段
+        ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
           FROM AW_MR9_REVM05_000001_TEMP
          WHERE COD_SCENARIO = P_SCENARIO
            AND COD_PERIODO = P_PERIODO
@@ -3511,7 +4968,7 @@ SELECT distinct CASE
                                     WHERE SESSION_ID = V_SESSION_ID
                               )
          --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
-           AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0')
+           AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0', 'CPM_SP_BSFT_M_T0')  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 维度回刷补日立分摊来源 */
               /*20260226 新增排除锁定公司*/
            /* AND COD_AZIENDA NOT IN
                (SELECT COD_AZIENDA
@@ -3554,7 +5011,11 @@ UPDATE SET  T.D_MARKET_PNT = C.D_MARKET_PNT
       , T.D_PRO_CLASS = C.D_PRO_CLASS
       , T.MATERIAL_GROUP_CODE = C.MATERIAL_GROUP_CODE
       , T.model_code = C.model_code
-    , T.COD_AZI_CTP = C.COD_AZI_CTP
+      , T.COD_AZI_CTP = C.COD_AZI_CTP
+    --20260920FJF_ADD 二期新增字段
+      , T.D_EFF_CLASS = C.D_EFF_CLASS --能效等级
+      , T.D_BU_SHOP = C.D_BU_SHOP --门店所属BU
+      , T.D_UNICUSTGRP = C.D_UNICUSTGRP --统一客户组编码
       ;
   INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
     VALUES('CPM_SP_M2M_REV_M', '手工调整数据客商信息和物料信息补充更新完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '',P_AZIENDA);
@@ -3628,8 +5089,28 @@ WHERE COD_SCENARIO = P_SCENARIO
 
       )
   ;
+  --EDIT BY CHENDONG3.EX 260817 将中国区费用转政策的业务在产品公司还原的部分，对方公司置为空，以确保后续不参与抵消
+--20260831 shiqingfeng.ex 月结不上线
+--20260908 10：33 开放 20260817-2 CHENDONG3.ex  将中国区费用转政策的业务在产品公司还原的部分，对方公司置为空，以确保后续不参与抵消，开始测试
+--20261016 LIYIFAN1.EX 新增业务分类OPTY060、OPTY061
+
+UPDATE AW_MR9_REVM05_000001_TEMP T
+SET COD_AZI_CTP_ORG= '',
+    COD_AZI_CTP= ''
+WHERE ((D_OPER_TYPE IN ('OPTY039','OPTY040') AND D_ADJ_TYPE = 'REV_01_221')
+      /*ALTER BY LICHENG.EX 20261030 19:17 OPTY061 取消对方公司置空，仅 OPTY060 置空；恢复时把 'OPTY061' 加回 IN 列表*/
+      OR D_OPER_TYPE IN ('OPTY060')
+      /* 20261026 21:42 LICHENG.EX REV005_STEP_2-3 产出的研发费用品类间调整行，对方公司一并置空，不参与抵消 */
+      OR (SRC_DETAIL = 'REVM05' AND D_ADJ_TYPE = 'REV_01_229'))
+     AND COD_SCENARIO = P_SCENARIO
+     AND COD_PERIODO = P_PERIODO
+     AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                    WHERE SESSION_ID = V_SESSION_ID
+                              )
+     AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0', 'CPM_SP_BSFT_M_T0')  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 对方公司置空补日立分摊来源 */
+     ;
   ------------------------------------------------------------------------------
-  -- 6  插入抵消数据-根据有CTP的收入, 未实现不能复制, ELIM_QTY, ELIM_REV, ELIM_COST, CN_ELIM_QTY, CN_ELIM_REV, CN_ELIM_COST
+  --插入抵消数据-根据有CTP的收入, 未实现不能复制, ELIM_QTY, ELIM_REV, ELIM_COST, CN_ELIM_QTY, CN_ELIM_REV, CN_ELIM_COST
   ------------------------------------------------------------------------------
 
 INSERT /*取消并发*/ INTO AW_MR9_REVM05_000001_TEMP(
@@ -3653,7 +5134,7 @@ INSERT /*取消并发*/ INTO AW_MR9_REVM05_000001_TEMP(
   ,ORG_QTY --原始销量
   ,MAP_QTY --数量(处理后)
   ,BILL_QTY --开票销量（日立用）
-  ,STD_QTY
+  ,STD_QTY,d_oper_type
     )
 WITH CN_AZI AS (
     -- 中国区公司集合（等同于 V_CN_AZIENDA 的 LISTAGG 来源）
@@ -3736,8 +5217,13 @@ SELECT NODE,ELEM FROM SESSION_V_REF_AZIENDA S
          NVL(POLICY_CASH_PD, 0) + NVL(CADJ_REV, 0)) AS ELIM_REV,
          CASE
            /*20260810-1 shiqingfeng.ex 对方公司是中国区公司，不生成成本抵消数*/
-           WHEN NODE_200.ELEM IS NOT NULL
-             THEN 0
+           /*20260831 shiqingfeng.ex 月结不上取消逻辑*/
+           /*
+             20260908 10：38 开放 20260810-1 shiqingfeng.ex 对方公司是中国区公司，不生成成本抵消数，开始测试
+           */
+           --20260929 中国区事业部成本9月不上线
+           /*WHEN NODE_200.ELEM IS NOT NULL
+             THEN 0*/
            WHEN CN_SELL.COD_AZIENDA IS NOT NULL AND
                 CN_BUY.COD_AZIENDA IS NOT NULL THEN
             0
@@ -3767,6 +5253,7 @@ SELECT NODE,ELEM FROM SESSION_V_REF_AZIENDA S
         ,
          -1 * NVL(BILL_QTY, 0) AS BILL_QTY --开票销量（日立用）
         ,-1 * NVL(STD_QTY, 0) AS STD_QTY
+        ,d_oper_type
     FROM AW_MR9_REVM05_000001_TEMP M
     LEFT JOIN CN_AZI CN_SELL ON CN_SELL.COD_AZIENDA = M.COD_AZIENDA
     LEFT JOIN CN_AZI CN_BUY  ON CN_BUY.COD_AZIENDA  = M.COD_AZI_CTP_ORG
@@ -3784,6 +5271,8 @@ SELECT NODE,ELEM FROM SESSION_V_REF_AZIENDA S
      AND M.SRC_DETAIL <> 'ZTAB_IM_ZB'
      AND M.COD_CONTO LIKE 'S6001%'
      AND M.PROVENIENZA <> 'INPUT_DEFORM'
+     /*
+     20260907 修改人 shiqingfeng.ex 去掉所有锁定表限制，仅保留最上面参数session表限制
      AND NOT EXISTS (
          SELECT 1 FROM AW_RUL_DWMCRS_000001 T
           WHERE T.REV05_FLAG = 'Y'
@@ -3791,7 +5280,7 @@ SELECT NODE,ELEM FROM SESSION_V_REF_AZIENDA S
             AND T.COD_PERIODO = P_PERIODO
             AND T.COD_CONTO = 'ZAW_D2M_LOCK'
             AND T.COD_AZIENDA = M.COD_AZIENDA
-     )
+     )*/
      /* AND NOT
           (EXISTS (
               SELECT 1 FROM tgk_gb_hisense.FORM_DIZIONARIO_ELEMENTO t
@@ -3838,7 +5327,7 @@ DELETE FROM AW_MR9_REVM05_000001_TEMP M
 
 
   INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
-    VALUES('CPM_SP_M2M_REV_M', '6  插入抵消数据-根据有CTP的收入, 未实现不能复制完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '',P_AZIENDA);
+    VALUES('CPM_SP_M2M_REV_M', 'STEP_6  插入抵消数据-根据有CTP的收入, 未实现不能复制完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '',P_AZIENDA);
     COMMIT;
 
 /* 20260406 zhuangxinzhou 视像ZK01兑现抵消逻辑 与中国区逻辑不一致 尚未拉通，单独设置
@@ -4174,18 +5663,17 @@ INSERT INTO AW_MR9_REVM05_000001_TEMP(
          COD_AZIENDA = '6515' AND SRC_DETAIL = 'CON_INP' AND
          COD_CONTO = 'S600111')
         /*20260226 新增排除锁定公司*/
-     AND COD_AZIENDA NOT IN
+    /*
+    20260907 修改人 shiqingfeng.ex 去掉所有锁定表限制，仅保留最上面参数session表限制
+    AND COD_AZIENDA NOT IN
          (SELECT COD_AZIENDA
             FROM AW_RUL_DWMCRS_000001 T
            WHERE REV05_FLAG = 'Y'
              AND T.COD_SCENARIO = P_SCENARIO
              AND T.COD_PERIODO = P_PERIODO
-             AND T.COD_CONTO = 'ZAW_D2M_LOCK');
+             AND T.COD_CONTO = 'ZAW_D2M_LOCK')*/
+             ;
 END IF ;
-
-  INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
-    VALUES('CPM_SP_M2M_REV_M', '6  插入抵消数据完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '6  插入抵消数据',P_AZIENDA);
-    COMMIT;
 
 
 /*ELIM_COST成本抵消-法人更新为0
@@ -4361,6 +5849,128 @@ WHERE COD_SCENARIO = P_SCENARIO
   ;
 
 
+  INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', '6  插入抵消数据完成', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '6  插入抵消数据',P_AZIENDA);
+    COMMIT;
+
+
+/* REV005_STEP_6_1（古洛尼赠品抵消数还原）  */ --20260820FJF_ADD
+
+INSERT INTO AW_MR9_REVM05_000001_TEMP
+(
+  OID,COD_SCENARIO,COD_PERIODO,SRC_DETAIL,COD_CONTO,COD_CATEGORIA,COD_AZIENDA,AGENCY_CODE,AGENCY_NAME,CUSTOMER_MODEL,CUST_CODE,CUST_NAME,D_CHANNEL,D_MODE,D_ONOFFLINE
+  ,D_CNL_C_TYPE,D_IND_C_TYPE,D_ECOM_BU,CUST_UNITY_NAME,CREDIT_LEVEL_NAME,CUST_NATURE_NAME,CUST_TYPE_NAME,SOLD_TO_CODE,SOLD_TO_NAME,COD_DEST3,D_SALE_DEPT,D_DATA_BLOCK
+  ,D_DIFF_TYPE,D_ADJ_TYPE,MATERIAL_CODE,MATERIAL_NAME,COD_DEST2,COD_DEST4,D_MARKET_PNT,D_PRO_SSER,D_SPEC_SEC,D_PRO_TYPE_S,D_PRO_STAGE,D_PRI_RANGE,D_PRO_SERIES,D_TECH_TYPE
+  ,IS_MINILED_CODE,D_PRO_CLASS,D_MODEL_LCA,D_PRO_TYPE,SALE_MODEL_CODE,SALE_MODEL_NAME,MODEL_CODE,MODEL_NAME,BATCH_ID,D_PRC_GRP,MATERIAL_GROUP_CODE,SHOP_CODE,SHOP_NAME
+  ,D_POL_CLASS,COD_AZI_CTP,COD_AZI_CTP_ORG,DATEUPD,USERUPD,CN_CLASS_MARK_CODE,CN_CLASS_MARK_NAME,SALE_CERT_TYPE,D_OPER_TYPE,COD_DEST1,ELIM_QTY,CN_ELIM_QTY,ELIM_REV
+  ,CN_ELIM_REV,ELIM_COST,CN_ELIM_COST,ORG_QTY,MAP_QTY,BILL_QTY,STD_QTY,PROVENIENZA
+)
+
+SELECT NEWID() AS OID
+  ,COD_SCENARIO        --场景
+  ,COD_PERIODO         --期间
+  ,'TA' AS SRC_DETAIL          --源数据明细
+  ,COD_CONTO           --科目
+  ,'GA00_EG' AS COD_CATEGORIA       --类别
+  ,COD_AZIENDA         --账套
+  ,AGENCY_CODE         --销售部门
+  ,AGENCY_NAME         --销售部门描述
+  ,CUSTOMER_MODEL      --客户型号
+  ,CUST_CODE           --客商
+  ,CUST_NAME           --客商描述
+  ,D_CHANNEL           --销售渠道
+  ,D_MODE              --营销模式
+  ,D_ONOFFLINE         --渠道分组
+  ,D_CNL_C_TYPE        --渠道客户大类小类
+  ,D_IND_C_TYPE        --行业客户大类小类
+  ,D_ECOM_BU           --电商BU渠道细分
+  ,CUST_UNITY_NAME     --统一客户组
+  ,CREDIT_LEVEL_NAME   --信用等级
+  ,CUST_NATURE_NAME    --单位性质
+  ,CUST_TYPE_NAME      --客户类型
+  ,SOLD_TO_CODE        --售达方
+  ,SOLD_TO_NAME        --售达方名称
+  ,COD_DEST3           --业务范围
+  ,D_SALE_DEPT         --业务管理单元
+  ,D_DATA_BLOCK        --数据块明细划分
+  ,D_DIFF_TYPE         --管法差异项
+  ,'REV_01_502' AS D_ADJ_TYPE          --调整类型
+  ,MATERIAL_CODE       --物料
+  ,MATERIAL_NAME       --物料描述
+  ,COD_DEST2           --利润中心
+  ,COD_DEST4           --品牌
+  ,D_MARKET_PNT        --营销定位
+  ,D_PRO_SSER          --产品套系
+  ,D_SPEC_SEC          --规格段
+  ,D_PRO_TYPE_S        --产品形态分类
+  ,D_PRO_STAGE         --产品阶段
+  ,D_PRI_RANGE         --价格段
+  ,D_PRO_SERIES        --产品系列
+  ,D_TECH_TYPE         --技术类型
+  ,IS_MINILED_CODE     --是否MiniLED编码
+  ,D_PRO_CLASS         --产品类别
+  ,D_MODEL_LCA         --产品型号生命周期
+  ,D_PRO_TYPE          --产品类型
+  ,SALE_MODEL_CODE     --销售型号
+  ,SALE_MODEL_NAME     --销售型号描述
+  ,MODEL_CODE          --产品型号
+  ,MODEL_NAME          --产品型号描述
+  ,BATCH_ID            --批次号
+  ,D_PRC_GRP           --定价组
+  ,MATERIAL_GROUP_CODE --物料组
+  ,SHOP_CODE           --门店
+  ,SHOP_NAME           --门店名称
+  ,D_POL_CLASS         --政策二级分类
+  ,COD_AZI_CTP         --对方公司
+  ,COD_AZI_CTP_ORG
+  ,SYSDATE AS DATEUPD             --更新日期
+  ,SESSION_USER AS USERUPD             --更新用户
+  ,CN_CLASS_MARK_CODE  --中国区品线标记编码
+  ,CN_CLASS_MARK_NAME  --中国区品线标记描述
+  ,SALE_CERT_TYPE      --销售凭证类型
+  ,D_OPER_TYPE         --业务分类
+  ,COD_DEST1           --成本中心
+  ,0 - ELIM_QTY     AS ELIM_QTY            --抵消数量
+  ,0 - CN_ELIM_QTY  AS CN_ELIM_QTY         --中国区自营-抵消数量
+  ,0 - ELIM_REV     AS ELIM_REV            --收入抵消-法人
+  ,0 - CN_ELIM_REV  AS CN_ELIM_REV         --中国区自营-抵消收入
+  ,0 - ELIM_COST    AS ELIM_COST           --成本抵消-法人
+  ,0 - CN_ELIM_COST AS CN_ELIM_COST        --中国区自营-抵消成本
+  ,0 - ORG_QTY      AS ORG_QTY             --原始销量
+  ,0 - MAP_QTY      AS MAP_QTY             --数量(处理后)
+  ,0 - BILL_QTY     AS BILL_QTY            --开票销量（日立用）
+  ,0 - STD_QTY      AS STD_QTY             --折算销量-标准量
+  ,'CPM_SP_M2M_REV_M' AS PROVENIENZA
+FROM AW_MR9_REVM05_000001_TEMP M
+WHERE 1=1
+AND COD_SCENARIO = P_SCENARIO
+AND COD_PERIODO = P_PERIODO
+--edit by lc 20261005 限制这个范围在BG009_BU010事业部的账套范围里
+AND COD_AZI_CTP_ORG IN (SELECT COD_AZIENDA
+                    FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
+                    WHERE COD_BG IN ('BG009_BU010')
+                    AND SUBSTR(P_SCENARIO,1,4) || P_PERIODO BETWEEN NVL(VALID_FR,'000000') AND NVL(VALID_TO,'999999'))
+AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID)
+AND D_OPER_TYPE = 'OPTY038' --取数时限制：OPTY038-中国区自营-古洛尼-赠品业务
+AND COD_CATEGORIA = 'GA00_ELIM'
+AND SRC_DETAIL = 'ELIM'
+/*
+20260907 修改人 shiqingfeng.ex 去掉所有锁定表限制，仅保留最上面参数session表限制
+AND NOT EXISTS (
+         SELECT 1 FROM AW_RUL_DWMCRS_000001 T
+          WHERE T.REV05_FLAG = 'Y'
+            AND T.COD_SCENARIO = P_SCENARIO
+            AND T.COD_PERIODO = P_PERIODO
+            AND T.COD_CONTO = 'ZAW_D2M_LOCK'
+            AND T.COD_AZIENDA = M.COD_AZIENDA
+     )*/
+  ;
+INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+VALUES('CPM_SP_M2M_REV_M', 'STEP_6_1  古洛尼赠品抵消数还原', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, 'STEP_6_1  古洛尼赠品抵消数还原',P_AZIENDA);
+COMMIT;
+
+
+
   ------------------------------------------------------------------------------
   -- 7  内销-计算法人成本和大系统产销存的差，在工厂内销账套范围内根据利润中心把差值分摊，写入VAR_ALLOC_COST
   ------------------------------------------------------------------------------
@@ -4370,7 +5980,14 @@ IF P_AZIENDA = 'SX' OR P_AZIENDA = 'ALL' THEN
     COMMIT;
 
   MERGE INTO AW_MR9_REVM05_000001_TEMP M
-  USING (SELECT A.OID,
+  USING (
+    /*ALTER BY LICHENG.EX 20261106 14:20 7.0 加固：ATSMAP 小集合先物化成 CTE，B 禁止下推 + 强制 hash join*/
+    WITH CTE_BG001_AZI AS (
+          SELECT DISTINCT COD_AZIENDA
+            FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
+           WHERE COD_BG = 'BG001_BU001'
+    )
+    SELECT /*+ USE_HASH(A B) */ A.OID,
                 COD_SCENARIO,
                 COD_PERIODO,
                 CASE
@@ -4415,23 +6032,26 @@ IF P_AZIENDA = 'SX' OR P_AZIENDA = 'ALL' THEN
                     ) A
            JOIN (
                 --按照物料获取差值
-                SELECT MATERIAL_CODE,
+                /* B 按物料汇总差值；NO_PUSH_PRED 防止被推成逐行标量子查询
+                   原写法 CASE WHEN COD_AZI_CTP IN (SELECT COD_AZIENDA FROM ATSMAP WHERE COD_BG='BG001_BU001')
+                   在统计失真时会逐行执行子查询，改为 LEFT JOIN 预聚合 CTE，集合只算一次 */
+                SELECT /*+ NO_PUSH_PRED */
+                        T.MATERIAL_CODE,
                         SUM(CASE
-                              WHEN COD_AZI_CTP IN
-                                   (SELECT COD_AZIENDA
-                                      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
-                                     WHERE COD_BG = 'BG001_BU001') THEN
-                               NVL(ENT_COST, 0) + NVL(ENT_COST_ADJ, 0) +
-                               NVL(ELIM_COST, 0) /*+ NVL(OTH_ASSESS_COST,0)*/
-                               -NVL(DOM_PSI_COST, 0)
+                              WHEN CTP.COD_AZIENDA IS NOT NULL THEN
+                               NVL(T.ENT_COST, 0) + NVL(T.ENT_COST_ADJ, 0) +
+                               NVL(T.ELIM_COST, 0) /*+ NVL(OTH_ASSESS_COST,0)*/
+                               -NVL(T.DOM_PSI_COST, 0)
                               ELSE
-                               NVL(ENT_COST, 0) + NVL(ENT_COST_ADJ, 0) /*+ NVL(OTH_ASSESS_COST,0)*/
-                               -NVL(DOM_PSI_COST, 0)
+                               NVL(T.ENT_COST, 0) + NVL(T.ENT_COST_ADJ, 0) /*+ NVL(OTH_ASSESS_COST,0)*/
+                               -NVL(T.DOM_PSI_COST, 0)
                             END) DIFF_AMT
-                  FROM AW_MR9_REVM05_000001_TEMP
-                 WHERE COD_SCENARIO = P_SCENARIO
-                   AND COD_PERIODO = P_PERIODO
-                   AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST A1
+                  FROM AW_MR9_REVM05_000001_TEMP T
+                  LEFT JOIN CTE_BG001_AZI CTP
+                         ON CTP.COD_AZIENDA = T.COD_AZI_CTP
+                 WHERE T.COD_SCENARIO = P_SCENARIO
+                   AND T.COD_PERIODO = P_PERIODO
+                   AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST A1
                                     WHERE SESSION_ID = V_SESSION_ID
                                       AND EXISTS (SELECT 1
                                                    FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A2
@@ -4443,19 +6063,20 @@ IF P_AZIENDA = 'SX' OR P_AZIENDA = 'ALL' THEN
                        (SELECT COD_AZIENDA
                           FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
                          WHERE COD_BG = 'BG001_BU001')*/
-                   AND COD_DEST3 LIKE '2%'
+                   AND T.COD_DEST3 LIKE '2%'
                    /*AND COD_DEST3 IN (SELECT ELEM
                                        FROM SESSION_V_REF_DEST3_NONAME
-                                      WHERE  SESSION_ID = V_SESSION_ID AND HIE = '01'
+                                      WHERE  SESSION_ID = V_SESSION_ID
+                                        AND HIE = '01'
                                         AND NODE = 'HN')*/
 
                    AND
                       --(COD_AZIENDA LIKE '2%' OR COD_AZIENDA LIKE '163%' /*OR COD_AZIENDA LIKE '62%' OR COD_AZIENDA LIKE '68%' OR COD_AZIENDA LIKE '63%' OR COD_AZIENDA LIKE '67%'*/) AND
-                       (NVL(ENT_COST, 0) <> 0 OR NVL(ENT_COST_ADJ, 0) <> 0 OR
-                       NVL(ELIM_COST, 0) <> 0 OR
-                       NVL(OTH_ASSESS_COST, 0) <> 0OR
-                        NVL(DOM_PSI_COST, 0) <> 0)
-                 GROUP BY MATERIAL_CODE) B
+                       (NVL(T.ENT_COST, 0) <> 0 OR NVL(T.ENT_COST_ADJ, 0) <> 0 OR
+                       NVL(T.ELIM_COST, 0) <> 0 OR
+                       NVL(T.OTH_ASSESS_COST, 0) <> 0OR
+                        NVL(T.DOM_PSI_COST, 0) <> 0)
+                 GROUP BY T.MATERIAL_CODE) B
              ON A.MATERIAL_CODE = B.MATERIAL_CODE
           WHERE ROUND(A.SUM_DOM_PSI_COST, 3) <> 0) T
 
@@ -4487,7 +6108,8 @@ BG001_AZI AS (
      WHERE COD_BG = 'BG001_BU001'
 ),
 NEED_UPDATE_MC AS (
-    SELECT T.MATERIAL_CODE
+    /*ALTER BY LICHENG.EX 20261106 14:20 禁止把本聚合视图下推成逐行标量子查询*/
+    SELECT /*+ NO_PUSH_PRED */ T.MATERIAL_CODE
       FROM AW_MR9_REVM05_000001_TEMP T
       LEFT JOIN BG001_AZI BG_CTP
              ON BG_CTP.COD_AZIENDA = T.COD_AZI_CTP_ORG
@@ -4497,6 +6119,8 @@ NEED_UPDATE_MC AS (
                                     WHERE SESSION_ID = V_SESSION_ID
                               )
        AND T.COD_AZIENDA IN (SELECT COD_AZIENDA FROM BG001_AZI)
+       /*
+       20260907 修改人 shiqingfeng.ex 去掉所有锁定表限制，仅保留最上面参数session表限制
        AND NOT EXISTS (
            SELECT 1 FROM AW_RUL_DWMCRS_000001 L
             WHERE L.REV05_FLAG   = 'Y'
@@ -4504,7 +6128,7 @@ NEED_UPDATE_MC AS (
               AND L.COD_PERIODO  = P_PERIODO
               AND L.COD_CONTO    = 'ZAW_D2M_LOCK'
               AND L.COD_AZIENDA  = T.COD_AZIENDA
-       )
+       )*/
        AND T.COD_DEST3 LIKE '2%'
        /*AND T.COD_DEST3 IN (
            SELECT ELEM
@@ -4527,7 +6151,8 @@ NEED_UPDATE_MC AS (
            , 3
            ) <> 0
 )
-    SELECT T.OID AS OID,
+    /*ALTER BY LICHENG.EX 20261106 14:20 物料清单与明细按 hash join 关联，避免逐行回表*/
+    SELECT /*+ USE_HASH(T MC) */ T.OID AS OID,
            T.VAR_ALLOC_COST
          + NVL(T.ENT_COST_ADJ, 0)
          + NVL(T.ENT_COST, 0)
@@ -4667,16 +6292,12 @@ INTO AW_MR9_REVM05_000001_TEMP A
 USING (
     WITH
     -- ---------------------------------------------------------------
-    -- CTE1：显示事业部公司范围（贵阳、广东分别独立分摊）
+    -- CTE1：BG001_BU020-显示事业部-贵阳工厂端 公司范围
     -- ---------------------------------------------------------------
-    CTE_DISPLAY_BU AS (
-        SELECT DISTINCT
-               COD_BG AS ALLOC_BU,
-               COD_AZIENDA
+    CTE_BG001 AS (
+        SELECT COD_AZIENDA
           FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
-         WHERE COD_BG IN ('BG001_BU020', 'BG001_BU030')
-           AND SUBSTR(P_SCENARIO, 1, 4) || P_PERIODO
-               BETWEEN NVL(VALID_FR, '000000') AND NVL(VALID_TO, '999999')
+         WHERE COD_BG IN ('BG001_BU020')
     ),
     -- ---------------------------------------------------------------
     -- CTE2：内销 DEST3 集合（HIE='01', NODE='HN'）
@@ -4686,7 +6307,7 @@ USING (
           FROM SESSION_V_REF_DEST3_NONAME
          WHERE SESSION_ID = V_SESSION_ID
            AND HIE = '01'
-           AND NODE = 'HN'
+           AND (NODE = 'HN' OR ELEM = '9999')
     ),
     -- ---------------------------------------------------------------
     -- CTE3：锁定公司集合
@@ -4755,25 +6376,21 @@ USING (
            )
     ),
     -- ---------------------------------------------------------------
-    -- CTE7：分摊基础数据（ALLOC_BU 全程作为事业部隔离键）
+    -- CTE7：分摊基础数据（未汇总，只做条件过滤）
     -- ---------------------------------------------------------------
     ALLOC_BASE AS (
         -- 部分①：折扣物料抵消金额
-        --   条件：SRC_DETAIL='ELIM' + 本方&对方属于同一显示事业部 + 内销 + 折扣物料
-        SELECT SELL_BU.ALLOC_BU,
-               T.COD_DEST2,
+        --   条件：SRC_DETAIL='ELIM' + 本方&对方同在BG001 + 内销 + 折扣物料
+        SELECT T.COD_DEST2,
                T.COD_DEST3,
                NVL(T.ELIM_COST, 0) AS ALLOC_AMT
           FROM AW_MR9_REVM05_000001_TEMP T
-          INNER JOIN CTE_DISPLAY_BU SELL_BU
-            ON SELL_BU.COD_AZIENDA = T.COD_AZIENDA
-          INNER JOIN CTE_DISPLAY_BU CTP_BU
-            ON CTP_BU.COD_AZIENDA = T.COD_AZI_CTP_ORG
-           AND CTP_BU.ALLOC_BU = SELL_BU.ALLOC_BU
          WHERE T.COD_SCENARIO = P_SCENARIO
            AND T.COD_PERIODO  = P_PERIODO
            AND T.SRC_DETAIL   = 'ELIM'
-           AND EXISTS (SELECT 1 FROM CTE_DEST3_HN D WHERE D.ELEM = T.COD_DEST3)
+           AND EXISTS (SELECT 1 FROM CTE_BG001     B WHERE B.COD_AZIENDA  = T.COD_AZIENDA)
+           AND EXISTS (SELECT 1 FROM CTE_BG001     B WHERE B.COD_AZIENDA  = T.COD_AZI_CTP_ORG)
+           AND EXISTS (SELECT 1 FROM CTE_DEST3_HN  D WHERE D.ELEM         = T.COD_DEST3)
            AND EXISTS (SELECT 1 FROM ZK_MATERIAL_CODE M WHERE M.MATERIAL_CODE = T.MATERIAL_CODE)
            AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
                                     WHERE SESSION_ID = V_SESSION_ID
@@ -4784,80 +6401,65 @@ USING (
            AND NVL(T.ELIM_COST, 0) <> 0
         UNION ALL
         -- 部分②：无物料单体成本
-        --   条件：MATERIAL_CODE IS NULL + 本方属于贵阳或广东显示事业部 + 内销
-        SELECT SELL_BU.ALLOC_BU,
-               T.COD_DEST2,
+        --   条件：MATERIAL_CODE IS NULL + 本方在BG001 + 内销
+        SELECT T.COD_DEST2,
                T.COD_DEST3,
                NVL(T.ENT_COST, 0) + NVL(T.ENT_COST_ADJ, 0) AS ALLOC_AMT
           FROM AW_MR9_REVM05_000001_TEMP T
-          INNER JOIN CTE_DISPLAY_BU SELL_BU
-            ON SELL_BU.COD_AZIENDA = T.COD_AZIENDA
          WHERE T.COD_SCENARIO  = P_SCENARIO
            AND T.COD_PERIODO   = P_PERIODO
            AND T.SRC_DETAIL   <> 'ZZFT'
-           AND EXISTS (SELECT 1 FROM CTE_DEST3_HN D WHERE D.ELEM = T.COD_DEST3)
+           AND EXISTS (SELECT 1 FROM CTE_BG001    B WHERE B.COD_AZIENDA = T.COD_AZIENDA)
+           AND EXISTS (SELECT 1 FROM CTE_DEST3_HN D WHERE D.ELEM        = T.COD_DEST3)
            AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
                                     WHERE SESSION_ID = V_SESSION_ID
                               )
          --AND (INSTR(V_AZIENDA, T.COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
            AND (P_AZIENDA = 'SX' OR P_AZIENDA = 'ALL')
-           AND T.MATERIAL_CODE IS NULL
+         AND T.MATERIAL_CODE IS NULL
            /* AND NOT EXISTS (SELECT 1 FROM CTE_LOCK_AZI L WHERE L.COD_AZIENDA = T.COD_AZIENDA) */
            AND NVL(T.ENT_COST, 0) + NVL(T.ENT_COST_ADJ, 0) <> 0
     ),
     -- ---------------------------------------------------------------
-    -- CTE8：待分摊金额（按事业部、源/目标 DEST2/DEST3 独立汇总）
+    -- CTE8：待分摊金额
     -- ---------------------------------------------------------------
     ALLOC_COST AS (
-        SELECT B.ALLOC_BU,
-               B.SRC_DEST2,
-               B.SRC_DEST3,
+        /*ALTER BY LICHENG.EX 20261106 14:20 待分摊金额禁止下推，保证只聚合一次*/
+        SELECT /*+ NO_PUSH_PRED */ B.SRC_DEST2, B.SRC_DEST3,
                NVL(D2.D2_MAP, B.SRC_DEST2) AS TARGET_DEST2,
                NVL(D3.D3_MAP, B.SRC_DEST3) AS TARGET_DEST3,
                SUM(B.TOTAL_ALLOC_AMT) AS TOTAL_ALLOC_AMT
           FROM (
-                   -- 按事业部及原始 DEST2/DEST3 汇总金额
-                   SELECT ALLOC_BU,
-                          COD_DEST2 AS SRC_DEST2,
+                   -- 按原始 DEST2/DEST3 汇总金额
+                   SELECT COD_DEST2 AS SRC_DEST2,
                           COD_DEST3 AS SRC_DEST3,
                           SUM(ALLOC_AMT) AS TOTAL_ALLOC_AMT
                      FROM ALLOC_BASE
-                    GROUP BY ALLOC_BU, COD_DEST2, COD_DEST3
+                    GROUP BY COD_DEST2, COD_DEST3
                     HAVING SUM(ALLOC_AMT) <> 0
                ) B
           LEFT JOIN D2_MAP D2 ON B.SRC_DEST2 = D2.D2_SRC
           LEFT JOIN D3_MAP D3 ON B.SRC_DEST3 = D3.D3_SRC
-          GROUP BY B.ALLOC_BU, B.SRC_DEST2, B.SRC_DEST3,
-                   NVL(D2.D2_MAP, B.SRC_DEST2),
+          GROUP BY B.SRC_DEST2, B.SRC_DEST3,NVL(D2.D2_MAP, B.SRC_DEST2),
                    NVL(D3.D3_MAP, B.SRC_DEST3)
     ),
     -- ---------------------------------------------------------------
-    -- CTE9：分摊因子 + 分摊比例（各事业部使用各自 PSI_COMB_COST 分母）
+    -- CTE9：分摊因子 + 分摊比例
     -- ---------------------------------------------------------------
     ALLOC_BL AS (
         SELECT T.OID,
-               RECIP_BU.ALLOC_BU,
-               AC_KEYS.SRC_DEST2,
-               AC_KEYS.SRC_DEST3,
+               ALLOC_COST.SRC_DEST2,ALLOC_COST.SRC_DEST3,
                T.COD_DEST2,
                T.COD_DEST3,
                NVL(T.PSI_COMB_COST, 0) AS BL,
-               RATIO_TO_REPORT(NVL(T.PSI_COMB_COST, 0)) OVER (
-                   PARTITION BY RECIP_BU.ALLOC_BU, AC_KEYS.SRC_DEST2, AC_KEYS.SRC_DEST3
-               ) AS ALLOC_RATIO
+               RATIO_TO_REPORT(NVL(T.PSI_COMB_COST, 0)) OVER (PARTITION BY ALLOC_COST.SRC_DEST2,ALLOC_COST.SRC_DEST3) AS ALLOC_RATIO
           FROM AW_MR9_REVM05_000001_TEMP T
-          INNER JOIN CTE_DISPLAY_BU RECIP_BU
-            ON RECIP_BU.COD_AZIENDA = T.COD_AZIENDA
-          INNER JOIN (
-                    SELECT DISTINCT
-                           ALLOC_BU, SRC_DEST2, SRC_DEST3, TARGET_DEST2, TARGET_DEST3
-                      FROM ALLOC_COST
-                    ) AC_KEYS
-            ON AC_KEYS.ALLOC_BU = RECIP_BU.ALLOC_BU
-           AND AC_KEYS.TARGET_DEST2 = T.COD_DEST2
-           AND AC_KEYS.TARGET_DEST3 = T.COD_DEST3
+          LEFT JOIN (SELECT DISTINCT SRC_DEST2,SRC_DEST3,TARGET_DEST2,TARGET_DEST3 FROM ALLOC_COST) ALLOC_COST
+            ON T.COD_DEST2 = ALLOC_COST.TARGET_DEST2
+           AND T.COD_DEST3 = ALLOC_COST.TARGET_DEST3
          WHERE T.COD_SCENARIO = P_SCENARIO
            AND T.COD_PERIODO  = P_PERIODO
+           AND EXISTS (SELECT 1 FROM CTE_BG001 B WHERE B.COD_AZIENDA = T.COD_AZIENDA)
            AND T.COD_CATEGORIA NOT IN ('GA00_PA_IN','GA00_PA_IN')
            AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
                                     WHERE SESSION_ID = V_SESSION_ID
@@ -4867,15 +6469,222 @@ USING (
            /* AND NOT EXISTS (SELECT 1 FROM CTE_LOCK_AZI L WHERE L.COD_AZIENDA = T.COD_AZIENDA) */
            AND NVL(T.PSI_COMB_COST, 0) <> 0
     )
-    SELECT BL.OID,
+    /*ALTER BY LICHENG.EX 20261106 14:20 分摊明细与待分摊金额按 hash join 关联*/
+    SELECT /*+ USE_HASH(BL AC) */ BL.OID,
            SUM(NVL(AC.TOTAL_ALLOC_AMT,0) * NVL(BL.ALLOC_RATIO,0)) AS ASSESS_NM_ALLOC_COST
       FROM ALLOC_BL BL
-      INNER JOIN ALLOC_COST AC
-        ON AC.ALLOC_BU = BL.ALLOC_BU
-       AND AC.TARGET_DEST2 = BL.COD_DEST2
-       AND AC.TARGET_DEST3 = BL.COD_DEST3
-       AND AC.SRC_DEST2 = BL.SRC_DEST2
-       AND AC.SRC_DEST3 = BL.SRC_DEST3
+      LEFT JOIN ALLOC_COST AC
+        ON BL.COD_DEST2 = AC.TARGET_DEST2
+       AND BL.COD_DEST3 = AC.TARGET_DEST3
+       AND BL.SRC_DEST2 = AC.SRC_DEST2
+       AND BL.SRC_DEST3 = AC.SRC_DEST3
+     GROUP BY BL.OID
+     HAVING SUM(NVL(AC.TOTAL_ALLOC_AMT,0) * NVL(BL.ALLOC_RATIO,0)) <> 0
+) S
+ON (A.OID = S.OID)
+WHEN MATCHED THEN
+    UPDATE SET A.ASSESS_NM_ALLOC_COST = S.ASSESS_NM_ALLOC_COST
+;
+
+  INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+    VALUES('CPM_SP_M2M_REV_M', 'REV005_STEP_7（ 考核成本无物料分摊）-显示事业部-贵阳工厂端结束', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '',P_AZIENDA);
+    COMMIT;
+
+/*   20260826-1 SHIQINGFENG.EX  REV005_STEP_7（ 考核成本无物料分摊）,【BG001_BU030-显示事业部-广东】SXX20260825新增范围内公司 注意：贵阳、广东的事业部只能分别在自己的事业部范围内分摊
+*/
+
+
+MERGE /*取消并发*/
+INTO AW_MR9_REVM05_000001_TEMP A
+USING (
+    WITH
+    -- ---------------------------------------------------------------
+    -- CTE1 20260826 新增BG001_BU030-显示事业部-广东
+    -- ---------------------------------------------------------------
+    CTE_BG001 AS (
+        SELECT COD_AZIENDA
+          FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001
+         WHERE COD_BG IN ('BG001_BU030')
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE2：内销 DEST3 集合（HIE='01', NODE='HN'）
+    -- ---------------------------------------------------------------
+    CTE_DEST3_HN AS (
+        SELECT ELEM
+          FROM SESSION_V_REF_DEST3_NONAME
+         WHERE SESSION_ID = V_SESSION_ID
+           AND HIE = '01'
+           AND (NODE = 'HN' OR ELEM = '9999')
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE3：锁定公司集合
+    -- ---------------------------------------------------------------
+    CTE_LOCK_AZI AS (
+        SELECT COD_AZIENDA
+          FROM AW_RUL_DWMCRS_000001
+         WHERE REV05_FLAG  = 'Y'
+           AND COD_SCENARIO = P_SCENARIO
+           AND COD_PERIODO  = P_PERIODO
+           AND COD_CONTO    = 'ZAW_D2M_LOCK'
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE4：折扣物料清单（带有效期判断）
+    -- ---------------------------------------------------------------
+    ZK_MATERIAL_CODE AS (
+        SELECT MATERIAL_CODE
+          FROM TGK_FIMA_HISENSE.AW_RUL_REVEMA_000001
+         WHERE COD_CONTO = 'ZAW_DWD_LIST_ZHEKOU'
+           AND SUBSTR(P_SCENARIO, 1, 4) || P_PERIODO
+               BETWEEN NVL(VALID_FR, '000000') AND NVL(VALID_TO, '999999')
+           AND MATERIAL_CODE IS NOT NULL
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE5：DEST2 映射关系（源→目标，无配置则保留原值）
+    -- ---------------------------------------------------------------
+    D2_MAP AS (
+        SELECT DISTINCT
+               CASE WHEN M.FROM_COLUMN_VALUE_1 = '990990000'
+                      THEN 'ZZZZ'
+                    ELSE M.FROM_COLUMN_VALUE_1
+               END AS D2_SRC,
+               NVL(D2.ELEM, M.TO_COLUMN_VALUE_1) AS D2_MAP
+          FROM TGK_FIMA_HISENSE.AW_RUL_ALCMAP_000001 M
+          LEFT JOIN (
+                    SELECT NODE, ELEM
+                      FROM SESSION_V_REF_DEST2
+                     WHERE SESSION_ID = V_SESSION_ID
+                    ) D2
+            ON M.TO_COLUMN_VALUE_1 = D2.NODE
+         WHERE SUBSTR(P_SCENARIO, 1, 4) || P_PERIODO
+               BETWEEN NVL(M.BEGIN_DATE, '000000') AND NVL(M.END_DATE, '999999')
+           AND M.ALCMAP_ID IN (
+               'EXP-MAP-A10001', 'EXP-MAP-A10002', 'EXP-MAP-A10003',
+               'EXP-MAP-A10004', 'EXP-MAP-A10013', 'EXP-MAP-A10008'
+           )
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE6：DEST3 映射关系（源→目标，无配置则保留原值）
+    -- ---------------------------------------------------------------
+    D3_MAP AS (
+        SELECT DISTINCT
+               M.FROM_COLUMN_VALUE_1             AS D3_SRC,
+               NVL(D3.ELEM, M.TO_COLUMN_VALUE_1) AS D3_MAP
+          FROM TGK_FIMA_HISENSE.AW_RUL_ALCMAP_000001 M
+          LEFT JOIN (
+                    SELECT NODE, ELEM
+                      FROM SESSION_V_REF_DEST3_NONAME
+                     WHERE SESSION_ID = V_SESSION_ID
+                    ) D3
+            ON M.TO_COLUMN_VALUE_1 = D3.NODE
+         WHERE SUBSTR(P_SCENARIO, 1, 4) || P_PERIODO
+               BETWEEN NVL(M.BEGIN_DATE, '000000') AND NVL(M.END_DATE, '999999')
+           AND M.ALCMAP_ID IN (
+               'EXP-MAP-A10006', 'EXP-MAP-A10011', 'EXP-MAP-A100013'
+           )
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE7：分摊基础数据（未汇总，只做条件过滤）
+    -- ---------------------------------------------------------------
+    ALLOC_BASE AS (
+        -- 部分①：折扣物料抵消金额
+        --   条件：SRC_DETAIL='ELIM' + 本方&对方同在BG001 + 内销 + 折扣物料
+        SELECT T.COD_DEST2,
+               T.COD_DEST3,
+               NVL(T.ELIM_COST, 0) AS ALLOC_AMT
+          FROM AW_MR9_REVM05_000001_TEMP T
+         WHERE T.COD_SCENARIO = P_SCENARIO
+           AND T.COD_PERIODO  = P_PERIODO
+           AND T.SRC_DETAIL   = 'ELIM'
+           AND EXISTS (SELECT 1 FROM CTE_BG001     B WHERE B.COD_AZIENDA  = T.COD_AZIENDA)
+           AND EXISTS (SELECT 1 FROM CTE_BG001     B WHERE B.COD_AZIENDA  = T.COD_AZI_CTP_ORG)
+           AND EXISTS (SELECT 1 FROM CTE_DEST3_HN  D WHERE D.ELEM         = T.COD_DEST3)
+           AND EXISTS (SELECT 1 FROM ZK_MATERIAL_CODE M WHERE M.MATERIAL_CODE = T.MATERIAL_CODE)
+           AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                    WHERE SESSION_ID = V_SESSION_ID
+                              )
+         --AND (INSTR(V_AZIENDA, T.COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
+           AND (P_AZIENDA = 'SX' OR P_AZIENDA = 'ALL')
+           /* AND NOT EXISTS (SELECT 1 FROM CTE_LOCK_AZI L WHERE L.COD_AZIENDA = T.COD_AZIENDA) */
+           AND NVL(T.ELIM_COST, 0) <> 0
+        UNION ALL
+        -- 部分②：无物料单体成本
+        --   条件：MATERIAL_CODE IS NULL + 本方在BG001 + 内销
+        SELECT T.COD_DEST2,
+               T.COD_DEST3,
+               NVL(T.ENT_COST, 0) + NVL(T.ENT_COST_ADJ, 0) AS ALLOC_AMT
+          FROM AW_MR9_REVM05_000001_TEMP T
+         WHERE T.COD_SCENARIO  = P_SCENARIO
+           AND T.COD_PERIODO   = P_PERIODO
+           AND T.SRC_DETAIL   <> 'ZZFT'
+           AND EXISTS (SELECT 1 FROM CTE_BG001    B WHERE B.COD_AZIENDA = T.COD_AZIENDA)
+           AND EXISTS (SELECT 1 FROM CTE_DEST3_HN D WHERE D.ELEM        = T.COD_DEST3)
+           AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                    WHERE SESSION_ID = V_SESSION_ID
+                              )
+         --AND (INSTR(V_AZIENDA, T.COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
+           AND (P_AZIENDA = 'SX' OR P_AZIENDA = 'ALL')
+         AND T.MATERIAL_CODE IS NULL
+           /* AND NOT EXISTS (SELECT 1 FROM CTE_LOCK_AZI L WHERE L.COD_AZIENDA = T.COD_AZIENDA) */
+           AND NVL(T.ENT_COST, 0) + NVL(T.ENT_COST_ADJ, 0) <> 0
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE8：待分摊金额
+    -- ---------------------------------------------------------------
+    ALLOC_COST AS (
+        /*ALTER BY LICHENG.EX 20261106 14:20 待分摊金额禁止下推，保证只聚合一次*/
+        SELECT /*+ NO_PUSH_PRED */ B.SRC_DEST2, B.SRC_DEST3,
+               NVL(D2.D2_MAP, B.SRC_DEST2) AS TARGET_DEST2,
+               NVL(D3.D3_MAP, B.SRC_DEST3) AS TARGET_DEST3,
+               SUM(B.TOTAL_ALLOC_AMT) AS TOTAL_ALLOC_AMT
+          FROM (
+                   -- 按原始 DEST2/DEST3 汇总金额
+                   SELECT COD_DEST2 AS SRC_DEST2,
+                          COD_DEST3 AS SRC_DEST3,
+                          SUM(ALLOC_AMT) AS TOTAL_ALLOC_AMT
+                     FROM ALLOC_BASE
+                    GROUP BY COD_DEST2, COD_DEST3
+                    HAVING SUM(ALLOC_AMT) <> 0
+               ) B
+          LEFT JOIN D2_MAP D2 ON B.SRC_DEST2 = D2.D2_SRC
+          LEFT JOIN D3_MAP D3 ON B.SRC_DEST3 = D3.D3_SRC
+          GROUP BY B.SRC_DEST2, B.SRC_DEST3,NVL(D2.D2_MAP, B.SRC_DEST2),
+                   NVL(D3.D3_MAP, B.SRC_DEST3)
+    ),
+    -- ---------------------------------------------------------------
+    -- CTE9：分摊因子 + 分摊比例
+    -- ---------------------------------------------------------------
+    ALLOC_BL AS (
+        SELECT T.OID,
+               ALLOC_COST.SRC_DEST2,ALLOC_COST.SRC_DEST3,
+               T.COD_DEST2,
+               T.COD_DEST3,
+               NVL(T.PSI_COMB_COST, 0) AS BL,
+               RATIO_TO_REPORT(NVL(T.PSI_COMB_COST, 0)) OVER (PARTITION BY ALLOC_COST.SRC_DEST2,ALLOC_COST.SRC_DEST3) AS ALLOC_RATIO
+          FROM AW_MR9_REVM05_000001_TEMP T
+          LEFT JOIN (SELECT DISTINCT SRC_DEST2,SRC_DEST3,TARGET_DEST2,TARGET_DEST3 FROM ALLOC_COST) ALLOC_COST
+            ON T.COD_DEST2 = ALLOC_COST.TARGET_DEST2
+           AND T.COD_DEST3 = ALLOC_COST.TARGET_DEST3
+         WHERE T.COD_SCENARIO = P_SCENARIO
+           AND T.COD_PERIODO  = P_PERIODO
+           AND EXISTS (SELECT 1 FROM CTE_BG001 B WHERE B.COD_AZIENDA = T.COD_AZIENDA)
+           AND T.COD_CATEGORIA NOT IN ('GA00_PA_IN','GA00_PA_IN')
+           AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                    WHERE SESSION_ID = V_SESSION_ID
+                              )
+         --AND (INSTR(V_AZIENDA, T.COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
+           AND (P_AZIENDA = 'SX' OR P_AZIENDA = 'ALL')
+           /* AND NOT EXISTS (SELECT 1 FROM CTE_LOCK_AZI L WHERE L.COD_AZIENDA = T.COD_AZIENDA) */
+           AND NVL(T.PSI_COMB_COST, 0) <> 0
+    )
+    /*ALTER BY LICHENG.EX 20261106 14:20 分摊明细与待分摊金额按 hash join 关联*/
+    SELECT /*+ USE_HASH(BL AC) */ BL.OID,
+           SUM(NVL(AC.TOTAL_ALLOC_AMT,0) * NVL(BL.ALLOC_RATIO,0)) AS ASSESS_NM_ALLOC_COST
+      FROM ALLOC_BL BL
+      LEFT JOIN ALLOC_COST AC
+        ON BL.COD_DEST2 = AC.TARGET_DEST2
+       AND BL.COD_DEST3 = AC.TARGET_DEST3
+       AND BL.SRC_DEST2 = AC.SRC_DEST2
+       AND BL.SRC_DEST3 = AC.SRC_DEST3
      GROUP BY BL.OID
      HAVING SUM(NVL(AC.TOTAL_ALLOC_AMT,0) * NVL(BL.ALLOC_RATIO,0)) <> 0
 ) S
@@ -4885,11 +6694,8 @@ WHEN MATCHED THEN
 ;
 
 
-
-
-
   INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
-    VALUES('CPM_SP_M2M_REV_M', 'REV005_STEP_7（ 考核成本无物料分摊）结束', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '',P_AZIENDA);
+    VALUES('CPM_SP_M2M_REV_M', 'REV005_STEP_7（ 考核成本无物料分摊）-显示事业部-广东结束', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '',P_AZIENDA);
     COMMIT;
 
 
@@ -4958,7 +6764,9 @@ USING (
         SELECT '6375' FROM DUAL UNION ALL
         SELECT '6515' FROM DUAL UNION ALL
         SELECT '6380' FROM DUAL UNION ALL
-        SELECT '6012' FROM DUAL
+        SELECT '6012' FROM DUAL UNION ALL
+        SELECT '6002' FROM DUAL UNION ALL          /*ALTER BY 20260828 10:57 XIAOYACHAO.EX 工厂端外销收入成本增加公司6002*/
+        SELECT '6015' FROM DUAL                    /*ALTER BY 20261013 16:31 XIAOYACHAO.EX 工厂端外销收入成本增加公司6015*/
     ),
     -- CTE 2: DEST3 外销集合
     CTE_DEST3_HW AS (
@@ -5010,8 +6818,11 @@ USING (
                -- 标志位：命中第一个UPDATE条件
                CASE WHEN EXISTS (SELECT 1 FROM CTE_HW_AZI H WHERE H.COD_AZIENDA = T.COD_AZIENDA)
                      AND EXISTS (SELECT 1 FROM CTE_DEST3_HW D WHERE D.ELEM = T.COD_DEST3)
-                     AND NOT EXISTS (SELECT 1 FROM CTE_HW_AZI H WHERE H.COD_AZIENDA = NVL(T.COD_AZI_CTP_ORG, '|'))
-                     AND NVL(T.CUST_CODE, '|') NOT IN ('4000033', '1010132')
+                     AND NOT EXISTS (SELECT 1 FROM CTE_HW_AZI H WHERE H.COD_AZIENDA = NVL(T.COD_AZI_CTP_ORG, '|') AND H.COD_AZIENDA NOT IN  ('6002','6015')) /*ALTER BY 20261013 XIAOYACHAO.EX 剔除6015*/
+                     /*ALTER BY 20261013 XIAOYACHAO.EX 只有冰箱剔除6015客户*/
+                     AND (NVL(T.CUST_CODE, '|') NOT IN (/*'4000033',*/ '1010132') AND T.COD_AZIENDA NOT LIKE '63%'
+                         OR T.COD_AZIENDA LIKE '63%'
+                         )                   /*ALTER BY 20260902 XIAOYACHAO.EX 剔除万高客户*/
                      AND NVL(T.SRC_DETAIL, '-') <> 'ELIM'
                      AND SUBSTR(T.COD_CONTO, 1, 5) IN ('S6001', 'S6401')
                     THEN 'Y' ELSE 'N'
@@ -5085,14 +6896,23 @@ USING (
             END AS MANG_QTY
           , CASE WHEN AZ_BG003.COD_AZIENDA IS NOT NULL AND NVL(AW.COD_AZI_CTP_ORG,'|') = '6015'
                    THEN 0
+                 --EDIT BY LC 20261101 2910政策记账方式不同于内销，在此做一段特殊逻辑处理
+                 WHEN NVL(AW.COD_AZIENDA,'|') = '2910' 
+                   THEN NVL(AW.ENT_REV,0) + NVL(AW.ENT_REV_ADJ,0) + NVL(AW.POLICY_AMT,0) + NVL(AW.POLICY_CASH_PD,0) + NVL(AW.ELIM_REV,0) + NVL(AW.CADJ_REV,0)
                    ELSE NVL(AW.ENT_REV,0) + NVL(AW.ENT_REV_ADJ,0) + NVL(AW.POLICY_AMT,0) - NVL(AW.POLICY_CASH_PD,0) + NVL(AW.ELIM_REV,0) + NVL(AW.CADJ_REV,0)
             END AS MANG_REV --端到端收入-BG
           , CASE WHEN AZ_BG003.COD_AZIENDA IS NOT NULL AND NVL(AW.COD_AZI_CTP_ORG,'|') = '6015'
                    THEN 0
+                 --EDIT BY LC 20261101 2910政策记账方式不同于内销，在此做一段特殊逻辑处理
+                 WHEN NVL(AW.COD_AZIENDA,'|') = '2910' 
+                   THEN NVL(AW.ENT_REV,0) + NVL(AW.ENT_REV_ADJ,0) + NVL(AW.POLICY_AMT,0) + NVL(AW.POLICY_CASH_PD,0) + NVL(AW.ELIM_REV,0) + NVL(AW.CADJ_REV,0)
                    ELSE NVL(AW.ENT_REV,0) + NVL(AW.ENT_REV_ADJ,0) + NVL(AW.POLICY_AMT,0) - NVL(AW.POLICY_CASH_PD,0) + NVL(AW.ELIM_REV,0) + NVL(AW.CADJ_REV,0) + NVL(AW.FAC_CADJ_REV,0) + NVL(AW.CN_CADJ_REV,0)
             END AS FAC_MANG_REV  --工厂端收入-BU
           , CASE WHEN AZ_BG003.COD_AZIENDA IS NOT NULL AND NVL(AW.COD_AZI_CTP_ORG,'|') = '6015'
                    THEN 0
+                --EDIT BY LC 20261101 2910政策记账方式不同于内销，在此做一段特殊逻辑处理
+                 WHEN NVL(AW.COD_AZIENDA,'|') = '2910' 
+                   THEN NVL(AW.ENT_REV,0) + NVL(AW.ENT_REV_ADJ,0) + NVL(AW.POLICY_AMT,0) + NVL(AW.POLICY_CASH_PD,0) + NVL(AW.ELIM_REV,0) + NVL(AW.CADJ_REV,0)
                    ELSE NVL(AW.ENT_REV,0) + NVL(AW.ENT_REV_ADJ,0) + NVL(AW.POLICY_AMT,0) - NVL(AW.POLICY_CASH_PD,0) + NVL(AW.ELIM_REV,0) + NVL(AW.CADJ_REV,0)
             END AS IM_MANG_REV --国际营销收入-BU
           , CASE WHEN DEST3_HW.ELEM IS NOT NULL AND NVL(AW.SRC_DETAIL,'|') = 'HB_ADJM01'
@@ -5101,7 +6921,8 @@ USING (
                    THEN  NVL(AW.FAC_EXTERNAL_SALE_COST,0)
                       + NVL(AW.IM_SALE_COST,0)
                       + NVL(AW.END_UNREAL_GP,0)-NVL(AW.BEG_UNREAL_GP,0)+ NVL(AW.CADJ_COST,0)
-                      + CASE WHEN AW.COD_AZIENDA in('1098') AND NOT(AW.COD_SCENARIO='2026ACT' AND AW.COD_PERIODO='01')
+                      + CASE WHEN AW.COD_AZIENDA in('1098','2910') AND NOT(AW.COD_SCENARIO='2026ACT' AND AW.COD_PERIODO='01')
+                      --EDIT BY SXX 20261107 2910端到端合并成本逻辑，改成与1098一致
                                 THEN NVL(AW.ENT_COST,0) + NVL(AW.ENT_COST_ADJ,0)+ NVL(AW.CADJ_COST,0)
                             ELSE 0
                         END
@@ -5148,7 +6969,9 @@ USING (
                       OR
                       (
                         (AW.COD_AZIENDA LIKE '63%' OR AW.COD_AZIENDA LIKE '67%' OR AW.COD_AZIENDA   IN ( '6000A','6000') )
-                        AND (NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '63%' OR NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '67%'  OR NVL(AW.COD_AZI_CTP_ORG,'|')  IN( '6000A','6000','6015','6002'))
+                        /*ALTER BY 20260902 XIAOYACHAO.EX 交易对手剔除万高*/
+                        /*ALTER BY 20261013 XIAOYACHAO.EX 交易对手剔除6015*/
+                        AND (NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '63%' OR NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '67%'  OR NVL(AW.COD_AZI_CTP_ORG,'|')  IN( '6000A','6000'/*,'6015','6002'*/))
                       )
                       OR
                       (
@@ -5160,6 +6983,16 @@ USING (
             END AS MANG_COST --端到端成本-BG
           , CASE
               --外销成本 非内部流转
+              /*ALTER BY 20260831 XIAOYACHAO.EX 工厂端成本6002公司特殊处理*/
+              WHEN DEST3_HW.ELEM IS NOT NULL AND AW.COD_AZIENDA = '6002' AND AW.COD_DEST2 = '101185000' THEN 0
+              WHEN DEST3_HW.ELEM IS NOT NULL AND AW.COD_AZIENDA = '6002' THEN NVL(AW.FAC_EXTERNAL_SALE_COST,0) + NVL(AW.ELIM_COST,0)
+              /*ALTER BY 20261013 XIAOYACHAO.EX 增加6015公司*/
+              WHEN DEST3_HW.ELEM IS NOT NULL AND AW.COD_AZIENDA = '6015' AND AW.COD_DEST2 IN (SELECT V2.ELEM FROM TGK_FIMA_HISENSE.V_REF_DEST2 V2 WHERE LENGTH(V2.NODE) = 4 AND V2.NODE IN ('0117','0118','0119','0120','0121'))
+                THEN NVL(AW.FAC_EXTERNAL_SALE_COST,0) + NVL(AW.ELIM_COST,0)
+              /*ALTER BY 20260902 XIAOYACHAO.EX 我方是冰箱公司，交易对手是万高的取工厂端外销成本+抵消成本*/
+              WHEN (AW.COD_AZIENDA LIKE '63%' OR AW.COD_AZIENDA LIKE '67%' OR AW.COD_AZIENDA   IN ( '6000A','6000') ) AND NVL(AW.COD_AZI_CTP_ORG,'|') = '6002' THEN NVL(AW.FAC_EXTERNAL_SALE_COST,0) + NVL(AW.ELIM_COST,0)
+              /*ALTER BY 20261013 XIAOYACHAO.EX 我方是冰箱公司，交易对手是6015的取工厂端外销成本+抵消成本*/
+              WHEN (AW.COD_AZIENDA LIKE '63%' OR AW.COD_AZIENDA LIKE '67%' OR AW.COD_AZIENDA   IN ( '6000A','6000') ) AND NVL(AW.COD_AZI_CTP_ORG,'|') = '6015' THEN NVL(AW.FAC_EXTERNAL_SALE_COST,0) + NVL(AW.ELIM_COST,0)
               WHEN DEST3_HW.ELEM IS NOT NULL
                   AND
                     NOT (
@@ -5176,7 +7009,7 @@ USING (
                   (
                       ((AW.COD_AZIENDA LIKE '2%' OR AW.COD_AZIENDA LIKE '163%') AND (AZ_BG001.COD_AZIENDA IS NOT NULL))
                       OR
-                      ((AW.COD_AZIENDA LIKE '63%' OR AW.COD_AZIENDA LIKE '67%' OR AW.COD_AZIENDA   IN ( '6000A','6000') ) AND (NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '63%' OR NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '67%'  OR NVL(AW.COD_AZI_CTP_ORG,'|')    IN( '6000A','6000')))
+                      ((AW.COD_AZIENDA LIKE '63%' OR AW.COD_AZIENDA LIKE '67%' OR AW.COD_AZIENDA   IN ( '6000A','6000') ) AND (NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '63%' OR NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '67%'  OR NVL(AW.COD_AZI_CTP_ORG,'|')    IN( '6000A','6000','6002'))) /*ALTER BY 20260902 XIAOYACHAO.EX 我方公司是冰箱，对方是6002万高也取抵消成本*/
                       OR
                       ((AW.COD_AZIENDA LIKE '62%' OR AW.COD_AZIENDA LIKE '68%') AND (NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '62%' OR NVL(AW.COD_AZI_CTP_ORG,'|')  LIKE '68%'))
                   )
@@ -5209,11 +7042,14 @@ USING (
               ELSE 0
           END AS FAC_MANG_COST --工厂端成本-BU
         , CASE
+            --EDIT BY LC 20261019 非国际营销机1098公司按以下逻辑取数
+            WHEN AZ_020.ELEM IS NULL AND AW.COD_AZIENDA NOT in ('1098') 
+            THEN NVL(AW.ENT_COST,0) + NVL(AW.ENT_COST_ADJ,0) + NVL(AW.CADJ_COST,0) + NVL(AW.ELIM_COST,0)
                     --外销成本
             WHEN DEST3_HW.ELEM IS NOT NULL
               THEN NVL(AW.IM_SALE_COST,0)
                + CASE WHEN AW.COD_AZIENDA in('1098') AND NOT(AW.COD_SCENARIO='2026ACT' AND AW.COD_PERIODO='01')
-                        THEN NVL(AW.ENT_COST,0) + NVL(AW.ENT_COST_ADJ,0)+ NVL(AW.CADJ_COST,0)
+                        THEN NVL(AW.ENT_COST,0) + NVL(AW.ENT_COST_ADJ,0) + NVL(AW.CADJ_COST,0)
                       ELSE 0
                  END/*20260302 1098 香港分 外销成本算到终端成本 后续2910 也需要增加  即 市场端外销成本 不限于国际营销的成本*/
                     --内销
@@ -5237,11 +7073,14 @@ USING (
                 THEN NVL(AW.ENT_QTY,0) + NVL(AW.ENT_QTY_ADJ,0)
                   ELSE NVL(AW.ENT_QTY,0) + NVL(AW.ENT_QTY_ADJ,0) + NVL(AW.ELIM_QTY,0) + NVL(AW.CADJ_QTY,0)
           END AS ASSESS_MANG_QTY
-        , CASE WHEN AW.COD_AZIENDA IN ('2900','6012')
+          /*20260827 SHIQINGFENG.EX 取消补充2900公司取数时排除ZZFT*/
+        , CASE WHEN AW.COD_AZIENDA IN (/*'2900',*/'6012')
                 /*20260804 SHIQINGFENG.EX 补充2900公司取数时排除ZZFT*/
                 /*20260817 CHENDONG3.EX 新增6012公司同逻辑处理*/
                 AND SRC_DETAIL <> 'ZZFT'
                  THEN NVL(AW.ENT_COST,0) + NVL(AW.ENT_COST_ADJ,0)
+               WHEN  AW.COD_AZIENDA IN ('2900')
+                 THEN NVL(AW.ENT_COST,0) + NVL(AW.ENT_COST_ADJ,0)+NVL(ASSESS_NM_ALLOC_COST,0)
                WHEN AZ_010102.ELEM IS NOT NULL
                 THEN CASE WHEN DEST3_HW.ELEM IS NOT NULL
                             THEN NVL(AW.CADJ_COST,0) + NVL(AW.ENT_COST,0) + NVL(AW.ENT_COST_ADJ,0)
@@ -5261,6 +7100,8 @@ USING (
       ON DEST3_HA0.ELEM = AW.COD_DEST3
     LEFT JOIN (SELECT DISTINCT ELEM FROM SESSION_V_REF_AZIENDA WHERE SESSION_ID = V_SESSION_ID AND  HIE = '10' AND NODE = '010102') AZ_010102
       ON AZ_010102.ELEM = AW.COD_AZIENDA
+    LEFT JOIN (SELECT DISTINCT ELEM FROM SESSION_V_REF_AZIENDA WHERE SESSION_ID = V_SESSION_ID AND  HIE = '10' AND NODE = '020') AZ_020
+      ON AZ_020.ELEM = AW.COD_AZIENDA
     LEFT JOIN (SELECT DISTINCT COD_AZIENDA FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 WHERE COD_BG IN ('BG001_BU001','BG002_BU001')) AZ_BG001_BG002
       ON AZ_BG001_BG002.COD_AZIENDA = AW.COD_AZI_CTP_ORG
   WHERE AW.COD_SCENARIO=P_SCENARIO
@@ -5270,7 +7111,7 @@ USING (
                               )
   --AND (INSTR(V_AZIENDA, AW.COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
   --对于收入直接调整数据也要做相同逻辑处理 分摊没有物料的 回写反冲值也需要参与
-  AND AW.PROVENIENZA IN ('CPM_SP_M2M_REV_M','INPUT_DEFORM','CPM_SP_ZZFT_M_T0')
+  AND AW.PROVENIENZA IN ('CPM_SP_M2M_REV_M','INPUT_DEFORM','CPM_SP_ZZFT_M_T0','CPM_SP_BSFT_M_T0')  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 考核成本口径补日立分摊冲销行 */
   AND ( NVL(AW.SRC_DETAIL,'|') NOT IN ( 'CON_INP')
    --OR (AW.COD_SCENARIO='2026ACT' AND AW.COD_PERIODO='01'AND AW.COD_AZIENDA='6515' AND AW.SRC_DETAIL='CON_INP'AND AW.COD_CONTO='S600111')
   )
@@ -5454,8 +7295,28 @@ SELECT DISTINCT
 
      , CASE WHEN NVL(LTRIM(AW.CUST_CODE),'ZZZZ') <> 'ZZZZ'
             THEN KNA1.name1 ELSE AW.CUST_NAME END AS CUST_NAME  --客商描述
-     , CASE WHEN NVL(LTRIM(AW.CUST_CODE),'ZZZZ') <> 'ZZZZ'
-            THEN NVL(CUST_INFO.com_3rd_code,'ZZZZ') ELSE AW.D_CHANNEL END AS D_CHANNEL  --公司三级分类
+     , CASE WHEN NVL(LTRIM(AW.D_CHANNEL),'ZZZZ') = 'ZZZZ'
+            /* ALTER BY 20260820-2 SHIQINGFENG.EX 新增公司三级分类更新逻辑与D表一致*/
+            THEN CASE
+                      WHEN AW.D_ONOFFLINE = '020_ON_003'
+                       AND AW.COD_AZIENDA IN ('2600', '6746', '6750', '6800', '6847')
+                       AND AW.cust_code = '2031242'
+                      THEN 'E4'
+                      WHEN AW.D_ONOFFLINE = '020_ON_003'
+                       AND AW.COD_AZIENDA IN ('2600', '6746', '6847')
+                       AND AW.cust_code = '2030797'
+                      THEN 'F4'
+                      WHEN AW.D_ONOFFLINE = '020_ON_003'
+                       AND AW.COD_AZIENDA IN ('2600', '6746', '6800')
+                       AND AW.cust_code = '2018577'
+                      THEN 'F4'
+                      WHEN (AW.COD_AZIENDA = '1180' OR AW.COD_AZIENDA LIKE '12%')
+                       AND ecom_map.channel_code_l3 IS NOT NULL
+                      THEN ecom_map.channel_code_l3
+                      ELSE nvl(CUST_INFO_sold.com_3rd_code,CUST_INFO.com_3rd_code)
+                  END
+            ELSE AW.D_CHANNEL
+       END AS D_CHANNEL  --公司三级分类
      , CASE WHEN NVL(LTRIM(AW.CUST_CODE),'ZZZZ') <> 'ZZZZ'
             THEN NVL(CUST_TRADE_INFO.MARKET_MODE_CODE,'ZZZZ') ELSE AW.D_MODE END AS D_MODE  --营销模式
      , CASE WHEN NVL(LTRIM(AW.CUST_CODE),'ZZZZ') <> 'ZZZZ'
@@ -5487,6 +7348,20 @@ SELECT DISTINCT
             THEN KNA1_sold.name1 ELSE AW.sold_to_name END AS sold_to_name  --售达方名称
 
      , OID
+     --20260920FJF_ADD 二期新增字段
+    , CASE WHEN nvl(aw.D_EFF_CLASS,'|') = '|' OR aw.D_EFF_CLASS = 'ZZZZ' OR MARA.ee_level_code <> aw.D_EFF_CLASS
+           THEN MARA.ee_level_code
+           ELSE aw.D_EFF_CLASS
+      END AS D_EFF_CLASS
+    , CASE WHEN nvl(aw.D_BU_SHOP,'|') = '|' OR aw.D_BU_SHOP = 'ZZZZ' OR CUST_INFO.bu_code <> aw.D_BU_SHOP
+           THEN CUST_INFO.bu_code
+           ELSE aw.D_BU_SHOP
+      END AS D_BU_SHOP
+
+     , CASE WHEN nvl(aw.D_UNICUSTGRP,'|') = '|' OR aw.D_UNICUSTGRP = 'ZZZZ' OR CUST_INFO.cust_unity_code <> aw.D_UNICUSTGRP
+           THEN CUST_INFO.cust_unity_code
+           ELSE aw.D_UNICUSTGRP
+      END AS D_UNICUSTGRP
   FROM
 (
 -- AW子查询：从目标表中取出所有需要保留原值的字段
@@ -5525,6 +7400,10 @@ SELECT OID
      , CUST_NATURE_NAME
      , CUST_TYPE_NAME
      , sold_to_name
+     , D_ECOM_BU
+     , D_ONOFFLINE
+   --20260920FJF_ADD 二期新增字段
+     ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP
   FROM AW_MR9_REVM05_000001_TEMP PS
  WHERE COD_SCENARIO = P_SCENARIO
    AND COD_PERIODO = P_PERIODO
@@ -5532,7 +7411,7 @@ SELECT OID
                                     WHERE SESSION_ID = V_SESSION_ID
                               )
    --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
-   AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0')
+   AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0', 'CPM_SP_BSFT_M_T0')  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 补日立分摊来源 */
    /*20260226 新增排除锁定公司*/
    /* AND COD_AZIENDA NOT IN (SELECT COD_AZIENDA
                             FROM AW_RUL_DWMCRS_000001 T
@@ -5560,6 +7439,10 @@ SELECT 'S'||MANDT AS SAP_VERSION,KUNNR,zkunnr_mdg,name1 FROM tgk_fima_hisense.DS
 
 LEFT JOIN tgk_fima_hisense.DIM_CUSTOMER_BASE_INFO_DD CUST_INFO
   ON LTRIM(KNA1.zkunnr_mdg,'0') = LTRIM(CUST_INFO.cust_code,'0')
+
+LEFT JOIN tgk_fima_hisense.DIM_CUSTOMER_BASE_INFO_DD CUST_INFO_sold
+  ON LTRIM(KNA1_sold.zkunnr_mdg,'0') = LTRIM(CUST_INFO_sold.cust_code,'0')
+
 LEFT JOIN TGK_FIMA_HISENSE.DIM_FI_PRODUCT MARA
   ON MARA.matnr = AW.MATERIAL_CODE
 LEFT JOIN tgk_fima_hisense.DIM_CUSTOMER_TRADE_INFO_DD CUST_TRADE_INFO
@@ -5582,7 +7465,12 @@ LEFT JOIN (
 ) CTP
 ON CTP.kunrg = AW.CUST_CODE
 AND CTP.system_src = AZ.SAP_VERSION
-
+LEFT JOIN (SELECT ecom_code,MAX(channel_code_l3) AS channel_code_l3,MAX(channel_name_l3) AS channel_name_l3
+             FROM TGK_FIMA_HISENSE.dim_rule_fi_mr_ecom_channel3_mapping
+            GROUP BY ecom_code
+          ) ecom_map
+ON (AW.COD_AZIENDA = '1180' OR AW.COD_AZIENDA LIKE '12%')
+ AND AW.D_ECOM_BU = ecom_map.ecom_code
 ) C
 ON(
    T.OID = C.OID
@@ -5617,6 +7505,83 @@ UPDATE SET
       ,T.CUST_NATURE_NAME   = C.CUST_NATURE_NAME          -- 单位性质
       ,T.CUST_TYPE_NAME     = C.CUST_TYPE_NAME            -- 客户类型
       ,T.sold_to_name       = C.sold_to_name               -- 售达方名称
+      --20260920FJF_ADD 二期新增字段
+      , T.D_EFF_CLASS = nvl(C.D_EFF_CLASS,'ZZZZ')  --能效等级
+      , T.D_BU_SHOP = nvl(C.D_BU_SHOP,'ZZZZ')   --门店所属BU
+      , T.D_UNICUSTGRP = nvl(C.D_UNICUSTGRP,'ZZZZ') --统一客户组编码
+;
+
+UPDATE AW_MR9_REVM05_000001_TEMP T
+   SET D_EFF_CLASS   = NVL(T.D_EFF_CLASS, 'ZZZZ'),
+       D_BU_SHOP     = NVL(T.D_BU_SHOP, 'ZZZZ'),
+       D_EC_STORE    = NVL(T.D_EC_STORE, 'ZZZZ'),
+       D_UNICUSTGRP  = NVL(T.D_UNICUSTGRP, 'ZZZZ')
+ WHERE T.COD_SCENARIO = P_SCENARIO
+   AND T.COD_PERIODO  = P_PERIODO
+   AND T.COD_AZIENDA IN (
+         SELECT ELEM
+           FROM SESSION_AZIENDA_LIST
+          WHERE SESSION_ID = V_SESSION_ID
+       )
+  AND T.PROVENIENZA = 'CPM_SP_M2M_REV_M'
+;
+ COMMIT;
+ 
+ 
+ 
+
+INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+VALUES('CPM_SP_M2M_REV_M', '二期新增维度处理', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '二期新增维度处理',P_AZIENDA);
+COMMIT;
+  
+--20261022fjf_add REV005_STEP_999 二期新增维度处理
+MERGE INTO AW_MR9_REVM05_000001_TEMP T
+USING(
+    SELECT S.OID,
+      NVL(BMU.BMU_CODE, S.D_SALE_DEPT) AS D_SALE_DEPT,
+      CASE WHEN S.COD_AZIENDA = '6700' AND S.CUST_CODE IN ('2171731', '2112453', '2020217', '2059117')
+          THEN 'S101'
+        ELSE NVL(BR.D_BRANCH,'ZZZZ')
+      END AS D_BRANCH,
+      NVL(CH.CHANNEL_BU_CODE,'ZZZZ') AS D_CHANNEL_BU,
+      CASE WHEN S.COD_AZIENDA = '1180' OR S.COD_AZIENDA LIKE '12%'
+          THEN CASE WHEN S.CN_CLASS_MARK_CODE = 'Z1' THEN '1' ELSE '2' END
+         ELSE CASE WHEN S.D_UNICUSTGRP = 'T0076' THEN '1' ELSE '2' END
+      END AS D_STORE_TYPE
+    FROM(
+        SELECT OID,D_SALE_DEPT,COD_AZIENDA,CUST_CODE,D_CHANNEL,COD_DEST2,CN_CLASS_MARK_CODE,D_UNICUSTGRP
+        FROM AW_MR9_REVM05_000001_TEMP T
+        WHERE T.COD_SCENARIO = P_SCENARIO
+        AND T.COD_PERIODO  = P_PERIODO
+        AND T.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID )
+      )S
+    LEFT JOIN 
+    (
+      SELECT DISTINCT PROFITCENTER_CODE, BMU_CODE
+      FROM TGK_FIMA_HISENSE.DIM_RULE_FI_MR_BMU_TO_PROFITCENTER
+      WHERE DIM_FLAG = '01'
+    ) BMU
+    ON BMU.PROFITCENTER_CODE = S.COD_DEST2
+    LEFT JOIN 
+    (
+      SELECT DISTINCT COD_AZIENDA, D_BRANCH
+      FROM TGK_FIMA_HISENSE.DIM_RULE_FI_MR_AZIENDA_MAPPING_BRANCH
+      WHERE D_BRANCH <> 'SI01'
+    ) BR
+    ON BR.COD_AZIENDA = S.COD_AZIENDA
+    LEFT JOIN 
+    (     
+      SELECT DISTINCT CHANNEL_BU_CODE,COM_3RD_CODE
+      FROM TGK_FIMA_HISENSE.DIM_RULE_MRS_MR3_CHANNEL_BU_RELATION
+    ) CH
+    ON CH.COM_3RD_CODE = S.D_CHANNEL
+  ) SRC
+ON (T.OID = SRC.OID)
+WHEN MATCHED THEN UPDATE SET
+    T.D_SALE_DEPT  = SRC.D_SALE_DEPT,
+    T.D_BRANCH     = SRC.D_BRANCH,
+    T.D_CHANNEL_BU = SRC.D_CHANNEL_BU,
+    T.D_STORE_TYPE = SRC.D_STORE_TYPE
 ;
 
 
@@ -5630,7 +7595,7 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
                                     WHERE SESSION_ID = V_SESSION_ID
                               )
      --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
-     AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0')
+     AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0', 'CPM_SP_BSFT_M_T0')  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 正式表 DELETE 补日立分摊来源 */
       /*20260226 新增排除锁定公司*/
       /* AND COD_AZIENDA NOT IN (SELECT COD_AZIENDA
                   FROM AW_RUL_DWMCRS_000001 T
@@ -5643,17 +7608,15 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
 
   INSERT INTO AW_MR9_REVM05_000001
   (OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, AGENCY_CODE, AGENCY_NAME, CUST_CODE, CUST_NAME, D_SALE_DEPT, D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_ECOM_BU, D_MARKET_PNT, D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES, D_TECH_TYPE, D_PRO_CLASS, D_MODEL_LCA, D_PRO_TYPE, D_PRC_GRP, D_POL_CLASS, CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME, CUST_TYPE_NAME, SOLD_TO_CODE, SOLD_TO_NAME, MATERIAL_CODE, MATERIAL_NAME, IS_MINILED_CODE, SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME, BATCH_ID, MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME, MAP_QTY, ORG_REV, POLICY_AMT, ASSESSED_REV, SALE_COGS, BEG_UNREAL_GP, END_UNREAL_GP, COMB_COST, AVG_UNIT_COST, COMB_COST_AVG, PSI_COMB_COST, WTD_UNIT_COST, DOM_PSI_COST, OTH_ASSESS_COST, PROVENIENZA, USERUPD, DATEUPD, EN_VERSION, POLICY_CASH_PD, COD_CATEGORIA, CUSTOMER_MODEL, FAC_EXTERNAL_SALE_COST, FAC_EXTERNAL_SALE_REVENUE, IM_SALE_COST, COD_AZI_CTP, MANG_COST, D_DATA_BLOCK, D_DIFF_TYPE, D_ADJ_TYPE, CN_CLASS_MARK_CODE, CN_CLASS_MARK_NAME, SALE_CERT_TYPE, CN_SALE_COGS, CN_ORG_REV, CN_MAP_ZUM, COD_AZI_CTP_ORG, D_OPER_TYPE, ELIM_COST, ELIM_REV, COMB_REV, MANG_REV, ENT_QTY, ENT_QTY_ADJ, ELIM_QTY, CADJ_QTY, MANG_QTY, ENT_REV, ENT_REV_ADJ, CADJ_REV, ENT_COST, ENT_COST_ADJ, CADJ_COST, CN_ELIM_QTY, CN_MANG_QTY, CN_ELIM_REV, CN_MANG_REV, CN_ELIM_COST, CN_MANG_COST, BU_MANG_COST, FAC_MANG_COST, IM_MANG_COST, NOTE, ORG_QTY, FAC_MANG_REV, IM_MANG_REV, FAC_CADJ_REV, CN_CADJ_REV, VAR_ALLOC_COST, COD_DEST1, BILL_QTY,D_MINILED,ASSESS_MANG_COST,ASSESS_MANG_REV,ASSESS_MANG_QTY
-  ,D_BUS_SCE_S
-  ,ASSESS_NM_ALLOC_COST
-  ,STD_QTY
-  ,MA_SALE_COGS
+  ,D_BUS_SCE_S,ASSESS_NM_ALLOC_COST,STD_QTY,MA_SALE_COGS, SHIPPING_ORDER
+  --20260920FJF_ADD 二期新增字段
+  ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP,D_BRANCH,D_CHANNEL_BU
   )
 
   SELECT NEWID() OID, COD_SCENARIO, COD_PERIODO, SRC_DETAIL, COD_CONTO, COD_AZIENDA, COD_DEST2, COD_DEST3, COD_DEST4, AGENCY_CODE, AGENCY_NAME, CUST_CODE, CUST_NAME, D_SALE_DEPT, D_CHANNEL, D_MODE, D_ONOFFLINE, D_CNL_C_TYPE, D_IND_C_TYPE, D_ECOM_BU, D_MARKET_PNT, D_PRO_SSER, D_SPEC_SEC, D_PRO_TYPE_S, D_PRO_STAGE, D_PRI_RANGE, D_PRO_SERIES, D_TECH_TYPE, D_PRO_CLASS, D_MODEL_LCA, D_PRO_TYPE, D_PRC_GRP, D_POL_CLASS, CUST_UNITY_NAME, CREDIT_LEVEL_NAME, CUST_NATURE_NAME, CUST_TYPE_NAME, SOLD_TO_CODE, SOLD_TO_NAME, MATERIAL_CODE, MATERIAL_NAME, IS_MINILED_CODE, SALE_MODEL_CODE, SALE_MODEL_NAME, MODEL_CODE, MODEL_NAME, BATCH_ID, MATERIAL_GROUP_CODE, SHOP_CODE, SHOP_NAME, MAP_QTY, ORG_REV, POLICY_AMT, ASSESSED_REV, SALE_COGS, BEG_UNREAL_GP, END_UNREAL_GP, COMB_COST, AVG_UNIT_COST, COMB_COST_AVG, PSI_COMB_COST, WTD_UNIT_COST, DOM_PSI_COST, OTH_ASSESS_COST, PROVENIENZA, USERUPD, DATEUPD, EN_VERSION, POLICY_CASH_PD, COD_CATEGORIA, CUSTOMER_MODEL, FAC_EXTERNAL_SALE_COST, FAC_EXTERNAL_SALE_REVENUE, IM_SALE_COST, COD_AZI_CTP, MANG_COST, D_DATA_BLOCK, D_DIFF_TYPE, D_ADJ_TYPE, CN_CLASS_MARK_CODE, CN_CLASS_MARK_NAME, SALE_CERT_TYPE, CN_SALE_COGS, CN_ORG_REV, CN_MAP_ZUM, COD_AZI_CTP_ORG, D_OPER_TYPE, ELIM_COST, ELIM_REV, COMB_REV, MANG_REV, ENT_QTY, ENT_QTY_ADJ, ELIM_QTY, CADJ_QTY, MANG_QTY, ENT_REV, ENT_REV_ADJ, CADJ_REV, ENT_COST, ENT_COST_ADJ, CADJ_COST, CN_ELIM_QTY, CN_MANG_QTY, CN_ELIM_REV, CN_MANG_REV, CN_ELIM_COST, CN_MANG_COST, BU_MANG_COST, FAC_MANG_COST, IM_MANG_COST, NOTE, ORG_QTY, FAC_MANG_REV, IM_MANG_REV, FAC_CADJ_REV, CN_CADJ_REV, VAR_ALLOC_COST, COD_DEST1, BILL_QTY ,D_MINILED,ASSESS_MANG_COST,ASSESS_MANG_REV,ASSESS_MANG_QTY
-  ,D_BUS_SCE_S
-  ,ASSESS_NM_ALLOC_COST
-  ,STD_QTY
-  ,MA_SALE_COGS
+    ,D_BUS_SCE_S,ASSESS_NM_ALLOC_COST,STD_QTY,MA_SALE_COGS, SHIPPING_ORDER
+    --20260920FJF_ADD 二期新增字段
+    ,D_EFF_CLASS,D_BU_SHOP,D_EC_STORE,D_UNICUSTGRP,D_BRANCH,D_CHANNEL_BU
   FROM AW_MR9_REVM05_000001_TEMP
     WHERE COD_SCENARIO = P_SCENARIO
    AND COD_PERIODO = P_PERIODO
@@ -5661,7 +7624,7 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
                                     WHERE SESSION_ID = V_SESSION_ID
                               )
    --AND (INSTR(V_AZIENDA, COD_AZIENDA) > 0 OR P_AZIENDA = 'ALL')
-   AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0')
+   AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0', 'CPM_SP_BSFT_M_T0')  /* ALTER BY LIYIFAN1.EX 20261116 16:24:00 正式表 INSERT 补日立分摊冲销行 */
           /*20260226 新增排除锁定公司*/
           /* AND COD_AZIENDA NOT IN (SELECT COD_AZIENDA
                   FROM AW_RUL_DWMCRS_000001 T
@@ -5675,19 +7638,6 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
   VALUES('CPM_SP_M2M_REV_M', '临时表插入AW', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '插入完成',P_AZIENDA);
   COMMIT;
 
---EDIT BY CHENDONG3.EX 260817 将中国区费用转政策的业务在产品公司还原的部分，对方公司置为空，以确保后续不参与抵消
-UPDATE AW_MR9_REVM05_000001 T
-SET T.COD_AZI_CTP = ''
-WHERE D_OPER_TYPE IN ('OPTY039','OPTY040')
-     AND D_ADJ_TYPE = 'REV_01_221'
-     AND COD_SCENARIO = P_SCENARIO
-     AND COD_PERIODO = P_PERIODO
-     AND COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
-                                    WHERE SESSION_ID = V_SESSION_ID
-                              )
-     AND PROVENIENZA IN ('CPM_SP_M2M_REV_M', 'CPM_SP_ZZFT_M_T0')
-     ;
-
 --用于获取外销成本-高低开及预分成调整数
 CPM_SP_M2M_REVADJ_M(P_SCENARIO,P_PERIODO,SESSION_USER);
 
@@ -5700,6 +7650,99 @@ END IF;
  CPM_SP_M2M_OPL_SUP(P_SCENARIO,P_PERIODO,SESSION_USER);
 
 
+  /*20261026 新增：事业部编码 / 是否事业部 / 是否产销存 —— 落表后回刷，不动 INSERT 结构
+    ① 公司码按层级规则匹配 AW_RUL_MAGPCR_000001：NODE_ELEMENT_FLAG='N' 是层级编码（走 NODE 展开），
+       'E' 是具体公司码（走 ELEM 等值），不能简单等值；有效期按 VALID_FR / VALID_TO 卡 YYYYMM。
+    ② 命中后取 COD_BG，再用 AW_RUL_PCRMAP_000001（同期间有效）换出该事业部的利润中心范围。
+    ③ 本行 COD_DEST2 落在范围内 → 写 COD_BG 并打 IS_BG_PL='Y'；不在范围内 → 两列留空。
+    ④ IS_PSC 只看公司是否命中，直接取配置值，与利润中心无关。
+
+    ★ 20261027 性能重构（V4.2）：原「IS_PSC 一条 + COD_BG/IS_BG_PL 一条」两段 UPDATE，合并为一条
+      ROWID 驱动的 MERGE，结果逐行等价。原写法三个瓶颈：
+      · 目标表整表扫 2 次、整表写 2 次（本表 130+ 列，undo/redo 与索引维护成本翻倍）；
+      · WHERE 命中的每一行都要跑一次标量子查询，派生表（MAGPCR × SESSION_V_REF_AZIENDA，再 join
+        PCRMAP）逐行重算；标量子查询缓存只按关联列 (COD_AZIENDA / COD_AZIENDA+COD_DEST2) 命中，
+        公司×利润中心组合越多重算次数越多 —— 这是主要耗时；
+      · 有效期比较 SUBSTR(P_SCENARIO,1,4)||LPAD(P_PERIODO,2,'0') 每行、每处 NVL 各算一遍，表达式不可索引。
+      现写法：两个映射派生表在 USING 里各算一次（hash join 到目标表），目标表只扫 1 次、只写 1 次，
+        MERGE 按 ROWID 定位不再二次扫描；再加 UPDATE ... WHERE「新旧值不同才写」，未命中且原本为空的行走不到写。
+      有效期统一用 v_per0（SP 内已有 = SUBSTR(P_SCENARIO,1,4)||P_PERIODO；P_PERIODO 为两位月份，
+        与原 LPAD 写法等价，且本程序其余 100+ 处都是这个口径）。
+      ? 原注释担心「合在一条里 IS_PSC 会一并被冲成空」只对 SET (A,B) = (SELECT ...) 元组写法成立；
+        这里三列各自独立赋值，公司未命中时 IS_PSC 为空，与拆开写结论完全一致。
+      ? 两个 LEFT JOIN 的派生表都按主键收敛（GROUP BY AZI_CODE / AZI_CODE,PCR_CODE），每个 ROWID 在
+        USING 里只出现一次，不会 ORA-30926、不放大行数。
+      ? 本段属「USING 内扫目标表取 ROWID + MERGE 定位更新」；若该表后续改成分区键变动/GTT，需复测。*/
+
+  MERGE INTO AW_MR9_REVM05_000001 T
+  USING (
+      SELECT T2.ROWID              AS RID
+           , PSC.IS_PSC_V          AS IS_PSC
+           , BG.PCR_CODE           AS PCR_CODE
+           , BG.BG_CODE            AS BG_CODE
+        FROM AW_MR9_REVM05_000001 T2
+        LEFT JOIN (
+             /* 公司级映射：公司 → 是否产销存。同一公司多条配置取 MAX，与原标量子查询一致 */
+             SELECT AZI_CODE, MAX(IS_PSC_V) AS IS_PSC_V
+               FROM (SELECT DISTINCT V.ELEM AS AZI_CODE, C.IS_PSC AS IS_PSC_V
+                       FROM TGK_FIMA_HISENSE.AW_RUL_MAGPCR_000001 C
+                       JOIN SESSION_V_REF_AZIENDA V
+                         ON V.SESSION_ID = V_SESSION_ID
+                        AND V.HIE = '01'
+                        AND (   (C.NODE_ELEMENT_FLAG = 'N' AND V.NODE = C.COMPANY_CODE)
+                             OR (C.NODE_ELEMENT_FLAG = 'E' AND V.ELEM = C.COMPANY_CODE))
+                      WHERE NVL(C.VALID_FR, '000000') <= v_per0
+                        AND NVL(C.VALID_TO, '999999') >= v_per0
+                    )
+              GROUP BY AZI_CODE
+          ) PSC
+          ON PSC.AZI_CODE = T2.COD_AZIENDA
+        LEFT JOIN (
+             /* 公司 + 利润中心级映射：命中才有 COD_BG；未命中 COD_BG / IS_BG_PL 一律为空 */
+             SELECT AZ.COD_AZIENDA AS AZI_CODE, PM.COD_DEST2 AS PCR_CODE, MAX(AZ.COD_BG) AS BG_CODE
+               FROM (SELECT DISTINCT V.ELEM AS COD_AZIENDA, C.COD_BG
+                       FROM TGK_FIMA_HISENSE.AW_RUL_MAGPCR_000001 C
+                       JOIN SESSION_V_REF_AZIENDA V
+                         ON V.SESSION_ID = V_SESSION_ID
+                        AND V.HIE = '01'
+                        AND (   (C.NODE_ELEMENT_FLAG = 'N' AND V.NODE = C.COMPANY_CODE)
+                             OR (C.NODE_ELEMENT_FLAG = 'E' AND V.ELEM = C.COMPANY_CODE))
+                      WHERE NVL(C.VALID_FR, '000000') <= v_per0
+                        AND NVL(C.VALID_TO, '999999') >= v_per0
+                    ) AZ
+               JOIN (SELECT DISTINCT COD_BG, COD_DEST2
+                       FROM TGK_FIMA_HISENSE.AW_RUL_PCRMAP_000001
+                      WHERE NVL(VALID_FR, '000000') <= v_per0
+                        AND NVL(VALID_TO, '999999') >= v_per0
+                    ) PM
+                 ON PM.COD_BG = AZ.COD_BG
+              GROUP BY AZ.COD_AZIENDA, PM.COD_DEST2
+          ) BG
+          ON BG.AZI_CODE = T2.COD_AZIENDA
+         AND BG.PCR_CODE = T2.COD_DEST2
+       WHERE T2.COD_SCENARIO = P_SCENARIO
+         AND T2.COD_PERIODO  = P_PERIODO
+         AND T2.COD_AZIENDA IN (SELECT ELEM FROM SESSION_AZIENDA_LIST
+                                 WHERE SESSION_ID = V_SESSION_ID)
+  ) S
+  ON (T.ROWID = S.RID)
+  WHEN MATCHED THEN UPDATE
+     SET T.IS_PSC   = S.IS_PSC
+       , T.COD_BG   = S.BG_CODE
+       , T.IS_BG_PL = CASE WHEN S.PCR_CODE IS NOT NULL THEN 'Y' END
+   /* 只写「新旧值不同」的行：新值有 → 写；旧值有而新值为空 → 写（清空，与原 UPDATE 全表置空等价）；
+      新旧都为空 → 不写，省掉一次行版本。*/
+   WHERE S.IS_PSC   IS NOT NULL
+      OR S.PCR_CODE IS NOT NULL
+      OR T.IS_PSC   IS NOT NULL
+      OR T.COD_BG   IS NOT NULL
+      OR T.IS_BG_PL IS NOT NULL
+  ;
+  COMMIT;
+
+INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, REMARK,COD_AZIENDA)
+  VALUES('CPM_SP_M2M_REV_M', '更新正式表数据-管法显差所需FLAG', SYSDATE, SESSION_USER, P_SCENARIO, P_PERIODO, '更新完成',P_AZIENDA);
+  COMMIT;
 
 DELETE
    FROM AW_MR9_REVM01_000001_CON_TEMP T
@@ -5756,5 +7799,6 @@ INSERT INTO ZTAB_CPM_LOG(CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIOD
     INSERT INTO ZTAB_CPM_LOG(CPM,STEP,EXECTIME,CREATEBY,COD_SCENARIO,COD_PERIODO,COD_AZIENDA)
     VALUES('CPM_SP_M2M_REV_M',SUBSTR(V_ERROR_COD||V_ERROR_MSG,1,1000),SYSDATE,SESSION_USER,P_SCENARIO,P_PERIODO,P_AZIENDA);
     COMMIT;*/
+
 
 END ;
