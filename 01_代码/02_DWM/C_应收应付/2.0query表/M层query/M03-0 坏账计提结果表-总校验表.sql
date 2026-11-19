@@ -47,7 +47,7 @@ T20_BASE AS (
        AND A.COD_PERIODO = ${$Period.code}
        AND A.COD_CATEGORIA = 'ZAMOUNT'
        AND A.COD_AZIENDA IN (${$Entity.code})
-       AND A.COD_CONTO IN ('1122000000', '122101F', '1460000000')
+       AND A.ME_AGE_FLAG IN ('AR', 'OR', 'CA')
 ),
 /* 1.0原始业务范围内的公司键，作为ITM三科目补齐的最小键集合 */
 T10_BASE AS (

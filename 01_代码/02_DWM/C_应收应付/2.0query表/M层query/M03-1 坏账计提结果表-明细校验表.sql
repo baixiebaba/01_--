@@ -43,8 +43,8 @@ ITM AS (
 /* ALTER BY 20261105 17:08 SHIQINGFENG.EX 修正明细校验客商金额汇总。 */
 T20_BASE AS (
     SELECT A.COD_AZIENDA AS COMPANY_CODE
-         , NVL(LTRIM(A.CUST_CODE, '0'), '(NO_CUST)') AS CUST_CODE
-         , MAX(A.CUST_NAME) AS CUST_NAME
+         , NVL(LTRIM(A.CUST_HEAD_CODE, '0'), '(NO_CUST)') AS CUST_CODE
+         , MAX(A.CUST_HEAD_NAME) AS CUST_NAME
          , A.COD_CONTO
          , SUM(A.BD_0_AMT) AS BD_0_AMT
       FROM AW_MR9_ARPM02_000001 A
@@ -52,9 +52,9 @@ T20_BASE AS (
        AND A.COD_PERIODO = ${$Period.code}
        AND A.COD_CATEGORIA = 'ZAMOUNT'
        AND A.COD_AZIENDA IN (${$Entity.code})
-       AND A.COD_CONTO IN ('1122000000', '122101F', '1460000000')
+       AND A.ME_AGE_FLAG IN ('AR', 'OR', 'CA')
      GROUP BY A.COD_AZIENDA
-            , NVL(LTRIM(A.CUST_CODE, '0'), '(NO_CUST)')
+            , NVL(LTRIM(A.CUST_HEAD_CODE, '0'), '(NO_CUST)')
             , A.COD_CONTO
 ),
 /* 1.0按公司、客商和科目汇总，与2.0保持相同校验粒度。 */
