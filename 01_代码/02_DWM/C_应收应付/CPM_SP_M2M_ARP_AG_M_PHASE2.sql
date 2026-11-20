@@ -7,9 +7,9 @@
     /*******************************************************************************
     *                              存储过程说明
     *-----------------------------------------------------------------------------
-    * 最后更新时间：20261120 09:51
-    * 本次修改：ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
-    * 上次修改：ALTER BY 20261119 18:11 SHIQINGFENG.EX 手工行清零的对方行限定为本过程生成的抽取行
+    * 最后更新时间：20261120 10:01
+    * 本次修改：ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
+    * 上次修改：ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
     *
     * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,7 @@
     * 目标表    ：AW_MR9_ARPM02_000001
     *
     * 修改历史：
+    *   ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
     *   ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
     *   ALTER BY 20261119 18:11 SHIQINGFENG.EX 手工行清零的对方行限定为本过程生成的抽取行
     *   ALTER BY 20261119 18:07 SHIQINGFENG.EX 同键多性质分行时清零手工行金额，仅保留呆死金额与风险金额
@@ -318,7 +319,7 @@
                       THEN 1 / NULLIF(1 + NVL(A.TAX_RATE, 0), 0)
                   ELSE 1
               END AS TAX_FACTOR
-          /* ALTER BY 20261120 09:51 SHIQINGFENG.EX 折算系数保留10位小数，修复VND等小币值币种期末汇率余额精度损失 */
+          /* ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位，一侧为人民币时不取整 */
           , CASE
                 WHEN TRIM(A.EXCHANGE_RATE_EVAL_FLAG) IS NULL
                   AND TRIM(A.COD_VALUTA_ORIGINARIA) IS NOT NULL
@@ -340,11 +341,17 @@
                   THEN CASE
                           WHEN A.COD_AZIENDA = '2023'
                             THEN TCURR_CONV.RATE
-                          ELSE ROUND(
-                                  (CASE WHEN TRIM(A.COD_VALUTA) = 'CNY' THEN 1 ELSE BCY_RATE.RATE END)
-                                  / (CASE WHEN TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY' THEN 1 ELSE QCY_RATE.RATE END)
-                                , 10
-                                )
+                          ELSE CASE
+                                  WHEN TRIM(A.COD_VALUTA) <> 'CNY'
+                                  AND TRIM(A.COD_VALUTA_ORIGINARIA) <> 'CNY'
+                                      THEN ROUND(
+                                              (CASE WHEN TRIM(A.COD_VALUTA) = 'CNY' THEN 1 ELSE BCY_RATE.RATE END)
+                                              / (CASE WHEN TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY' THEN 1 ELSE QCY_RATE.RATE END)
+                                            , 5
+                                            )
+                                  ELSE (CASE WHEN TRIM(A.COD_VALUTA) = 'CNY' THEN 1 ELSE BCY_RATE.RATE END)
+                                       / (CASE WHEN TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY' THEN 1 ELSE QCY_RATE.RATE END)
+                              END
                       END
             END AS CONVERSION_FACTOR
         FROM AW_MR9_ARPM01_000001 A
