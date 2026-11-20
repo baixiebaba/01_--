@@ -7,9 +7,9 @@
     /*******************************************************************************
     *                              存储过程说明
     *-----------------------------------------------------------------------------
-    * 最后更新时间：20261118 21:29
-    * 本次修改：ALTER BY 20261118 21:29 SHIQINGFENG.EX 补充来源仅在无账龄行时新增独立行，避免空性质行重复
-    * 上次修改：ALTER BY 20261118 21:26 SHIQINGFENG.EX 账龄调整副本ZZT003_ADJ重新纳入本包，按性质匹配账龄行并入槽位，匹配不到按独立行新增
+    * 最后更新时间：20261120 09:51
+    * 本次修改：ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
+    * 上次修改：ALTER BY 20261119 18:11 SHIQINGFENG.EX 手工行清零的对方行限定为本过程生成的抽取行
     *
     * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,9 @@
     * 目标表    ：AW_MR9_ARPM02_000001
     *
     * 修改历史：
+    *   ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
+    *   ALTER BY 20261119 18:11 SHIQINGFENG.EX 手工行清零的对方行限定为本过程生成的抽取行
+    *   ALTER BY 20261119 18:07 SHIQINGFENG.EX 同键多性质分行时清零手工行金额，仅保留呆死金额与风险金额
     *   ALTER BY 20261118 21:29 SHIQINGFENG.EX 补充来源仅在无账龄行时新增独立行，避免空性质行重复
     *   ALTER BY 20261118 21:26 SHIQINGFENG.EX 账龄调整副本ZZT003_ADJ重新纳入本包，按性质匹配账龄行并入槽位，匹配不到按独立行新增
     *   ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入
@@ -315,6 +318,7 @@
                       THEN 1 / NULLIF(1 + NVL(A.TAX_RATE, 0), 0)
                   ELSE 1
               END AS TAX_FACTOR
+          /* ALTER BY 20261120 09:51 SHIQINGFENG.EX 折算系数保留10位小数，修复VND等小币值币种期末汇率余额精度损失 */
           , CASE
                 WHEN TRIM(A.EXCHANGE_RATE_EVAL_FLAG) IS NULL
                   AND TRIM(A.COD_VALUTA_ORIGINARIA) IS NOT NULL
@@ -339,7 +343,7 @@
                           ELSE ROUND(
                                   (CASE WHEN TRIM(A.COD_VALUTA) = 'CNY' THEN 1 ELSE BCY_RATE.RATE END)
                                   / (CASE WHEN TRIM(A.COD_VALUTA_ORIGINARIA) = 'CNY' THEN 1 ELSE QCY_RATE.RATE END)
-                                , 5
+                                , 10
                                 )
                       END
             END AS CONVERSION_FACTOR
@@ -1664,7 +1668,7 @@
         , T.GRP_SCOPE = S.GRP_SCOPE
         , T.NATURE_L1_NAME = S.NATURE_L1_NAME
         , T.NATURE_L2_NAME = S.NATURE_L2_NAME
-        /* , T.NATURE_L3_NAME = S.NATURE_L3_NAME */
+        , T.NATURE_L3_NAME = S.NATURE_L3_NAME
         , T.D_CHANNEL = S.D_CHANNEL
         , T.D_CHANNEL_BU = S.D_CHANNEL_BU
         , T.D_CC_CUSTGRP = S.D_CC_CUSTGRP
@@ -2163,6 +2167,200 @@
             SELECT ELEM
               FROM SESSION_AZIENDA_LIST
               WHERE SESSION_ID = V_SESSION_ID
+      );
+  END;
+
+    /* 同键多性质分行时清零手工行金额，仅保留呆死金额和风险金额，避免与抽取行重复。 */
+    /* ALTER BY 20261119 18:07 SHIQINGFENG.EX 新增手工行金额清零，同键多性质分行时手工行只保留呆死金额与风险金额 */
+  BEGIN
+    UPDATE AW_MR9_ARPM02_000001 T
+      SET T.BY_BCY_0_AMT = 0
+        , T.LM_BCY_0_AMT = 0
+        , T.BCY_0_AMT = 0
+        , T.BCY_1_AMT = 0
+        , T.BCY_2_AMT = 0
+        , T.BCY_3_AMT = 0
+        , T.BCY_4_AMT = 0
+        , T.BCY_5_AMT = 0
+        , T.BCY_6_AMT = 0
+        , T.BCY_7_AMT = 0
+        , T.BCY_8_AMT = 0
+        , T.BCY_9_AMT = 0
+        , T.BCY_10_AMT = 0
+        , T.BCY_11_AMT = 0
+        , T.BCY_12_AMT = 0
+        , T.BCY_13_AMT = 0
+        , T.BCY_14_AMT = 0
+        , T.BCY_15_AMT = 0
+        , T.QCY_0_AMT = 0
+        , T.QCY_1_AMT = 0
+        , T.QCY_2_AMT = 0
+        , T.QCY_3_AMT = 0
+        , T.QCY_4_AMT = 0
+        , T.QCY_5_AMT = 0
+        , T.QCY_6_AMT = 0
+        , T.QCY_7_AMT = 0
+        , T.QCY_8_AMT = 0
+        , T.QCY_9_AMT = 0
+        , T.QCY_10_AMT = 0
+        , T.QCY_11_AMT = 0
+        , T.QCY_12_AMT = 0
+        , T.QCY_13_AMT = 0
+        , T.QCY_14_AMT = 0
+        , T.QCY_15_AMT = 0
+        , T.SHP_NINV_AMT = 0
+        , T.RET_NTRF_AMT = 0
+        , T.BCY_ADJ_INCL_0_AMT = 0
+        , T.BCY_ADJ_INCL_1_AMT = 0
+        , T.BCY_ADJ_INCL_2_AMT = 0
+        , T.BCY_ADJ_INCL_3_AMT = 0
+        , T.BCY_ADJ_INCL_4_AMT = 0
+        , T.BCY_ADJ_INCL_5_AMT = 0
+        , T.BCY_ADJ_INCL_6_AMT = 0
+        , T.BCY_ADJ_INCL_7_AMT = 0
+        , T.BCY_ADJ_INCL_8_AMT = 0
+        , T.BCY_ADJ_INCL_9_AMT = 0
+        , T.BCY_ADJ_INCL_10_AMT = 0
+        , T.BCY_ADJ_INCL_11_AMT = 0
+        , T.BCY_ADJ_INCL_12_AMT = 0
+        , T.BCY_ADJ_INCL_13_AMT = 0
+        , T.BCY_ADJ_INCL_14_AMT = 0
+        , T.BCY_ADJ_INCL_15_AMT = 0
+        , T.BCY_ADJ_EXCL_0_AMT = 0
+        , T.OVERDUE_0_AMT = 0
+        , T.OVERDUE_1_AMT = 0
+        , T.OVERDUE_2_AMT = 0
+        , T.OVERDUE_3_AMT = 0
+        , T.OVERDUE_4_AMT = 0
+        , T.OVERDUE_5_AMT = 0
+        , T.OVERDUE_6_AMT = 0
+        , T.OVERDUE_7_AMT = 0
+        , T.OVERDUE_8_AMT = 0
+        , T.OVERDUE_9_AMT = 0
+        , T.INV_SAMPLE_AMT = 0
+        , T.EPAY_AMT = 0
+        , T.ECLS_AMT = 0
+        , T.UREB_AMT = 0
+        , T.UFEE_AMT = 0
+        , T.CLOSING_RATE_BCY_AMT = 0
+        , T.POSTING_RATE_BCY_AMT = 0
+        , T.TH_FX_EVAL_AMT = 0
+        , T.ADJ_REB_AMT = 0
+        , T.ADJ_RET_AMT = 0
+        , T.SPC_DSV_DED_AMT = 0
+        , T.SPC_REB_DED_AMT = 0
+        , T.BD_BASE_0_AMT = 0
+        , T.BD_BASE_1_AMT = 0
+        , T.BD_BASE_2_AMT = 0
+        , T.BD_BASE_3_AMT = 0
+        , T.BD_BASE_4_AMT = 0
+        , T.BD_BASE_5_AMT = 0
+        , T.BD_BASE_6_AMT = 0
+        , T.BD_BASE_7_AMT = 0
+        , T.BD_BASE_8_AMT = 0
+        , T.BD_BASE_9_AMT = 0
+        , T.BD_BASE_10_AMT = 0
+        , T.BD_BASE_11_AMT = 0
+        , T.BD_BASE_12_AMT = 0
+        , T.BD_BASE_13_AMT = 0
+        , T.BD_BASE_14_AMT = 0
+        , T.BD_BASE_15_AMT = 0
+        , T.BD_0_AMT = 0
+        , T.BD_1_AMT = 0
+        , T.BD_2_AMT = 0
+        , T.BD_3_AMT = 0
+        , T.BD_4_AMT = 0
+        , T.BD_5_AMT = 0
+        , T.BD_6_AMT = 0
+        , T.BD_7_AMT = 0
+        , T.BD_8_AMT = 0
+        , T.BD_9_AMT = 0
+        , T.BD_10_AMT = 0
+        , T.BD_11_AMT = 0
+        , T.BD_12_AMT = 0
+        , T.BD_13_AMT = 0
+        , T.BD_14_AMT = 0
+        , T.BD_15_AMT = 0
+        , T.AGE_ALLOC_0_AMT = 0
+        , T.AGE_ALLOC_1_AMT = 0
+        , T.AGE_ALLOC_2_AMT = 0
+        , T.AGE_ALLOC_3_AMT = 0
+        , T.AGE_ALLOC_4_AMT = 0
+        , T.AGE_ALLOC_5_AMT = 0
+        , T.AGE_ALLOC_6_AMT = 0
+        , T.AGE_ALLOC_7_AMT = 0
+        , T.AGE_ALLOC_8_AMT = 0
+        , T.AGE_ALLOC_9_AMT = 0
+        , T.AGE_ALLOC_10_AMT = 0
+        , T.AGE_ALLOC_11_AMT = 0
+        , T.AGE_ALLOC_12_AMT = 0
+        , T.AGE_ALLOC_13_AMT = 0
+        , T.AGE_ALLOC_14_AMT = 0
+        , T.AGE_ALLOC_15_AMT = 0
+        , T.BD_AFAL_0_AMT = 0
+        , T.BD_AFAL_1_AMT = 0
+        , T.BD_AFAL_2_AMT = 0
+        , T.BD_AFAL_3_AMT = 0
+        , T.BD_AFAL_4_AMT = 0
+        , T.BD_AFAL_5_AMT = 0
+        , T.BD_AFAL_6_AMT = 0
+        , T.BD_AFAL_7_AMT = 0
+        , T.BD_AFAL_8_AMT = 0
+        , T.BD_AFAL_9_AMT = 0
+        , T.BD_AFAL_10_AMT = 0
+        , T.BD_AFAL_11_AMT = 0
+        , T.BD_AFAL_12_AMT = 0
+        , T.BD_AFAL_13_AMT = 0
+        , T.BD_AFAL_14_AMT = 0
+        , T.BD_AFAL_15_AMT = 0
+        , T.SPID_0_AMT = 0
+        , T.SPID_1_AMT = 0
+        , T.SPID_2_AMT = 0
+        , T.SPID_3_AMT = 0
+        , T.SPID_4_AMT = 0
+        , T.SPID_5_AMT = 0
+        , T.SPID_6_AMT = 0
+        , T.SPID_7_AMT = 0
+        , T.SPID_8_AMT = 0
+        , T.SPID_9_AMT = 0
+        , T.SPID_10_AMT = 0
+        , T.SPID_11_AMT = 0
+        , T.SPID_12_AMT = 0
+        , T.SPID_13_AMT = 0
+        , T.SPID_14_AMT = 0
+        , T.SPID_15_AMT = 0
+        , T.LM_BD_AFAL_0_AMT = 0
+        , T.WRITEOFF_AMT = 0
+        , T.MTD_BD_PROV_OCUR_AMT = 0
+        , T.USERUPD = SESSION_USER
+        , T.DATEUPD = SYSDATE
+    WHERE T.COD_SCENARIO = V_SCENARIO
+      AND T.COD_PERIODO = V_PERIODO
+      AND T.COD_CATEGORIA = 'ZAMOUNT'
+      AND T.PROVENIENZA = 'INPUT_DEFORM'
+      AND T.COD_AZIENDA IN (
+            SELECT ELEM
+              FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+      )
+      /* 同键存在性质不同的另一行时才处理，手工行单独成行时金额不被清掉。
+         ALTER BY 20261119 18:11 SHIQINGFENG.EX 对方行限定为本过程新生成的抽取行，两个手工行同键不同性质时互不清零 */
+      AND EXISTS (
+            SELECT 1
+              FROM AW_MR9_ARPM02_000001 X
+             WHERE X.COD_SCENARIO = T.COD_SCENARIO
+               AND X.COD_PERIODO = T.COD_PERIODO
+               AND X.COD_CATEGORIA = T.COD_CATEGORIA
+               AND X.COD_AZIENDA = T.COD_AZIENDA
+               AND X.COD_CONTO = T.COD_CONTO
+               AND NVL(X.CUST_CODE, '|') = NVL(T.CUST_CODE, '|')
+               AND NVL(X.COD_DEST2, '|') = NVL(T.COD_DEST2, '|')
+               AND X.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+               AND X.OID <> T.OID
+               AND (   NVL(X.NATURE_L1_NAME, '|') <> NVL(T.NATURE_L1_NAME, '|')
+                    OR NVL(X.NATURE_L2_NAME, '|') <> NVL(T.NATURE_L2_NAME, '|')
+                    OR NVL(X.NATURE_L3_NAME, '|') <> NVL(T.NATURE_L3_NAME, '|')
+                   )
       );
   END;
 
