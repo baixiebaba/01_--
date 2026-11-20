@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261113 17:20
- * 本次修改：ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
- * 上次修改：ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围编码与名称改为按公司与国家映射表取值，国家取不到时用S810客户主数据兜底。
+ * 最后更新时间：20261120 11:22
+ * 本次修改：ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值。
+ * 上次修改：ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
  *
  * 脚本名称  ：dwd_fi_mr_ar_imocc_mi.sql
  * 功能描述  ：装载国际营销应收占用明细。
@@ -11,6 +11,7 @@
  * 目标表    ：test.dwd_fi_mr_ar_imocc_mi
  *
  * 修改历史：
+ *   ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值。
  *   ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
  *   ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围编码与名称改为按公司与国家映射表取值，国家取不到时用S810客户主数据兜底。
  *   ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称字段，按公司及119项目客户打标。
@@ -133,6 +134,18 @@ s810_account_name_dim AS (
        AND spras = '1'
      GROUP BY NULLIF(LTRIM(TRIM(saknr), '0'), '')
 ),
+-- S810客户对方公司映射，取参数月有效配置；同一客商多条时按MR口径优先。
+cust_ctp_dim AS (
+    SELECT NULLIF(LTRIM(TRIM(r.cust_code), '0'), '') AS cust_code
+         , MAX(NULLIF(TRIM(r.cp_company_code_mr), '')) AS cp_company_mr_code
+         , MAX(NULLIF(TRIM(r.cp_company_code), '')) AS cp_company_code
+      FROM dim.dim_rule_fi_mr_cust2ctp_mapping r
+     WHERE r.system_src = 'S810'
+       AND r.cust_type_code = 'C'
+       AND NVL(r.valid_fr, '202401') <= @dt_month
+       AND NVL(r.valid_to, '999999') >= @dt_month
+     GROUP BY NULLIF(LTRIM(TRIM(r.cust_code), '0'), '')
+),
 -- 汇总客户账期映射，未匹配到描述时由主查询回退为“其他”。
 payment_term_dim AS (
     SELECT col_zterm AS zterm
@@ -249,8 +262,9 @@ imocc_enriched AS (
          , COALESCE(mc.cust_name, kc.name1, s8.name1) AS cust_name
          , a.custfundcode AS cust_branch_code
          , a.custfundname AS cust_branch_name
-         -- MDG主数据无对方公司字段，客户大表停用后该列暂不赋值。
-         , NULL AS cp_company_code
+         -- S810客户对方公司映射，MR口径优先，未配置时为空。
+         -- ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值
+         , COALESCE(ct.cp_company_mr_code, ct.cp_company_code) AS cp_company_code
          -- ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG主数据
          , COALESCE(mc.country_code, kc.country_code) AS country_code
          , COALESCE(mc.country_name, kn.country_name) AS country_name
@@ -280,6 +294,8 @@ imocc_enriched AS (
         ON mc.mdg_cust_code = kc.mdg_cust_code
       LEFT JOIN s810_account_name_dim s8
         ON s8.cust_s810_code = NULLIF(LTRIM(TRIM(a.kunnr), '0'), '')
+      LEFT JOIN cust_ctp_dim ct
+        ON ct.cust_code = NULLIF(LTRIM(TRIM(a.kunnr), '0'), '')
       LEFT JOIN country_name_dim kn
         ON kn.country_code = COALESCE(mc.country_code, kc.country_code)
       LEFT JOIN payment_term_dim pt
