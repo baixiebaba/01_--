@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261118 21:57
- * 本次修改：ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
- * 上次修改：ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
+ * 最后更新时间：20261119 15:43
+ * 本次修改：ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
+ * 上次修改：ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
  *
  * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -17,6 +17,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
  *   ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
  *   ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
@@ -1333,7 +1334,21 @@ ar_nature_candidate AS (
       FROM standard_fact f
       LEFT JOIN ar_nature_rule r
         ON (
-               (r.batch_id = 1
+               /* ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇来源无SAP系统号，性质按batch 1/2/4优先级匹配，不比较系统号与科目类型。 */
+               (f.system_src = 'XH'
+                AND r.batch_id = 1
+                AND r.company_code = f.company_code
+                AND r.acct_src_code = f.acct_src_code
+                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
+            OR (f.system_src = 'XH'
+                AND r.batch_id = 2
+                AND r.company_code = f.company_code
+                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
+            OR (f.system_src = 'XH'
+                AND r.batch_id = 4
+                AND r.company_code = f.company_code
+                AND r.acct_src_code = f.acct_src_code)
+            OR (r.batch_id = 1
                 AND r.system_src = f.system_src
                 AND r.company_code = f.company_code
                 AND r.acct_src_code = f.acct_src_code
