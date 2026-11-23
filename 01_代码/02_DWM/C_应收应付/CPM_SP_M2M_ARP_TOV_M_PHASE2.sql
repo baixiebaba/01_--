@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261111 10:54
-   * 本次修改：ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
-   * 上次修改：ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
+   * 最后更新时间：20261120 18:33
+   * 本次修改：ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行，修复多DEST3行收入重复
+   * 上次修改：ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行，修复多DEST3行收入重复
    *   ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
    *   ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
    *   ALTER BY 20261110 19:03 SHIQINGFENG.EX GB科目与组织节点成员初始化进会话表，科目与DEST1改用独立会话表
@@ -862,7 +863,9 @@ BEGIN
         /* ALTER BY 20261109 18:12 SHIQINGFENG.EX 保留周转行已映射事业部，防止MAPPED_FACT二次展开导致金额翻倍 */
         , T.D_BG
         , T.AR_AMT
-        , NVL(R.REV_AMT, 0) AS REV_AMT
+        /* 同一收入匹配键下只有一行承接收入，其余置0，避免多DEST3周转行各挂一次收入。
+           ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行 */
+        , CASE WHEN T.REV_ROW_NUM = 1 THEN NVL(R.REV_AMT, 0) ELSE 0 END AS REV_AMT
         , T.F1_ODUE_AMT
         , T.F2_EPAY_AMT
         , T.F3_ECR_AMT
@@ -872,7 +875,17 @@ BEGIN
         , T.F7_GSUB_AMT
         , T.F8_ADJ_AMT
         , T.SRC_DETAIL
-      FROM FILTERED_TURNOVER T
+      FROM (
+             /* 按收入匹配键编号，AR绝对值最大的行优先承接收入，同额时按DEST3排序保证结果稳定。
+                ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行 */
+             SELECT T.*
+                  , ROW_NUMBER() OVER (
+                        PARTITION BY T.COD_SCENARIO, T.COD_PERIODO, T.COD_AZIENDA
+                                   , T.CUST_CODE, T.COD_DEST2, T.COD_CATEGORIA
+                        ORDER BY ABS(NVL(T.AR_AMT, 0)) DESC, NVL(T.COD_DEST3, 'ZZZZ')
+                    ) AS REV_ROW_NUM
+               FROM FILTERED_TURNOVER T
+           ) T
       LEFT JOIN REVENUE_MATCH_KEY R
         ON R.COD_SCENARIO = T.COD_SCENARIO
       AND R.COD_PERIODO = T.COD_PERIODO
