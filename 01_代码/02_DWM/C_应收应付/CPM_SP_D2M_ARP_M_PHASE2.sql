@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261118 22:07
-   * 本次修改：ALTER BY 20261118 22:07 SHIQINGFENG.EX 利润中心映射改用AW_RUL_ARPPRC_000001应收周转利润中心映射表，优先级按公司 > 按利润中心 > 公司+物料组。
-   * 上次修改：ALTER BY 20261118 22:04 SHIQINGFENG.EX 利润中心映射改用AW_RUL_ARPPRC_000001应收周转利润中心映射表，并补充按公司兜底。
+   * 最后更新时间：20261123 11:35
+   * 本次修改：ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制。
+   * 上次修改：ALTER BY 20261118 22:07 SHIQINGFENG.EX 利润中心映射改用AW_RUL_ARPPRC_000001应收周转利润中心映射表，优先级按公司 > 按利润中心 > 公司+物料组。
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2
    * 功能描述  ：DWD->DWM往来账龄数据抽取
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM01_000001
    *
    * 修改历史：
+   *   ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制。
    *   ALTER BY 20261118 22:07 SHIQINGFENG.EX 利润中心映射改用AW_RUL_ARPPRC_000001应收周转利润中心映射表，优先级按公司 > 按利润中心 > 公司+物料组。
    *   ALTER BY 20261118 22:04 SHIQINGFENG.EX 利润中心映射改用AW_RUL_ARPPRC_000001应收周转利润中心映射表，并补充按公司兜底。
    *   ALTER BY 20261117 15:32 SHIQINGFENG.EX 取消公司2023本位币乘100补偿，币种小数位统一由DWD按TCURX还原。
@@ -62,55 +63,81 @@ BEGIN
   V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
   V_LAST_DAY := LAST_DAY(TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD'));
 
-  /* 只抽取当前期间允许抽取、且尚未锁定的公司。 */
-  INSERT INTO SESSION_AZIENDA_LIST (SESSION_ID, ELEM)
-  SELECT DISTINCT V_SESSION_ID, ELEM
-    FROM SESSION_V_REF_AZIENDA
-   WHERE HIE = '10'
+  /* LOCK_FLAG=N保留全部允许进数公司，LOCK_FLAG=Y再排除已锁定公司。
+     ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+  INSERT INTO SESSION_AZIENDA_LIST (SESSION_ID, HIE, NODE, ELEM, LOCK_FLAG)
+  SELECT DISTINCT V_SESSION_ID AS SESSION_ID
+       , A.HIE AS HIE
+       , A.NODE AS NODE
+       , A.ELEM AS ELEM
+       , L.LOCK_FLAG AS LOCK_FLAG
+    FROM SESSION_V_REF_AZIENDA A
+   CROSS JOIN (
+         SELECT 'N' AS LOCK_FLAG
+           FROM DUAL
+          UNION ALL
+         SELECT 'Y' AS LOCK_FLAG
+           FROM DUAL
+   ) L
+   WHERE A.HIE = '10'
      AND (
-           INSTR(',' || P_AZIENDA || ',', ',' || ELEM || ',') > 0
-        OR INSTR(',' || P_AZIENDA || ',', ',' || NODE || ',') > 0
+           INSTR(',' || P_AZIENDA || ',', ',' || A.ELEM || ',') > 0
+        OR INSTR(',' || P_AZIENDA || ',', ',' || A.NODE || ',') > 0
         OR P_AZIENDA = 'ALL'
      )
-     AND ELEM IN (SELECT COD_AZIENDA
-                    FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
-                   WHERE ARP_FLAG = 'Y'
-                     AND VALID_FR <= V_YEARMONTH
-                     AND NVL(VALID_TO,'999999') >= V_YEARMONTH
-                     AND COD_CONTO = 'ZAW_D2M_IN'
-                  )
-     AND ELEM NOT IN (
-           SELECT COD_AZIENDA
-             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
+     AND A.ELEM IN (
+           SELECT COD_AZIENDA AS COD_AZIENDA
+             FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
             WHERE ARP_FLAG = 'Y'
-              AND T.COD_SCENARIO = V_SCENARIO
-              AND T.COD_PERIODO = V_PERIODO
-              AND T.COD_CONTO = 'ZAW_D2M_LOCK'
+              AND VALID_FR <= V_YEARMONTH
+              AND NVL(VALID_TO, '999999') >= V_YEARMONTH
+              AND COD_CONTO = 'ZAW_D2M_IN'
+     )
+     AND (
+           L.LOCK_FLAG = 'N'
+        OR (
+             L.LOCK_FLAG = 'Y'
+             AND A.ELEM NOT IN (
+                   SELECT T.COD_AZIENDA AS COD_AZIENDA
+                     FROM TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001 T
+                    WHERE T.ARP_FLAG = 'Y'
+                      AND T.COD_SCENARIO = V_SCENARIO
+                      AND T.COD_PERIODO = V_PERIODO
+                      AND T.COD_CONTO = 'ZAW_D2M_LOCK'
+             )
+        )
      );
 
   /* 本次运行的公司清单，写入日志便于按公司追溯。 */
   SELECT LISTAGG(ELEM, ',') WITHIN GROUP (ORDER BY ELEM)
     INTO V_AZIENDA
     FROM (
-      SELECT DISTINCT ELEM
+      SELECT DISTINCT ELEM AS ELEM
         FROM SESSION_AZIENDA_LIST
        WHERE SESSION_ID = V_SESSION_ID
+         AND LOCK_FLAG = 'N'
     );
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
   VALUES ('CPM_SP_D2M_ARP_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
   COMMIT;
 
-  /* 删除当前批次，保证增量重跑不产生重复数据 */
-  DELETE FROM AW_MR9_ARPM01_000001
-   WHERE COD_SCENARIO = V_SCENARIO
-     AND COD_PERIODO = V_PERIODO
-     AND COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
+  /* 按SRC_DETAIL对应的LOCK_FLAG公司范围删除旧批次，保留已锁定来源。
+     ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+  DELETE FROM AW_MR9_ARPM01_000001 T
+   WHERE T.COD_SCENARIO = V_SCENARIO
+     AND T.COD_PERIODO = V_PERIODO
+     AND EXISTS (
+           SELECT 1 AS MATCH_FLAG
+             FROM SESSION_AZIENDA_LIST S
+            WHERE S.SESSION_ID = V_SESSION_ID
+              AND S.ELEM = T.COD_AZIENDA
+              AND S.LOCK_FLAG = CASE
+                    WHEN T.SRC_DETAIL IN ('ORG_ZZT003', 'ORG_XH', 'ZTSO04_CK', 'ZTSO04_TH', 'ZZT003_ADJ') THEN 'Y'
+                    ELSE 'N'
+                  END
      )
-     AND PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+     AND T.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
      ;
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
@@ -354,10 +381,17 @@ BEGIN
      WHERE DT_MONTH = V_YEARMONTH
        /* 限制需要进数范围的公司和客商，在D打标为Y或为空的 */
        AND NVL(IS_APAR_FLAG, 'Y') = 'Y'
-       AND COMPANY_CODE IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
-              WHERE SESSION_ID = V_SESSION_ID
+       /* 锁定来源取LOCK_FLAG=Y公司，其余来源取LOCK_FLAG=N公司。
+          ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+       AND EXISTS (
+             SELECT 1 AS MATCH_FLAG
+               FROM SESSION_AZIENDA_LIST S
+              WHERE S.SESSION_ID = V_SESSION_ID
+                AND S.ELEM = COMPANY_CODE
+                AND S.LOCK_FLAG = CASE
+                      WHEN ODS_SRC IN ('ORG_ZZT003', 'ORG_XH') THEN 'Y'
+                      ELSE 'N'
+                    END
        )
   ),
 
@@ -436,10 +470,13 @@ BEGIN
        AND PM6.MATERIAL_GROUP_CODE = TRIM(T.MATERIAL_GROUP_CODE)
      WHERE T.COD_SCENARIO = V_SCENARIO
        AND T.COD_PERIODO = V_PERIODO
+       /* 出库未开、退货未办均为锁定来源，只取LOCK_FLAG=Y公司。
+          ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
        AND T.COD_AZIENDA IN (
-             SELECT ELEM
-               FROM SESSION_AZIENDA_LIST
-              WHERE SESSION_ID = V_SESSION_ID
+             SELECT S.ELEM AS ELEM
+               FROM SESSION_AZIENDA_LIST S
+              WHERE S.SESSION_ID = V_SESSION_ID
+                AND S.LOCK_FLAG = 'Y'
        )
        /* ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。 */
        AND (T.COD_CONTO LIKE 'S600101%' OR T.COD_CONTO LIKE 'S600102%')
@@ -716,34 +753,50 @@ BEGIN
             FROM AW_MR9_ARPM01_000001 A
             LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
               ON A.COD_AZIENDA = AZ.COD_AZIENDA
-          WHERE A.COD_SCENARIO = V_SCENARIO
-            AND A.COD_PERIODO = V_PERIODO
-            AND A.COD_AZIENDA IN (
-                  SELECT ELEM
-                    FROM SESSION_AZIENDA_LIST
-                    WHERE SESSION_ID = V_SESSION_ID
-
-                  UNION ALL
-                  /* 6000/6000A/6000B/6000C/6600 合并重分类 */
-                  SELECT COD_AZIENDA
-                    FROM AZIENDA AZ
-                   WHERE COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
-                     AND 1 IN (SELECT 1
-                                  FROM SESSION_AZIENDA_LIST
-                                 WHERE SESSION_ID = V_SESSION_ID
-                                   AND ELEM IN ('6000', '6000A', '6000B', '6000C', '6600')
-                                 )
-              )
-            AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
-            AND (A.SRC_DETAIL LIKE 'ORG%'
-                  OR A.SRC_DETAIL LIKE 'ZTSO04%'
+           WHERE A.COD_SCENARIO = V_SCENARIO
+             AND A.COD_PERIODO = V_PERIODO
+             /* 重分类按SRC_DETAIL选择LOCK_FLAG公司范围。
+                ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+             AND (
+                   EXISTS (
+                     SELECT 1 AS MATCH_FLAG
+                       FROM SESSION_AZIENDA_LIST S
+                      WHERE S.SESSION_ID = V_SESSION_ID
+                        AND S.ELEM = A.COD_AZIENDA
+                        AND S.LOCK_FLAG = CASE
+                              WHEN A.SRC_DETAIL IN ('ORG_ZZT003', 'ORG_XH', 'ZTSO04_CK', 'ZTSO04_TH', 'ZZT003_ADJ') THEN 'Y'
+                              ELSE 'N'
+                            END
+                   )
+                OR (
+                     /* 6000/6000A/6000B/6000C/6600 合并重分类 */
+                     A.COD_AZIENDA IN ('6000', '6000A', '6000B', '6000C', '6600')
+                     AND EXISTS (
+                           SELECT 1 AS MATCH_FLAG
+                             FROM SESSION_AZIENDA_LIST S
+                            WHERE S.SESSION_ID = V_SESSION_ID
+                              AND S.ELEM IN ('6000', '6000A', '6000B', '6000C', '6600')
+                              AND S.LOCK_FLAG = CASE
+                                    WHEN A.SRC_DETAIL IN ('ORG_ZZT003', 'ORG_XH', 'ZTSO04_CK', 'ZTSO04_TH', 'ZZT003_ADJ') THEN 'Y'
+                                    ELSE 'N'
+                                  END
+                     )
                 )
+             )
+             AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+             AND (A.SRC_DETAIL LIKE 'ORG%'
+                   OR A.SRC_DETAIL LIKE 'ZTSO04%'
+                 )
         ) AA
-        WHERE AA.COD_AZIENDA IN (
-                  SELECT ELEM
-                    FROM SESSION_AZIENDA_LIST
-                    WHERE SESSION_ID = V_SESSION_ID
-            )
+         WHERE AA.COD_AZIENDA IN (
+                   SELECT S.ELEM AS ELEM
+                     FROM SESSION_AZIENDA_LIST S
+                    WHERE S.SESSION_ID = V_SESSION_ID
+                      AND S.LOCK_FLAG = CASE
+                            WHEN AA.SRC_DETAIL IN ('ORG_ZZT003', 'ORG_XH', 'ZTSO04_CK', 'ZTSO04_TH', 'ZZT003_ADJ') THEN 'Y'
+                            ELSE 'N'
+                          END
+         )
     ),
     REC_FLAG_FACT AS (
       SELECT F.*
@@ -967,20 +1020,26 @@ BEGIN
        , T.USERUPD = SESSION_USER;
 END;
 
-  /* 非ORG来源且科目为空的记录回写默认应收科目。 */
+  /* 非ORG来源且科目为空的记录回写默认应收科目，按来源选择LOCK_FLAG公司。
+     ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
 BEGIN
-  UPDATE AW_MR9_ARPM01_000001
+  UPDATE AW_MR9_ARPM01_000001 T
      SET COD_CONTO = '1122000000'
-   WHERE COD_SCENARIO = V_SCENARIO
-     AND COD_PERIODO = V_PERIODO
-     AND COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
+   WHERE T.COD_SCENARIO = V_SCENARIO
+     AND T.COD_PERIODO = V_PERIODO
+     AND EXISTS (
+           SELECT 1 AS MATCH_FLAG
+             FROM SESSION_AZIENDA_LIST S
+            WHERE S.SESSION_ID = V_SESSION_ID
+              AND S.ELEM = T.COD_AZIENDA
+              AND S.LOCK_FLAG = CASE
+                    WHEN T.SRC_DETAIL IN ('ORG_ZZT003', 'ORG_XH', 'ZTSO04_CK', 'ZTSO04_TH', 'ZZT003_ADJ') THEN 'Y'
+                    ELSE 'N'
+                  END
      )
-     AND PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
-     AND SRC_DETAIL NOT LIKE 'ORG%'
-     AND COD_CONTO IS NULL;
+     AND T.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+     AND T.SRC_DETAIL NOT LIKE 'ORG%'
+     AND T.COD_CONTO IS NULL;
 END;
   /* 手工调整数据复制为调整副本：SRC_DETAIL按D_ADJ_TYPE映射，客商分户优先回退主户，插行不走重分类、随下轮批清理。
      ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
@@ -1159,10 +1218,17 @@ BEGIN
    WHERE A.COD_SCENARIO = V_SCENARIO
      AND A.COD_PERIODO = V_PERIODO
      AND A.COD_CATEGORIA = 'ZFAMOUNT'
-     AND A.COD_AZIENDA IN (
-           SELECT ELEM
-             FROM SESSION_AZIENDA_LIST
-            WHERE SESSION_ID = V_SESSION_ID
+     /* ZZT003_ADJ取LOCK_FLAG=Y公司，其余调整副本取LOCK_FLAG=N公司。
+        ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+     AND EXISTS (
+           SELECT 1 AS MATCH_FLAG
+             FROM SESSION_AZIENDA_LIST S
+            WHERE S.SESSION_ID = V_SESSION_ID
+              AND S.ELEM = A.COD_AZIENDA
+              AND S.LOCK_FLAG = CASE
+                    WHEN A.D_ADJ_TYPE = 'ARP_01_000' THEN 'Y'
+                    ELSE 'N'
+                  END
      );
 END;
   /* 目标表装载完成，提交事务。 */
