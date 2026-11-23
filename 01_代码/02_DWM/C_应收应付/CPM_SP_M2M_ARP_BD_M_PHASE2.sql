@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_BD_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261119 17:20
-   * 本次修改：ALTER BY 20261119 17:20 SHIQINGFENG.EX 删除AGE_ALLOC_TOTAL已移除的利润中心关联条件，修复过程编译报错
-   * 上次修改：ALTER BY 20261119 17:19 SHIQINGFENG.EX 组内无正数行时负数坏账改由本行自身承担
+   * 最后更新时间：20261123 16:13
+   * 本次修改：ALTER BY 20261123 16:13 SHIQINGFENG.EX 050节点公司返利扣减金额改取UREB_AMT。
+   * 上次修改：ALTER BY 20261119 17:20 SHIQINGFENG.EX 删除AGE_ALLOC_TOTAL已移除的利润中心关联条件，修复过程编译报错
    *
    * 过程名称  ：CPM_SP_M2M_ARP_BD_M_PHASE2
    * 功能描述  ：按STEP1坏账计提基数、STEP2坏账计算、STEP3坏账分摊三步加工ARPM02坏账表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_BD_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM02_000001
    *
    * 修改历史：
+   *   ALTER BY 20261123 16:13 SHIQINGFENG.EX 050节点公司返利扣减金额改取UREB_AMT。
    *   ALTER BY 20261119 17:20 SHIQINGFENG.EX 删除AGE_ALLOC_TOTAL已移除的利润中心关联条件，修复过程编译报错
    *   ALTER BY 20261119 17:19 SHIQINGFENG.EX 组内无正数行时负数坏账改由本行自身承担
    *   ALTER BY 20261118 18:09 SHIQINGFENG.EX 投保保障天数判断改为大于账龄段上限才按未覆盖率计提，对齐1.0口径
@@ -126,11 +127,17 @@ BEGIN
           , A.BCY_ADJ_INCL_10_AMT, A.BCY_ADJ_INCL_11_AMT, A.BCY_ADJ_INCL_12_AMT
           , A.BCY_ADJ_INCL_13_AMT, A.BCY_ADJ_INCL_14_AMT, A.BCY_ADJ_INCL_15_AMT
           , NVL(DR.SPC_DSV_DED_AMT, 0) AS SPC_DSV_DED_AMT
-          , NVL(DR.SPC_REB_DED_AMT, 0) AS SPC_REB_DED_AMT
+          /* 050节点公司优先按欠付返利余额扣减，其他公司沿用手工调整返利金额。
+             ALTER BY 20261123 16:13 SHIQINGFENG.EX 050节点公司返利扣减金额改取UREB_AMT */
+          , CASE
+                WHEN R10_050.ELEM IS NOT NULL THEN NVL(A.UREB_AMT, 0)
+                ELSE NVL(DR.SPC_REB_DED_AMT, 0)
+            END AS SPC_REB_DED_AMT
           , I.INS_COV_DAYS, I.INS_UNCOV_RATIO
         FROM (
           SELECT OID, COD_AZIENDA, CUST_CODE, COD_CONTO, COD_DEST2
-              , COD_CATEGORIA, BCY_ADJ_INCL_1_AMT, BCY_ADJ_INCL_2_AMT, BCY_ADJ_INCL_3_AMT
+              , COD_CATEGORIA, UREB_AMT AS UREB_AMT
+              , BCY_ADJ_INCL_1_AMT, BCY_ADJ_INCL_2_AMT, BCY_ADJ_INCL_3_AMT
               , BCY_ADJ_INCL_4_AMT, BCY_ADJ_INCL_5_AMT, BCY_ADJ_INCL_6_AMT, BCY_ADJ_INCL_7_AMT
               , BCY_ADJ_INCL_8_AMT, BCY_ADJ_INCL_9_AMT, BCY_ADJ_INCL_10_AMT, BCY_ADJ_INCL_11_AMT
               , BCY_ADJ_INCL_12_AMT, BCY_ADJ_INCL_13_AMT, BCY_ADJ_INCL_14_AMT, BCY_ADJ_INCL_15_AMT
@@ -146,6 +153,16 @@ BEGIN
                   OR MB_AGE_FLAG IN ('AR', 'OR', 'CA')
                   )
         ) A
+        /* 050公司范围按会话组织引用表去重，避免重复层级记录放大明细。
+           ALTER BY 20261123 16:13 SHIQINGFENG.EX 050节点公司返利扣减金额改取UREB_AMT */
+        LEFT JOIN (
+          SELECT DISTINCT ELEM AS ELEM
+            FROM SESSION_V_REF_AZIENDA
+           WHERE SESSION_ID = V_SESSION_ID
+             AND HIE = '10'
+             AND NODE = '050'
+        ) R10_050
+          ON R10_050.ELEM = A.COD_AZIENDA
         LEFT JOIN (
           SELECT COD_AZIENDA, COD_CONTO, NVL(CUST_BRANCH_CODE,CUST_HEAD_CODE) AS CUST_CODE, COD_DEST2
               , SUM(CASE WHEN D_ADJ_TYPE = 'ARP_02_001' THEN BCY_0_AMT ELSE 0 END) SPC_DSV_DED_AMT
