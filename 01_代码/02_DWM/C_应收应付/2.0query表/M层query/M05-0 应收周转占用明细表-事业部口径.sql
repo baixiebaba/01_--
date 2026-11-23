@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261110 10:35
- * 本次修改：ALTER BY 20261110 10:35 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转数据来源。
- * 上次修改：ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
+ * 最后更新时间：20261120 18:38
+ * 本次修改：ALTER BY 20261120 18:38 SHIQINGFENG.EX 新增销售部门层级七/六/五级分类字段，渠道层级分类字段改名前缀。
+ * 上次修改：ALTER BY 20261110 10:35 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转数据来源。
  *
  * 查询名称  ：应收周转占用明细表-事业部口径
- * 源表      ：AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
+ * 源表      ：AW_MR9_ARPM03_000001、TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT、TGK_FIMA_HISENSE.ED_D_SALE_DEPT_GERARCHIA_FLAT、TGK_FIMA_HISENSE.DEST3_GERARCHIA_FLAT 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261120 18:38 SHIQINGFENG.EX 新增销售部门层级七/六/五级分类字段，渠道层级分类字段改名前缀。
  *   ALTER BY 20261110 10:35 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转数据来源。
  *   ALTER BY 20261109 17:52 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。
@@ -72,11 +73,12 @@ SELECT
      , MAX(CASE WHEN B.COD_PERIODO = ${$Period.code} THEN B.COUNTRY_NAME   END) AS COUNTRY_NAME  /* 国家名称 */
      , MAX(CASE WHEN B.COD_PERIODO = ${$Period.code} THEN B.NATURE_L2_NAME  END) AS NATURE_L2_NAME  /* 二级性质 */
  /* ALTER BY 20261103 14:08 SHIQINGFENG.EX 为公司分类层级关联增加 COD_GERARCHIA='01' 限制，未修改业务逻辑。 */
- /* 公司分类层级: D_CHANNEL为公司三级分类，E6为一级分类，E5为二级分类。 */
-     , G.COD_ELEGER6                     AS COD_ELEGER6                          /* 公司一级分类编码 */
-     , G.DESC_ELEGER6                   AS DESC_ELEGER6                        /* 公司一级分类描述 */
-     , G.COD_ELEGER5                     AS COD_ELEGER5                          /* 公司二级分类编码 */
-     , G.DESC_ELEGER5                   AS DESC_ELEGER5                        /* 公司二级分类描述 */
+ /* 渠道层级分类: D_CHANNEL为公司三级分类，E6为一级分类，E5为二级分类。 */
+ /* ALTER BY 20261120 18:38 SHIQINGFENG.EX 渠道层级分类字段改名前缀CHANNEL_，与销售部门层级字段区分。 */
+     , G.COD_ELEGER6                     AS CHANNEL_COD_ELEGER6                  /* 渠道层级一级分类编码 */
+     , G.DESC_ELEGER6                    AS CHANNEL_DESC_ELEGER6                 /* 渠道层级一级分类描述 */
+     , G.COD_ELEGER5                     AS CHANNEL_COD_ELEGER5                  /* 渠道层级二级分类编码 */
+     , G.DESC_ELEGER5                    AS CHANNEL_DESC_ELEGER5                 /* 渠道层级二级分类描述 */
  /* 渠道 */
      , B.D_CHANNEL                                                               /* 三级公司分类编码 */
      , F_TGK_GET_DIMNAME('D_CHANNEL', B.D_CHANNEL)      AS D_CHANNEL_DESC        /* 三级公司分类名称 */
@@ -89,6 +91,14 @@ SELECT
  /* DEST3 */
      , B.COD_DEST3                                                               /* 业务范围编码 */
      , F_TGK_GET_DIMNAME('DEST3', B.COD_DEST3)        AS COD_DEST3_DESC          /* 业务范围名称 */
+ /* 销售部门层级: 用 D_SALE_DEPT 匹配 COD，带出七/六/五级分类。 */
+ /* ALTER BY 20261120 18:38 SHIQINGFENG.EX 新增销售部门层级七/六/五级分类编码及描述。 */
+     , SD.COD_ELEGER7                    AS COD_ELEGER7                          /* 销售部门七级分类编码 */
+     , SD.DESC_ELEGER7                   AS DESC_ELEGER7                         /* 销售部门七级分类描述 */
+     , SD.COD_ELEGER6                    AS COD_ELEGER6                          /* 销售部门六级分类编码 */
+     , SD.DESC_ELEGER6                   AS DESC_ELEGER6                         /* 销售部门六级分类描述 */
+     , SD.COD_ELEGER5                    AS COD_ELEGER5                          /* 销售部门五级分类编码 */
+     , SD.DESC_ELEGER5                   AS DESC_ELEGER5                         /* 销售部门五级分类描述 */
  /* 销售部门 */
      , B.D_SALE_DEPT                                                             /* 业务管理单元编码 */
      , F_TGK_GET_DIMNAME('D_SALE_DEPT', B.D_SALE_DEPT)    AS D_SALE_DEPT_DESC    /* 业务管理单元名称 */
@@ -204,6 +214,20 @@ SELECT
   LEFT JOIN TGK_FIMA_HISENSE.V_ED_D_CHANNEL_FLAT G
     ON G.COD = B.D_CHANNEL
    AND G.COD_GERARCHIA = '01'
+/* 销售部门层级扁平表：HISDA 切片，COD与业务管理单元一一对应。 */
+/* ALTER BY 20261120 18:38 SHIQINGFENG.EX 新增销售部门层级扁平表关联，按D_SALE_DEPT带出上级分类。 */
+  LEFT JOIN (
+        SELECT COD
+             , COD_ELEGER7
+             , DESC_ELEGER7
+             , COD_ELEGER6
+             , DESC_ELEGER6
+             , COD_ELEGER5
+             , DESC_ELEGER5
+          FROM ED_D_SALE_DEPT_GERARCHIA_FLAT
+         WHERE COD_GERARCHIA = 'HISDA'
+       ) SD
+    ON SD.COD = B.D_SALE_DEPT
 /* DEST3 层级扁平表 (hie = '01' 切片) */
   LEFT JOIN (
  SELECT COD_DEST3, DESC_DEST3_ELEGER3, DESC_DEST3_ELEGER4, DESC_DEST3_ELEGER5
@@ -218,6 +242,8 @@ SELECT
         , B.D_CHANNEL_BU, B.D_CC_CUSTGRP, B.COD_VALUTA
         , G.COD_ELEGER6, G.DESC_ELEGER6, G.COD_ELEGER5, G.DESC_ELEGER5
         , G.COD_ELEGER7, G.DESC_ELEGER7
+        /* ALTER BY 20261120 18:38 SHIQINGFENG.EX 销售部门层级字段纳入分组维度。 */
+        , SD.COD_ELEGER7, SD.DESC_ELEGER7, SD.COD_ELEGER6, SD.DESC_ELEGER6, SD.COD_ELEGER5, SD.DESC_ELEGER5
         , DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER4, DEST3_GERARCHIA_FLAT.DESC_DEST3_ELEGER5
 ) X
  /* 金额全为 0 的公司客商组合不展示 */
