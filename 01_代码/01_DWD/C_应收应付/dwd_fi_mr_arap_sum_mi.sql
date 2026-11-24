@@ -22,23 +22,7 @@
  *   ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
  *   ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
- *   ALTER BY 20261102 15:18 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支客户范围改为排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支改为命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单，其余条件不变。
- *   ALTER BY 20261102 15:09 SHIQINGFENG.EX 电商零售标识ecls_flag严格按逻辑文档改造：客户范围改为规则库dim_rule_fi_mr_ar_cust_type中cust_type='电商零售类客户'按渠道BU配置的清单（18个电商BU），明细按channel_bu_code关联判断，替代原A前缀模糊匹配；金额与基准日期条件不变。
- *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 电商零售判据由周转渠道ARTA_A_07前缀改为渠道BU编码（channel_bu_code LIKE 'A%'）。
- *   ALTER BY 20261102 14:35 SHIQINGFENG.EX 新增渠道BU编码/名称：DETAIL直接对应，POLICY按三级公司分类匹配渠道BU关系表，其余来源置空。
- *   ALTER BY 20261030 20:06 ZHOUHONG.EX 电商零售标识ecls_flag取消付款原因代码400限制，其余取数条件不变。
- *   ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增物料组编码/描述两字段（仅POLICY来源取product_category，其余来源放空）并纳入policy_sum汇总粒度；POLICY利润中心映射增加batch_id=6按公司+物料组匹配（公司主数据展开后用等号关联）。
- *   ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE统一增加data_class取数限制。
- *   ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE限定问题资金超期款明细并改用batch_id=1利润中心映射。
- *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- *   ALTER BY 20261026 15:25 SHIQINGFENG.EX POLICY对方公司匹配仅保留客户类型C
- *   ALTER BY 20261026 13:53 SHIQINGFENG.EX POLICY客户维度关联在MDG客商编码为空时回退SAP客商编码
- *   20261009 ADD BY Kiro 新增周转渠道及商冷客户群四字段
- *   20261009 ADD BY Kiro 调整POLICY取数限制
- *   20261009 ADD BY Kiro 补充OVERDUE及POLICY利润中心映射
- *   20261009 ADD BY Kiro 修改POLICY政策取数逻辑
- *   20261009 ADD BY Kiro 修改EPAY提前回款逻辑
- *   20260915 ADD BY shiqingfeng.ex 新增
+ *   ADD   BY 20260915 15:40 SHIQINGFENG.EX 新增
  ******************************************************************************/
 
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
@@ -243,7 +227,6 @@ apar_range_rule AS (
             , cust_code
 ),
 -- 电商零售类客户渠道BU范围：规则库按渠道BU配置，取目标月份有效记录。
--- ALTER BY 20261102 15:09 SHIQINGFENG.EX 电商零售渠道BU清单改由规则库提供，替代原A前缀模糊匹配。
 ecls_channel_bu AS (
     SELECT DISTINCT NULLIF(TRIM(r.channel_bu_code), '') AS channel_bu_code
       FROM dim.dim_rule_fi_mr_ar_cust_type r
@@ -253,7 +236,6 @@ ecls_channel_bu AS (
        AND NVL(r.valid_to, '999999') >= @dt_month
 ),
 -- 识别满足金额、基准日期和电商零售范围条件的明细键。
--- ALTER BY 20261030 20:06 ZHOUHONG.EX 1030取消付款原因代码限制：不再限定 pay_reason_code='400'，其余取数条件不变。
 ecls_match AS (
     SELECT d.acct_map_code
          , d.cust_code
@@ -644,7 +626,6 @@ overdue_sample_src AS (
                                )
                              , '%Y%m%d'
                          )
-       -- ALTER BY 20261028 13:49 SHIQINGFENG.EX OVERDUE与INV_SAMPLE均仅取data_class以“问题资金超期款明细”结尾的数据。
        AND s.data_class LIKE '%问题资金超期款明细'
      GROUP BY s.ledge_code
             , s.gl_account
@@ -661,7 +642,6 @@ overdue_profitcenter_rule AS (
          , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
          , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
-     -- ALTER BY 20261028 13:43 SHIQINGFENG.EX OVERDUE利润中心改用应收应付-利润中心映射表batch_id=1配置。
      -- ALTER BY 20261118 21:57 SHIQINGFENG.EX 利润中心映射批次号改为batch_id=4，对应旧利润中心映射新利润中心。
      WHERE CAST(pm.batch_id AS INT) = 4
        AND NVL(pm.valid_fr, '202401') <= @dt_month
@@ -798,7 +778,6 @@ sms_fact AS (
      WHERE amount <> 0
 ),
 -- POLICY：结算类客户规则；batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配。
--- ALTER BY 20261102 15:18 SHIQINGFENG.EX batch_id=2匹配键由周转分析渠道tov_channel_code改为渠道BU编码channel_bu_code，与逻辑文档口径一致。
 policy_settle_cust AS (
     SELECT company_code
          , LTRIM(NULLIF(TRIM(cust_code), ''), '0') AS cust_code
@@ -839,7 +818,6 @@ policy_customer_ccc_dim AS (
             , NULLIF(LTRIM(TRIM(d.cust_sap_code), '0'), '')
 ),
 -- POLICY：读取S600客户主数据，提供客户名称与MDG客商编码；不再依赖客户大表dim_fi_mr_customer_map_dd/dim_fi_mr_customer_dd。
--- ALTER BY 20261029 18:40 SHIQINGFENG.EX 本文件为「不使用客户大表」并行版本，客商维度直读SAP KNA1 + 客户基础信息表 + 对方公司规则表。
 policy_customer_kna1 AS (
     SELECT NULLIF(LTRIM(TRIM(k.kunnr), '0'), '') AS cust_sap_code
          , MAX(k.name1) AS cust_name
@@ -945,7 +923,6 @@ policy_src_base AS (
          , p.arrears_amount AS qcy_amt
          , COALESCE(t1.tov_channel_code, t2.tov_channel_code) AS policy_tov_channel
          , COALESCE(t1.tov_channel_name, t2.tov_channel_name) AS policy_tov_channel_name
-         -- ALTER BY 20261102 14:35 SHIQINGFENG.EX 渠道BU：政策来源无渠道BU，按三级公司分类匹配关系表（一对一，先去重）。
          , bu.channel_bu_code
          , bu.channel_bu_name
       FROM dwd.dwd_mrs_mc_report_reward_account_detail_new_hi p
@@ -1077,7 +1054,6 @@ policy_sum AS (
          , MAX(s.cc_cust_group_name) AS cc_cust_group_name
          , s.profitcenter_code AS profitcenter_code
          , MAX(s.profitcenter_name) AS profitcenter_name
-         -- ALTER BY 20261029 17:39 SHIQINGFENG.EX 物料组进汇总粒度；编码决定粒度，描述取MAX，避免源端同码异名把行拆碎。
          , s.material_group_code
          , MAX(s.material_group_name) AS material_group_name
          , s.ledger_status
@@ -1104,7 +1080,6 @@ policy_profitcenter_rule AS (
 ),
 -- POLICY：batch_id=6规则先按公司主数据ods.odsfima_azienda展开为具体公司，事实侧关联改用等号，避免在事实表上做LIKE匹配。
 policy_profitcenter_rule_6 AS (
-    -- ALTER BY 20261029 17:39 SHIQINGFENG.EX 新增batch_id=6利润中心映射，按公司company_code%+物料组material_group_code匹配。
     SELECT b.cod_azienda AS company_code
          , NULLIF(TRIM(pm.material_group_code), '') AS material_group_code
          , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
@@ -1141,7 +1116,6 @@ policy_fact AS (
          , s.profitcenter_name AS src_profitcenter_name
          , s.material_group_code
          , s.material_group_name
-         -- ALTER BY 20261029 17:28 SHIQINGFENG.EX 利润中心映射优先级：batch_id=4 > batch_id=6 > 原始利润中心。
          , COALESCE(r.profitcenter_code, r6.profitcenter_code, s.profitcenter_code) AS profitcenter_code
          , COALESCE(r.profitcenter_name, r6.profitcenter_name, s.profitcenter_name) AS profitcenter_name
          , NULL AS bus_range_code, NULL AS bus_range_name
@@ -1156,7 +1130,6 @@ policy_fact AS (
       FROM policy_sum s
       LEFT JOIN policy_profitcenter_rule r
         ON r.src_profitcenter_code = NULLIF(LTRIM(TRIM(s.profitcenter_code), '0'), '')
-      -- ALTER BY 20261029 17:28 SHIQINGFENG.EX 新增batch_id=6关联；规则侧已按公司主数据展开，此处用等号匹配。
       LEFT JOIN policy_profitcenter_rule_6 r6
         ON r6.company_code = s.company_code
        AND r6.material_group_code = s.material_group_code
@@ -1791,7 +1764,6 @@ INSERT INTO test.dwd_fi_mr_arap_sum_mi
 )
 WITH
 -- EPAY：电商零售类客户渠道BU范围，与主查询口径一致，取规则库中目标月份有效的配置。
--- ALTER BY 20261102 15:18 SHIQINGFENG.EX 提前回款电商排除范围由A前缀改为规则库渠道BU清单。
 epay_ecls_channel_bu AS (
     SELECT DISTINCT NULLIF(TRIM(r.channel_bu_code), '') AS channel_bu_code
       FROM dim.dim_rule_fi_mr_ar_cust_type r
