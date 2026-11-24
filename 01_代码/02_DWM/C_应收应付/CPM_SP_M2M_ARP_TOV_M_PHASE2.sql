@@ -17,8 +17,8 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
-   *   ALTER BY 20261124 18:25 SHIQINGFENG.EX 收入来源渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值。
    *   ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段，不再通过渠道BU关系表映射
+   *   ALTER BY 20261124 18:25 SHIQINGFENG.EX 收入来源渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值。
    *   ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
    *   ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
    *   ALTER BY 20261110 19:03 SHIQINGFENG.EX GB科目与组织节点成员初始化进会话表，科目与DEST1改用独立会话表
@@ -704,6 +704,8 @@ BEGIN
         , T.SRC_SYSTEM
         , T.COD_AZI_CTP
         , T.D_CHANNEL
+        /* ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段 */
+        , T.D_CHANNEL_BU
         , T.COD_DEST2 AS SRC_COD_DEST2
         , T.MATERIAL_GROUP_CODE
         , T.COD_DEST3 AS SRC_COD_DEST3
