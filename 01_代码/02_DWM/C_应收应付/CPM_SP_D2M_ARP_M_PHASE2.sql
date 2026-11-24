@@ -332,7 +332,8 @@ BEGIN
      GROUP BY TRIM(B.COD_AZIENDA)
             , NULLIF(TRIM(A.ONOFFLINE_CODE), '')
   ),
-  /* 业务范围映射规则：批次1公司+二级分类、批次3公司，三级性质优先级取消。 */
+  /* 业务范围映射规则：批次1公司+二级分类、批次3公司，三级性质优先级取消。
+     规则公司编码含通配符（如12%），先按公司主数据展开为实际公司，事实侧按公司等值匹配。 */
   BUSRANGE_RULE AS (
     SELECT TRIM(A.BATCH_ID) AS BATCH_ID
          , TRIM(B.COD_AZIENDA) AS COMPANY_CODE
