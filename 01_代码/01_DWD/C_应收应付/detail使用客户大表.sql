@@ -1,13 +1,13 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261118 21:55
- * 本次修改：ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号对应业务优先级，1公司+渠道分组、2公司、3公司+科目、4新旧利润中心。
- * 上次修改：ALTER BY 20261118 21:40 SHIQINGFENG.EX 利润中心映射按公司+渠道分组、公司、公司+科目、新旧利润中心四个优先级统一编号。
+ * 最后更新时间：20261124 17:31
+ * 本次修改：ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
+ * 上次修改：ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5改为等值连接，消除LIKE全表放大导致的超时。
  *
  * 脚本名称  ：detail使用客户大表.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
- * 源表      ：六套SAP BSID、BSAD、BSIK、BSAK及脚本正文引用的客商、组织、汇率和规则表。
+ * 源表      ：六套SAP BSID、BSAD、BSIK、BSAK，S800 BKPF、BSEG及脚本正文引用的客商、组织、汇率和规则表。
  * 目标表    ：test.dwd_fi_mr_arap_detail_mi
  * 版本说明  ：备用版本 —— 使用客户大表 dim_fi_mr_customer_map_dd / dim_fi_mr_customer_dd。
  *             客户大表正在改造、存在数据问题，暂不启用（2026-10-30 业务确认）。
@@ -16,32 +16,12 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
+ *   ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5改为等值连接，消除LIKE全表放大导致的超时。
+ *   ALTER BY 20261124 15:03 SHIQINGFENG.EX S800客户已清项目改取BKPF和BSEG。
+ *   ALTER BY 20261124 14:34 SHIQINGFENG.EX S800供应商已清项目改取BKPF和BSEG。
  *   ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号对应业务优先级，1公司+渠道分组、2公司、3公司+科目、4新旧利润中心。
- *   ALTER BY 20261118 21:40 SHIQINGFENG.EX 利润中心映射按公司+渠道分组、公司、公司+科目、新旧利润中心四个优先级统一编号。
- *   ALTER BY 20261118 21:30 SHIQINGFENG.EX 利润中心映射优先级改为公司+渠道分组→公司→公司+科目→新旧利润中心→收入利润中心，新增收入利润中心批次。
- *   ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
- *   ALTER BY 20261103 19:10 SHIQINGFENG.EX 科目余额（非统驭科目）行利润中心映射新增batch 4（公司+渠道分组）。
- *   ALTER BY 20261103 19:05 SHIQINGFENG.EX 科目余额（非统驭科目）行补充渠道分组（线上/线下）映射。
- *   ALTER BY 20261103 18:58 SHIQINGFENG.EX 科目余额（非统驭科目）行补充三级性质映射。
- *   ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额（非统驭科目）行补充业务管理单元映射。
- *   ALTER BY 20261103 17:45 SHIQINGFENG.EX 业务管理单元映射改用利润中心最终结果。
- *   ALTER BY 20261103 16:45 SHIQINGFENG.EX 恢复batch_id=1电商零售利润中心映射。
- *   ALTER BY 20261103 14:53 ZHOUHONG.EX 修复业务映射按fact_key一对多回连主表导致的n×n行放大（同一凭证行在BSAK有多条清账记录时，2条被放大为4条，余额重复计算），ar_business_mapping与ar_bmu_profitcenter_pick改为按fact_key聚合输出，取值口径不变，源表多条记录照常保留。（20261103 17:45 SHIQINGFENG.EX 同步自生效版）
- *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
- *   ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU编码/名称；周转分析渠道两字段停用（注释保留）。
- *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- *   ALTER BY 20261026 18:46 SHIQINGFENG.EX 客商类型恢复按行项目客户供应商来源匹配
- *   ALTER BY 20261026 16:22 SHIQINGFENG.EX 客户供应商类型改按KOART映射C或V
- *   ALTER BY 20261026 15:18 SHIQINGFENG.EX 对方公司映射按客户供应商类型匹配
- *   ALTER BY 20261026 11:31 SHIQINGFENG.EX MDG客户编码为空时回退使用SAP客户编码
- *   ALTER BY 20261023 16:18 SHIQINGFENG.EX 恢复文件头完整修改记录并按最近到最早排序
- *   ALTER BY 20261023 16:15 SHIQINGFENG.EX 利润中心映射业务管理单元增加有效期限制
- *   ALTER BY 20261023 16:09 SHIQINGFENG.EX 补充业务管理单元按系统公司及映射后利润中心取值逻辑
- *   ALTER BY 20261022 18:27 SHIQINGFENG.EX 对方公司映射统一固定取C类型，供应商同样适用
- *   20261009 MODIFY 修复SAP多格式日期转换
- *   20260921 MODIFY 更正净收付日期借贷方向逻辑
- *   20260921 ADD 新增净收付日期 netrcp_dt
- *   20260910 ADD BY shiqingfeng.ex 新增
+ *   ADD   BY 20260910 09:30 SHIQINGFENG.EX 新增
  ******************************************************************************/
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
 --SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
@@ -63,7 +43,9 @@ SET @min_aging_date_sap = '00010101';
 set enable_auto_create_when_overwrite=true;
 -- ============================================================================
 -- 第一段：统驭科目凭证行项目。
--- 仅处理六套SAP的BSID/BSAD/BSIK/BSAK；按参数月覆盖目标月份分区。
+-- 处理六套SAP的BSID/BSAD/BSIK/BSAK；S800已清项目改取BKPF+BSEG，其余系统保留原表。
+-- ALTER BY 20261124 15:03 SHIQINGFENG.EX S800已清项目改取BKPF和BSEG
+-- 按参数月覆盖目标月份分区。
 -- ============================================================================
 INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_detail_mi PARTITION (*)
 (
@@ -100,7 +82,6 @@ INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_detail_mi PARTITION (*)
     , channel_l3_name          -- 三级公司分类名称
     , channel_bu_code          -- 渠道BU编码
     , channel_bu_name          -- 渠道BU名称
---  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道两字段停用，列保留，待业务确认替代口径后再删列
 --  , tov_channel_code         -- 周转分析渠道编码
 --  , tov_channel_name         -- 周转分析渠道名称
     , cc_cust_group_code       -- 商冷客户群编码
@@ -206,8 +187,9 @@ src_t001 AS (
     SELECT 'S810' AS system_src, bukrs, ktopl, waers
       FROM ods.odss810_t001
 ),
--- S610统一读取610客户端TCURX并按币种去重计算转换因子；currdec缺失或无效时因子为1。
-s610_tcurx_factor AS (
+-- 币种小数位因子：SAP零小数位币种（JPY/KRW/VND）在ODS按两位小数落地，需乘100还原；
+-- 六套SAP的TCURX内容一致，统一暂取S810的TCURX，各系统入湖后按需拆分替换。
+tcurx_factor AS (
     SELECT UPPER(TRIM(tx.currkey)) AS currkey
          , CASE
                WHEN MAX(CASE
@@ -230,7 +212,7 @@ s610_tcurx_factor AS (
       FROM ods.odss810_tcurx tx
      GROUP BY UPPER(TRIM(tx.currkey))
 ),
--- 聚合公司本位币配置，供凭证明细和总账余额按S610公司取得本位币。
+-- 聚合公司本位币配置，供凭证明细和总账余额按公司取得本位币。
 company_dim AS (
     SELECT system_src
          , bukrs
@@ -275,7 +257,6 @@ src_skb1 AS (
       FROM ods.odss810_skb1
 ),
 -- 汇总SAP客商编码映射，并以MDG客商维度补充统一属性。
--- ALTER BY 20261026 18:46 SHIQINGFENG.EX 恢复客商映射表原始C/S类型，供应商匹配S类型。
 cust_sap_map_dim AS (
     SELECT DISTINCT NULLIF(LTRIM(TRIM(m.cust_sap_code), '0'), '') AS cust_sap_code
          , CASE TRIM(m.cust_sap_client)
@@ -317,7 +298,6 @@ customer_supplier_dim AS (
         ON NULLIF(LTRIM(TRIM(d.cust_code), '0'), '') = m.cust_mdg_code
 ),
 -- 对方公司映射维度：保留客户和供应商类型，供行项目按客商类型匹配对方公司。
--- ALTER BY 20261026 15:18 SHIQINGFENG.EX 对方公司映射按客户或供应商行项目匹配对应客商类型。
 cp_company_dim AS (
     SELECT cust_sap_code
          , cust_sap_client
@@ -488,7 +468,9 @@ src_bsid AS (
 ),
 -- 客户已清项目：保留月末前过账、月末后清账的项目，回溯月末未清快照。
 src_bsad AS (
-    SELECT 'S600' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    SELECT 'S600' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont
+    , prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat
+    , zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
       FROM ods.odsslt_s600_bsad
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -508,12 +490,53 @@ src_bsad AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
-      FROM ods.odsslt_s800_bsad
-     WHERE budat <= @key_date_sap
-       AND augdt > @key_date_sap
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    -- S800原BSAD分支暂时注释保留，待BSEG_D对数通过后再确认是否删除。
+    -- ALTER BY 20261124 15:03 SHIQINGFENG.EX S800客户已清项目改取BKPF和BSEG
+    -- SELECT 'S800' AS system_src, 'BSAD' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber,
+    -- filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr,
+    -- bstat, rstgr, zlsch, NULL AS pays_tran, sgtxt
+    --   FROM ods.odsslt_s800_bsad
+    --  WHERE budat <= @key_date_sap
+    --    AND augdt > @key_date_sap
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+
+    SELECT 'S800' AS system_src
+         , 'BSEG_D' AS ods_src
+         , s.bukrs AS bukrs
+         , s.kunnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , s.rstgr AS rstgr
+         , s.zlsch AS zlsch
+         , NULL AS pays_tran                       -- BSEG无此字段，与其余已清分支保持一致
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs800_bkpf_v h
+      JOIN ods.odssap_zs800_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
+     WHERE s.augdt > @key_date_sap                -- 月末后才清账
+       AND h.budat <= @key_date_sap
+       AND s.koart = 'D'
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
 
     UNION ALL
 
@@ -664,7 +687,8 @@ src_bsik AS (
 -- 供应商已清项目：保留月末前过账、月末后清账的项目，回溯月末未清快照。
 src_bsak AS (
     SELECT 'S600' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, 
-            gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+            gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt
+            , shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
       FROM ods.odsslt_s600_bsak
      WHERE budat <= @key_date_sap
        AND augdt > @key_date_sap
@@ -673,7 +697,10 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S700' AS system_src, 'BSAK' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.lifnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, NULL AS rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
+    SELECT 'S700' AS system_src, 'BSAK' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.lifnr AS cust_head_code, 
+    b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, 
+    b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, 
+    b.wrbtr, b.bstat, NULL AS rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
       FROM ods.odsslt_s700_bsak b
       LEFT JOIN s700_company_map hm
         ON hm.ent_sap700_code = TRIM(b.bukrs)
@@ -684,12 +711,53 @@ src_bsak AS (
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
-      FROM ods.odsslt_s800_bsak
-     WHERE budat <= @key_date_sap
-       AND augdt > @key_date_sap
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    -- S800原BSAK分支暂时注释保留，待BSEG_K对数通过后再确认是否删除。
+    -- ALTER BY 20261124 14:34 SHIQINGFENG.EX S800供应商已清项目改取BKPF和BSEG
+    -- SELECT 'S800' AS system_src, 'BSAK' AS ods_src, bukrs, lifnr AS cust_head_code, hkont, prctr, gsber,
+    -- filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr,
+    -- bstat, NULL AS rstgr, zlsch, NULL AS pays_tran, sgtxt
+    --   FROM ods.odsslt_s800_bsak
+    --  WHERE budat <= @key_date_sap
+    --    AND augdt > @key_date_sap
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+
+    SELECT 'S800' AS system_src
+         , 'BSEG_K' AS ods_src
+         , s.bukrs AS bukrs
+         , s.lifnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , NULL AS rstgr
+         , s.zlsch AS zlsch
+         , NULL AS pays_tran
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs800_bkpf_v h
+      JOIN ods.odssap_zs800_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
+     WHERE s.augdt > @key_date_sap
+       AND h.budat <= @key_date_sap
+       AND s.koart = 'K'
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
 
     UNION ALL
 
@@ -722,7 +790,6 @@ src_bsak AS (
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
 ),
 -- 按系统、公司和科目区间识别统驭科目，仅保留D应收/K应付。
--- ALTER BY 20261026 18:46 SHIQINGFENG.EX 撤销KOART判定，客商类型恢复按行项目客户或供应商来源匹配。
 account_cfg AS (
     SELECT DISTINCT t.system_src
          , t.bukrs AS company_code
@@ -789,17 +856,9 @@ all_items AS (
          , b.zbd1t
          , b.augdt
          , b.shkzg
-         -- S610的dmbtr按公司本位币转换，wrbtr按凭证明细交易币waers转换。
-         , CASE
-               WHEN b.system_src = 'S610'
-                   THEN b.dmbtr * COALESCE(cf.conversion_factor, 1)
-               ELSE b.dmbtr
-           END AS dmbtr
-         , CASE
-               WHEN b.system_src = 'S610'
-                   THEN b.wrbtr * COALESCE(tf.conversion_factor, 1)
-               ELSE b.wrbtr
-           END AS wrbtr
+         -- dmbtr按公司本位币、wrbtr按凭证交易币，均按TCURX小数位因子还原。
+         , b.dmbtr * COALESCE(cf.conversion_factor, 1) AS dmbtr
+         , b.wrbtr * COALESCE(tf.conversion_factor, 1) AS wrbtr
          , b.bstat
          , b.rstgr
          , b.zlsch
@@ -814,12 +873,10 @@ all_items AS (
       LEFT JOIN company_dim co
         ON co.system_src = b.system_src
        AND co.bukrs = b.bukrs
-      LEFT JOIN s610_tcurx_factor cf
-        ON b.system_src = 'S610'
-       AND cf.currkey = UPPER(TRIM(co.waers))
-      LEFT JOIN s610_tcurx_factor tf
-        ON b.system_src = 'S610'
-       AND tf.currkey = UPPER(TRIM(b.waers))
+      LEFT JOIN tcurx_factor cf
+        ON cf.currkey = UPPER(TRIM(co.waers))
+      LEFT JOIN tcurx_factor tf
+        ON tf.currkey = UPPER(TRIM(b.waers))
 ),
 -- 按目标月份筛选有效科目映射，并按原始科目和系统聚合。
 acct_mapping AS (
@@ -867,6 +924,15 @@ items_with_aging_date AS (
       LEFT JOIN agingdate_cfg system_cfg
         ON system_cfg.system_src = a.system_src
        AND system_cfg.company_code IS NULL
+),
+-- 主户公司范围：配置表内的公司不使用分户，分户编码置空后按主户匹配。
+-- ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空
+cust_range_dim AS (
+    SELECT DISTINCT TRIM(company_code) AS company_code
+      FROM dim.dim_rule_fi_mr_ar_cust_range
+     WHERE NVL(valid_fr, '202401') <= @dt_month
+       AND NVL(valid_to, '999999') >= @dt_month
+       AND NULLIF(TRIM(company_code), '') IS NOT NULL
 ),
 -- 转换日期、标准化客商编码、处理借贷方向并计算账龄天数。
 normalized_items AS (
@@ -951,7 +1017,12 @@ normalized_items AS (
            END AS netrcp_dt
          , STR_TO_DATE(NULLIF(TRIM(a.augdt), ''), '%Y%m%d') AS clearing_dt
          , NULLIF(LTRIM(TRIM(a.cust_head_code), '0'), '') AS cust_head_code
-         , NULLIF(LTRIM(TRIM(a.filkd), '0'), '') AS cust_branch_code
+         -- 配置表范围内的公司不使用分户。
+         -- ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空
+         , CASE
+               WHEN cr.company_code IS NOT NULL THEN NULL
+               ELSE NULLIF(LTRIM(TRIM(a.filkd), '0'), '')
+           END AS cust_branch_code
          , a.acct_type_code
          , a.hkont AS acct_src_code
          , CASE WHEN a.system_src = 'S600' THEN a.hkont ELSE am.acct_map_code END AS acct_map_code
@@ -992,6 +1063,8 @@ normalized_items AS (
       LEFT JOIN acct_mapping am
         ON am.racct_src_code = a.hkont
        AND am.system_src = a.system_src
+      LEFT JOIN cust_range_dim cr
+        ON cr.company_code = TRIM(a.bukrs)
 ),
 -- 读取目标月份有效的账龄段配置，并准备账龄天数匹配区间。
 aging_seg_cfg AS (
@@ -1065,7 +1138,7 @@ nf_match_base AS (
                                   ELSE 'S'
                               END
 ),
-/* ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道规则整段停用，代码保留备查。
+/* 1030废弃：周转分析渠道规则整段停用，代码保留备查。
 -- 读取目标月份有效的周转分析渠道规则；客户编码去前导零并按匹配键聚合，避免重复配置放大事实行。
 tov_channel_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
@@ -1214,7 +1287,6 @@ nf_final AS (
 ),
 -- 读取目标月份有效的利润中心映射规则，并展开公司编码通配配置。
 -- 批次号即业务优先级：1公司+渠道分组、2公司、3公司+科目、4新旧利润中心（仅电商零售类客户渠道BU范围）。
--- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，不再去零，与规则表原值同口径比较。
 -- ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号直接对应业务优先级。
 ar_profitcenter_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
@@ -1292,7 +1364,7 @@ profitcenter_candidate AS (
      INNER JOIN ar_profitcenter_rule r
         ON r.batch_id = 1
        AND r.company_code = NULLIF(LTRIM(TRIM(b.company_code), '0'), '')
-       AND r.onoffline_code = NULLIF(LTRIM(TRIM(b.onoffline_code), '0'), '')
+       AND r.onoffline_code = NULLIF(TRIM(b.onoffline_code), '')
     UNION ALL
     -- 优先级2：公司。
     SELECT b.fact_key
@@ -1355,7 +1427,6 @@ profitcenter_candidate AS (
        AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
     UNION ALL
     -- 优先级4：新旧利润中心，仅电商零售类客户渠道BU范围内的客户。
-    -- ALTER BY 20261103 16:45 SHIQINGFENG.EX 电商零售利润中心映射：周转分析渠道停用后，客户范围改按客商类型规则库的渠道BU编码判定。
     SELECT b.fact_key
          , r.batch_id
          , r.profitcenter_code
@@ -1457,7 +1528,6 @@ ar_mapping_base AS (
          , ch.com_2nd_code AS channel_l2_code
          , ch.country_code
          , pc.profitcenter_code
-         -- ALTER BY 20261103 17:45 SHIQINGFENG.EX 带出源利润中心，供业务管理单元映射在重映射未命中时回退
          , a.src_profitcenter_code
          , cs.company_scope
          , k.kverm
@@ -1501,7 +1571,6 @@ ar_mapping_base AS (
 ),
 -- 按有效期聚合三级性质映射规则。
 -- 系统号、客商、利润中心统一去前导0后参与匹配；规则表system_src为600/700形式，与数据源S600对齐时拼S前缀。
--- ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0
 ar_nature_rule AS (
     SELECT CAST(batch_id AS INT) AS batch_id
          , CONCAT('S', TRIM(system_src)) AS system_src
@@ -1576,6 +1645,9 @@ ar_nature_candidate AS (
        AND r.company_code = b.company_code
        AND r.acct_map_code = b.acct_src_code
     UNION ALL
+    -- 优先级5：公司+科目+客商。规则客商为纯通配符'%'时按任意客商匹配，单独走等值连接；
+    -- 其余带通配的规则才走 LIKE，避免千万行明细与非等值条件做嵌套循环。
+    -- ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5拆分等值连接，消除LIKE放大
     SELECT b.fact_key
          , r.batch_id
          , r.nature_l1_name
@@ -1586,6 +1658,22 @@ ar_nature_candidate AS (
         ON r.batch_id = 5
        AND r.system_src = b.system_src
        AND r.acct_map_code = b.acct_src_code
+       AND r.cust_code = '%'
+     WHERE NULLIF(LTRIM(TRIM(b.cust_code), '0'), '') IS NOT NULL
+
+    UNION ALL
+
+    SELECT b.fact_key
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_mapping_base b
+     INNER JOIN ar_nature_rule r
+        ON r.batch_id = 5
+       AND r.system_src = b.system_src
+       AND r.acct_map_code = b.acct_src_code
+       AND r.cust_code <> '%'
        AND NULLIF(LTRIM(TRIM(b.cust_code), '0'), '') LIKE r.cust_code
 ),
 -- 按最小批次优先原则确定三级性质。
@@ -1684,7 +1772,6 @@ ar_country_busrange_rule AS (
      GROUP BY country_code
 ),
 -- 聚合有效期内业务管理单元映射规则。
--- ALTER BY 20261023 16:09 SHIQINGFENG.EX 补充batch_id=3按系统号和公司编码映射业务管理单元。
 ar_busdept_rule AS (
     SELECT CAST(batch_id AS INT) AS batch_id
          , system_src
@@ -1703,7 +1790,6 @@ ar_busdept_rule AS (
             , nature_l3_name
 ),
 -- 按1（系统+映射后利润中心，未命中回退源利润中心）→2（系统+三级性质）→3（系统+公司）生成业务管理单元候选。
--- ALTER BY 20261103 17:45 SHIQINGFENG.EX 重映射未命中时回退源利润中心参与映射，修复6800业务管理单元全空。
 ar_busdept_candidate AS (
     SELECT b.fact_key
          , r.batch_id
@@ -1713,7 +1799,6 @@ ar_busdept_candidate AS (
      INNER JOIN ar_busdept_rule r
         ON r.batch_id = 1
        AND r.system_src = b.system_src
-       -- ALTER BY 20261103 17:45 SHIQINGFENG.EX 映射后利润中心为空时回退源利润中心参与匹配
        AND r.profitcenter_code = COALESCE(NULLIF(TRIM(b.profitcenter_code), ''), b.src_profitcenter_code)
     UNION ALL
     SELECT b.fact_key
@@ -1754,7 +1839,6 @@ ar_busdept_pick AS (
        AND p.batch_id = c.batch_id
      GROUP BY c.fact_key
 ),
--- ALTER BY 20261023 16:15 SHIQINGFENG.EX 仅保留dim_flag为01且当前月份在有效期内的利润中心映射业务管理单元，并按映射后利润中心聚合。
 ar_bmu_profitcenter_rule AS (
     SELECT NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '') AS profitcenter_code
          , MAX(bmu_code) AS bmu_code
@@ -1764,20 +1848,16 @@ ar_bmu_profitcenter_rule AS (
      WHERE TRIM(dim_flag) = '01'
      GROUP BY NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
 ),
--- ALTER BY 20261023 16:15 SHIQINGFENG.EX 按映射后利润中心补充业务管理单元，作为业务管理单元映射表未命中时的兜底。
--- ALTER BY 20261103 14:53 ZHOUHONG.EX 按fact_key聚合，避免同一凭证行有多条记录时本结果集随之增多、回连主表时放大行数。
 ar_bmu_profitcenter_pick AS (
     SELECT b.fact_key
          , MAX(r.bmu_code) AS bmu_code
          , MAX(r.bmu_name) AS bmu_name
       FROM ar_mapping_base b
      INNER JOIN ar_bmu_profitcenter_rule r
-        -- ALTER BY 20261103 17:45 SHIQINGFENG.EX 映射后利润中心为空时回退源利润中心参与兜底匹配
         ON r.profitcenter_code = NULLIF(LTRIM(TRIM(COALESCE(NULLIF(TRIM(b.profitcenter_code), ''), b.src_profitcenter_code)), '0'), '')
      GROUP BY b.fact_key
 ),
 -- 汇总业务范围与业务管理单元映射结果。
--- ALTER BY 20261103 14:53 ZHOUHONG.EX 按fact_key聚合，使本结果集每个fact_key只保留一行，杜绝与主表n×n放大。
 ar_business_mapping AS (
     SELECT b.fact_key
          , MAX(
@@ -1815,7 +1895,6 @@ ar_business_mapping AS (
                    ELSE br.bus_range_name
                END
            ) AS bus_range_name
-         -- ALTER BY 20261023 16:09 SHIQINGFENG.EX 优先按业务管理单元映射表取值，未命中时使用映射后利润中心对应业务管理单元。
          , MAX(COALESCE(NULLIF(TRIM(bd.marketing_dept_code), ''), bp.bmu_code)) AS marketing_dept_code
          , MAX(COALESCE(NULLIF(TRIM(bd.marketing_dept_name), ''), bp.bmu_name)) AS marketing_dept_name
       FROM ar_mapping_base b
@@ -1881,7 +1960,6 @@ SELECT @dt_month
                THEN COALESCE(bc.name1, '')
            ELSE COALESCE(bc.name1, '')
        END AS cust_branch_name
-     -- ALTER BY SHIQINGFENG.EX 20261022 18:27:33 对方公司统一取C类型映射，供应商行同样适用。
      , COALESCE(cp.cp_company_mr_code, cp.cp_company_code) AS cp_company_code
      , ci.country_code
      , ci.country_name
@@ -1896,7 +1974,6 @@ SELECT @dt_month
      , ch.com_3rd_name AS channel_l3_name
      , bu.channel_bu_code
      , bu.channel_bu_name
---  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道停用
 --   , tc.tov_channel_code
 --   , tc.tov_channel_name
      , cc.crg_cust_group_code AS cc_cust_group_code
@@ -1961,7 +2038,7 @@ SELECT @dt_month
              , COALESCE(a.acct_cert_item, '')
            )
        )
-/* ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道结果不再输出。
+/* 1030废弃：周转分析渠道结果不再输出。
   LEFT JOIN tov_channel_pick tc
     ON tc.fact_key = MD5(
            CONCAT_WS(
@@ -1997,7 +2074,6 @@ SELECT @dt_month
                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
                                   ELSE 'S'
                               END
-      -- ALTER BY 20261026 18:46 SHIQINGFENG.EX 对方公司映射按行项目来源匹配客户C或供应商S类型。
       LEFT JOIN cp_company_dim cp
         ON cp.cust_sap_code = a.cust_head_code
        AND cp.cust_sap_client = a.system_src
@@ -2023,7 +2099,6 @@ SELECT @dt_month
                                   WHEN a.object_source = 'CUSTOMER' THEN 'C'
                                   ELSE 'S'
                               END
-      -- ALTER BY 20261030 17:50 SHIQINGFENG.EX 新增渠道BU：按三级公司分类关联渠道BU关系表，同码多条取MAX避免放大事实行。
       LEFT JOIN (
             SELECT TRIM(com_3rd_code) AS com_3rd_code
                  , MAX(channel_bu_code) AS channel_bu_code
@@ -2097,7 +2172,6 @@ INSERT INTO test.dwd_fi_mr_arap_detail_mi
     , channel_l3_name          -- 三级公司分类名称
     , channel_bu_code          -- 渠道BU编码
     , channel_bu_name          -- 渠道BU名称
---  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道两字段停用，列保留，待业务确认替代口径后再删列
 --  , tov_channel_code         -- 周转分析渠道编码
 --  , tov_channel_name         -- 周转分析渠道名称
     , cc_cust_group_code       -- 商冷客户群编码
@@ -2203,8 +2277,9 @@ src_t001 AS (
     SELECT 'S810' AS system_src, bukrs, ktopl, waers
       FROM ods.odss810_t001
 ),
--- S610统一读取610客户端TCURX并按币种去重计算转换因子；currdec缺失或无效时因子为1。
-s610_tcurx_factor AS (
+-- 币种小数位因子：SAP零小数位币种（JPY/KRW/VND）在ODS按两位小数落地，需乘100还原；
+-- 六套SAP的TCURX内容一致，统一暂取S810的TCURX，各系统入湖后按需拆分替换。
+tcurx_factor AS (
     SELECT UPPER(TRIM(tx.currkey)) AS currkey
          , CASE
                WHEN MAX(CASE
@@ -2227,7 +2302,7 @@ s610_tcurx_factor AS (
       FROM ods.odss810_tcurx tx
      GROUP BY UPPER(TRIM(tx.currkey))
 ),
--- 聚合公司本位币配置，供凭证明细和总账余额按S610公司取得本位币。
+-- 聚合公司本位币配置，供凭证明细和总账余额按公司取得本位币。
 company_dim AS (
     SELECT system_src
          , bukrs
@@ -2396,8 +2471,9 @@ balance_detail AS (
          + CASE WHEN @fiscal_month >= '10' THEN ROUND(IFNULL(g.hsl10, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '11' THEN ROUND(IFNULL(g.hsl11, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '12' THEN ROUND(IFNULL(g.hsl12, 0), 2) ELSE 0 END)
-         * CASE WHEN g.system_src = 'S610' THEN COALESCE(cf.conversion_factor, 1) ELSE 1 END AS bcy_amt
-         -- S610的tsl按余额记录交易币rtcur转换，不能复用本位币因子。
+         -- 本位币与交易币金额均按TCURX小数位因子还原。
+         * COALESCE(cf.conversion_factor, 1) AS bcy_amt
+         -- tsl按余额记录交易币rtcur转换，不能复用本位币因子。
          , (ROUND(IFNULL(g.tslvt, 0), 2)
          + CASE WHEN @fiscal_month >= '01' THEN ROUND(IFNULL(g.tsl01, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '02' THEN ROUND(IFNULL(g.tsl02, 0), 2) ELSE 0 END
@@ -2411,7 +2487,7 @@ balance_detail AS (
          + CASE WHEN @fiscal_month >= '10' THEN ROUND(IFNULL(g.tsl10, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '11' THEN ROUND(IFNULL(g.tsl11, 0), 2) ELSE 0 END
          + CASE WHEN @fiscal_month >= '12' THEN ROUND(IFNULL(g.tsl12, 0), 2) ELSE 0 END)
-         * CASE WHEN g.system_src = 'S610' THEN COALESCE(tf.conversion_factor, 1) ELSE 1 END AS qcy_amt
+         * COALESCE(tf.conversion_factor, 1) AS qcy_amt
       FROM src_gl_balance g
      INNER JOIN gl_account_cfg c
         ON c.system_src = g.system_src
@@ -2420,12 +2496,10 @@ balance_detail AS (
       LEFT JOIN company_dim co
         ON co.system_src = g.system_src
        AND co.bukrs = g.company_code
-      LEFT JOIN s610_tcurx_factor cf
-        ON g.system_src = 'S610'
-       AND cf.currkey = UPPER(TRIM(co.waers))
-      LEFT JOIN s610_tcurx_factor tf
-        ON g.system_src = 'S610'
-       AND tf.currkey = UPPER(TRIM(g.qcy_code))
+      LEFT JOIN tcurx_factor cf
+        ON cf.currkey = UPPER(TRIM(co.waers))
+      LEFT JOIN tcurx_factor tf
+        ON tf.currkey = UPPER(TRIM(g.qcy_code))
 ),
 -- 按余额粒度汇总，并保留至少一个币种非零的余额组合。
 balance_agg AS (
@@ -2498,7 +2572,6 @@ gl_nf_by_company AS (
 ),
 -- 读取第二段可用的利润中心规则；非统驭余额无客商，支持公司+渠道分组、公司、公司+科目三个优先级。
 -- 批次号即业务优先级：1公司+渠道分组、2公司、3公司+科目。
--- ALTER BY 20261118 14:45 SHIQINGFENG.EX 渠道分组编码保留前导零，不再去零，与规则表原值同口径比较。
 -- ALTER BY 20261118 21:55 SHIQINGFENG.EX 余额段利润中心映射按规则表批次号直接对应业务优先级。
 ar_profitcenter_balance_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
@@ -2620,7 +2693,6 @@ profitcenter_balance_pick AS (
             , c.qcy_code
             , c.ods_src
 ),
--- ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额行业务管理单元规则：系统+利润中心（batch 1）优先，系统+公司（batch 3）兜底；余额无客商与三级性质，batch 2 不适用。
 gl_busdept_by_prctr AS (
     SELECT system_src
          , profitcenter_code
@@ -2655,7 +2727,6 @@ gl_bmu_profitcenter AS (
      GROUP BY NULLIF(LTRIM(TRIM(profitcenter_code), '0'), '')
 ),
 -- 三级性质按公司+科目+利润中心取（batch 3）；科目余额无客商，客商批次 1/2/5 不适用。
--- ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，利润中心去前导0
 gl_nature_by_prctr AS (
     SELECT CONCAT('S', TRIM(system_src)) AS system_src
          , company_code
@@ -2722,12 +2793,10 @@ SELECT @dt_month
      , NULL AS channel_l3_name
      , NULL AS channel_bu_code
      , NULL AS channel_bu_name
---  ALTER BY 20261030 17:50 SHIQINGFENG.EX 1030废弃：周转分析渠道停用
 --   , NULL AS tov_channel_code
 --   , NULL AS tov_channel_name
      , NULL AS cc_cust_group_code
      , NULL AS cc_cust_group_name
-     -- ALTER BY 20261103 19:05 SHIQINGFENG.EX 渠道分组按公司取规则表，未命中或规则为空按默认零售渠道兜底，与凭证行 nf_final 同口径。
      , CASE
            WHEN NULLIF(TRIM(nf2.onoffline_code), '') IS NULL
              OR nf2.onoffline_code = 'NULL'
@@ -2746,10 +2815,8 @@ SELECT @dt_month
      , COALESCE(NULLIF(TRIM(bp.profitcenter_name), ''), COALESCE(pc.ktext, '')) AS profitcenter_name
      , br.bus_range_code
      , br.bus_range_name
-     -- ALTER BY 20261103 18:45 SHIQINGFENG.EX 业务管理单元按映射后利润中心取规则表，未命中依次回退系统+公司规则与利润中心业务管理单元。
      , COALESCE(NULLIF(TRIM(bd1.marketing_dept_code), ''), NULLIF(TRIM(bd3.marketing_dept_code), ''), bg.bmu_code) AS marketing_dept_code
      , COALESCE(NULLIF(TRIM(bd1.marketing_dept_name), ''), NULLIF(TRIM(bd3.marketing_dept_name), ''), bg.bmu_name) AS marketing_dept_name
-     -- ALTER BY 20261103 18:58 SHIQINGFENG.EX 三级性质按公司+科目+利润中心取规则表，未命中回退公司+科目。
      , COALESCE(NULLIF(TRIM(nt3.nature_l1_name), ''), NULLIF(TRIM(nt4.nature_l1_name), '')) AS nature_l1_name
      , COALESCE(NULLIF(TRIM(nt3.nature_l2_name), ''), NULLIF(TRIM(nt4.nature_l2_name), '')) AS nature_l2_name
      , COALESCE(NULLIF(TRIM(nt3.nature_l3_name), ''), NULLIF(TRIM(nt4.nature_l3_name), '')) AS nature_l3_name
@@ -2797,7 +2864,6 @@ SELECT @dt_month
   LEFT JOIN acct_mapping am
     ON am.racct_src_code = b.acct_src_code
    AND am.system_src = b.system_src
-  -- ALTER BY 20261103 18:45 SHIQINGFENG.EX 科目余额行业务管理单元按利润中心映射，与凭证行同口径。
   LEFT JOIN gl_busdept_by_prctr bd1
     ON bd1.system_src = b.system_src
    AND bd1.profitcenter_code = COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)
@@ -2806,7 +2872,6 @@ SELECT @dt_month
    AND bd3.company_code = b.company_code
   LEFT JOIN gl_bmu_profitcenter bg
     ON bg.profitcenter_code = NULLIF(LTRIM(TRIM(COALESCE(NULLIF(TRIM(bp.profitcenter_code), ''), b.src_profitcenter_code)), '0'), '')
-  -- ALTER BY 20261103 18:58 SHIQINGFENG.EX 三级性质按映射后利润中心（未命中回退源利润中心）取规则，再退公司+科目。
   LEFT JOIN gl_nature_by_prctr nt3
     ON nt3.system_src = b.system_src
    AND nt3.company_code = b.company_code
@@ -2816,7 +2881,6 @@ SELECT @dt_month
     ON nt4.system_src = b.system_src
    AND nt4.company_code = b.company_code
    AND nt4.acct_src_code = b.acct_src_code
-  -- ALTER BY 20261103 19:05 SHIQINGFENG.EX 渠道分组按公司取规则，未命中走默认零售渠道。
   LEFT JOIN gl_nf_by_company nf2
     ON nf2.company_code = b.company_code
   LEFT JOIN company_dim co
