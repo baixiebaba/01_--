@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261119 15:43
- * 本次修改：ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
- * 上次修改：ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
+ * 最后更新时间：20261124 18:04
+ * 本次修改：ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
+ * 上次修改：ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
  *
  * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -17,11 +17,11 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
  *   ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
  *   ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
  *   ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
  *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
- *   ALTER BY 20261102 15:27 SHIQINGFENG.EX 政策台账金额与提前回款按逻辑文档改口径：①政策非电商分支排除规则库「电商零售类客户」渠道BU清单，结算类客户batch_id=1按公司+客商、batch_id=2按公司+渠道BU编码匹配，仅取兑现过程中/确认完毕；②政策电商分支命中规则库电商零售渠道BU清单且政策清单为退差未冲红；③提前回款电商排除范围由A前缀改为规则库渠道BU清单；④batch_id=2规则中23%/26%/67%通配公司码改由公司主数据展开后等号关联。
  *   ADD   BY 20260915 15:40 SHIQINGFENG.EX 新增
  ******************************************************************************/
 
@@ -790,7 +790,6 @@ policy_settle_cust AS (
             , LTRIM(NULLIF(TRIM(cust_code), ''), '0')
 ),
 -- POLICY：结算类客户第二匹配方式，按公司+渠道BU编码去重。
--- ALTER BY 20261102 15:27 SHIQINGFENG.EX 规则库batch_id=2的company_code存在23%/26%/67%通配写法，
 -- 先按公司主数据展开为具体公司再等号关联，避免事实侧做LIKE匹配（与batch_id=6利润中心映射同一做法）。
 policy_settle_bu AS (
     SELECT b.cod_azienda AS company_code
@@ -942,6 +941,10 @@ policy_src_base AS (
                  , MAX(channel_bu_code) AS channel_bu_code
                  , MAX(channel_bu_name) AS channel_bu_name
               FROM dim.dim_rule_mrs_mr3_channel_bu_relation
+             -- 关系表按期间取版本，避免新旧版本同时命中。
+             -- ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系补充生效期间限制
+             WHERE SUBSTR(start_time, 1, 6) <= @dt_month
+               AND NVL(SUBSTR(end_time, 1, 6), '999999') >= @dt_month
              GROUP BY com_3rd_code
       ) bu
         ON bu.com_3rd_code = c.channel_l3_code

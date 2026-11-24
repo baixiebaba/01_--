@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261120 18:33
-   * 本次修改：ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行，修复多DEST3行收入重复
-   * 上次修改：ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
+   * 最后更新时间：20261124 18:11
+   * 本次修改：ALTER BY 20261124 18:11 SHIQINGFENG.EX 渠道BU关系补充生效期间限制，按月份取版本
+   * 上次修改：ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行，修复多DEST3行收入重复
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261124 18:11 SHIQINGFENG.EX 渠道BU关系补充生效期间限制，按月份取版本
    *   ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行，修复多DEST3行收入重复
    *   ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
    *   ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
@@ -313,10 +314,13 @@ BEGIN
             , CHANNEL_L3_CODE
   ),
   /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 1030新增渠道BU：按三级公司分类映射渠道BU（com_3rd_code = channel_l3_code）。 */
+  /* ALTER BY 20261124 18:11 SHIQINGFENG.EX 渠道BU关系补充生效期间限制，按月份取版本 */
   CHANNEL_BU_RULE AS (
     SELECT COM_3RD_CODE AS CHANNEL_L3_CODE
          , MAX(CHANNEL_BU_CODE) AS CHANNEL_BU_CODE
       FROM DIM_RULE_MRS_MR3_CHANNEL_BU_RELATION
+    WHERE SUBSTR(START_TIME, 1, 6) <= V_YEARMONTH
+      AND NVL(SUBSTR(END_TIME, 1, 6), '999999') >= V_YEARMONTH
      GROUP BY COM_3RD_CODE
   ),
   /* DEST3层级：仅收入未匹配时使用其自身国家名称维度。 */

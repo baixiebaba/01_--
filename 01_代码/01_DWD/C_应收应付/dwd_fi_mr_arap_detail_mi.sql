@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261124 17:31
- * 本次修改：ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
- * 上次修改：ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5改为等值连接，消除LIKE全表放大导致的超时。
+ * 最后更新时间：20261124 18:04
+ * 本次修改：ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
+ * 上次修改：ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -18,11 +18,11 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
  *   ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
  *   ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5改为等值连接，消除LIKE全表放大导致的超时。
  *   ALTER BY 20261124 15:03 SHIQINGFENG.EX S800客户已清项目改取BKPF和BSEG。
  *   ALTER BY 20261124 14:34 SHIQINGFENG.EX S800供应商已清项目改取BKPF和BSEG。
- *   ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号对应业务优先级，1公司+渠道分组、2公司、3公司+科目、4新旧利润中心。
  *   ADD   BY 20260910 09:30 SHIQINGFENG.EX 新增
  ******************************************************************************/
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
@@ -1392,7 +1392,6 @@ nf_final AS (
 ),
 -- 读取目标月份有效的利润中心映射规则，并展开公司编码通配配置。
 -- 批次号即业务优先级：1公司+渠道分组、2公司、3公司+科目、4新旧利润中心（仅电商零售类客户渠道BU范围）。
--- ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心映射按规则表批次号直接对应业务优先级。
 ar_profitcenter_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
@@ -1423,7 +1422,6 @@ ecomm_channel_bu AS (
        AND NVL(valid_to, '999999') >= @dt_month
 ),
 -- 按业务优先级生成利润中心候选：1公司+渠道分组→2公司→3公司+科目→4新旧利润中心（限电商零售类客户渠道BU范围）。
--- ALTER BY 20261118 21:55 SHIQINGFENG.EX 利润中心候选按业务优先级重排为四个批次。
 profitcenter_candidate AS (
     -- 优先级1：公司+渠道分组。
     SELECT b.fact_key
@@ -1566,6 +1564,10 @@ profitcenter_candidate AS (
                     SELECT TRIM(com_3rd_code) AS com_3rd_code
                          , MAX(channel_bu_code) AS channel_bu_code
                       FROM dim.dim_rule_mrs_mr3_channel_bu_relation
+                     -- 关系表按期间取版本，避免新旧版本同时命中。
+                     -- ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系补充生效期间限制
+                     WHERE SUBSTR(start_time, 1, 6) <= @dt_month
+                       AND NVL(SUBSTR(end_time, 1, 6), '999999') >= @dt_month
                      GROUP BY TRIM(com_3rd_code)
               ) bu
                 ON bu.com_3rd_code = ch.com_3rd_code
@@ -1579,7 +1581,6 @@ profitcenter_candidate AS (
        AND r.src_profitcenter_code = b.src_profitcenter_code
 ),
 -- 按 batch_id 最小者唯一选取利润中心，避免规则重复放大事实行。
--- ALTER BY 20261118 21:55 SHIQINGFENG.EX 优先级直接比较批次号。
 profitcenter_pick AS (
     SELECT c.fact_key
          , MAX(c.profitcenter_code) AS profitcenter_code
@@ -2209,6 +2210,10 @@ SELECT @dt_month
                  , MAX(channel_bu_code) AS channel_bu_code
                  , MAX(channel_bu_name) AS channel_bu_name
               FROM dim.dim_rule_mrs_mr3_channel_bu_relation
+             -- 关系表按期间取版本，避免新旧版本同时命中。
+             -- ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系补充生效期间限制
+             WHERE SUBSTR(start_time, 1, 6) <= @dt_month
+               AND NVL(SUBSTR(end_time, 1, 6), '999999') >= @dt_month
              GROUP BY TRIM(com_3rd_code)
       ) bu
         ON bu.com_3rd_code = ch.com_3rd_code
@@ -2677,7 +2682,6 @@ gl_nf_by_company AS (
 ),
 -- 读取第二段可用的利润中心规则；非统驭余额无客商，支持公司+渠道分组、公司、公司+科目三个优先级。
 -- 批次号即业务优先级：1公司+渠道分组、2公司、3公司+科目。
--- ALTER BY 20261118 21:55 SHIQINGFENG.EX 余额段利润中心映射按规则表批次号直接对应业务优先级。
 ar_profitcenter_balance_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , NULLIF(LTRIM(TRIM(b.cod_azienda), '0'), '') AS company_code
@@ -2697,7 +2701,6 @@ ar_profitcenter_balance_rule AS (
             , NULLIF(TRIM(a.onoffline_code), '')
 ),
 -- 按业务优先级生成余额利润中心候选：1公司+渠道分组→2公司→3公司+科目。
--- ALTER BY 20261118 21:55 SHIQINGFENG.EX 余额候选按业务优先级重排为三个批次。
 profitcenter_balance_candidate AS (
     -- 优先级1：公司+渠道分组。
     SELECT b.system_src
@@ -2752,7 +2755,6 @@ profitcenter_balance_candidate AS (
        AND NULLIF(LTRIM(TRIM(b.acct_src_code), '0'), '') LIKE r.acct_src_code
 ),
 -- 按余额粒度唯一选取利润中心，batch_id 最小者优先，且不复制余额事实。
--- ALTER BY 20261118 21:55 SHIQINGFENG.EX 余额段优先级直接比较批次号。
 profitcenter_balance_pick AS (
     SELECT c.system_src
          , c.company_code
