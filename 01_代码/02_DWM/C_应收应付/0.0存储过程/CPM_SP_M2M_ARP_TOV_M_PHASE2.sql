@@ -7,16 +7,17 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261125 14:57
-   * 本次修改：ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
-   * 上次修改：ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
+   * 最后更新时间：20261125 17:55
+   * 本次修改：ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
+   * 上次修改：ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
-   * 源表      ：AW_MR9_ARPM02_000001、DWD_FI_MR_AR_IMOCC_MI、AW_MR9_REVM01_000001、AW_MR8_CPRS01_000001、DATI_SALDI_LORDI、AW_RUL_ARPPRC_000001、AW_RUL_CP2SAP_000001、DIM_RULE_FI_MR_AR_NF_MAPPING、DIM_RULE_FI_MR_AR_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_COUNTRY_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_BUSDEPT_MAPPING、DIM_RULE_FI_MR_BMU_TO_PROFITCENTER、DWD_FI_MR_SAP_KNA1_DD、DIM_CUSTOMER_BASE_INFO_DD
+   * 源表      ：AW_MR9_ARPM02_000001、DWD_FI_MR_AR_IMOCC_MI、AW_MR9_REVM01_000001、AW_MR8_CPRS01_000001、DATI_SALDI_LORDI、AW_RUL_ARPPRC_000001、AW_RUL_ARPCUS_000001、AW_RUL_CP2SAP_000001、DIM_RULE_FI_MR_AR_NF_MAPPING、DIM_RULE_FI_MR_AR_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_COUNTRY_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_BUSDEPT_MAPPING、DIM_RULE_FI_MR_BMU_TO_PROFITCENTER、DWD_FI_MR_SAP_KNA1_DD、DIM_CUSTOMER_BASE_INFO_DD
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
    *   ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
    *   ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
    *   ALTER BY 20261125 10:11 SHIQINGFENG.EX ARPM02的ME与MB账龄标识同时命中时按两个周转类别各出一行
@@ -723,14 +724,31 @@ BEGIN
                ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类维度 */
             , SRC_DETAIL
   ),
+  /* 主分户映射：公司+收入客户编码（分户）→ 主户编码/名称，按期间取有效版本。 */
+  /* ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+  CUST_BRANCH_MAP AS (
+    SELECT TRIM(COD_AZIENDA) AS COD_AZIENDA
+         , NULLIF(LTRIM(TRIM(CUST_BRANCH_CODE), '0'), '') AS CUST_BRANCH_CODE
+         , MAX(TRIM(CUST_HEAD_CODE)) AS CUST_HEAD_CODE
+         , MAX(TRIM(CUST_HEAD_NAME)) AS CUST_HEAD_NAME
+      FROM AW_RUL_ARPCUS_000001
+    WHERE VALID_FR <= V_YEARMONTH
+      AND NVL(VALID_TO, '999999') >= V_YEARMONTH
+    GROUP BY TRIM(COD_AZIENDA)
+            , NULLIF(LTRIM(TRIM(CUST_BRANCH_CODE), '0'), '')
+  ),
   /* 收入明细基础行：补齐渠道分类层级、客商国家与公司架构范围，供四字段映射使用。 */
   REVENUE_SRC AS (
     SELECT T.COD_SCENARIO
         , T.COD_PERIODO
         , T.COD_AZIENDA
         , 'S600100' AS COD_CONTO
-        , T.CUST_CODE
-        , T.CUST_NAME
+        /* 收入客商统一取主分户映射后的主户，映射不到回退收入原值；后续客商匹配均按该编码进行。
+           ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+        , NVL(CM.CUST_HEAD_CODE, T.CUST_CODE) AS CUST_CODE
+        , NVL(CM.CUST_HEAD_NAME, T.CUST_NAME) AS CUST_NAME
+        , NVL(CM.CUST_HEAD_CODE, T.CUST_CODE) AS CUST_HEAD_CODE
+        , NVL(CM.CUST_HEAD_NAME, T.CUST_NAME) AS CUST_HEAD_NAME
         , T.SRC_SYSTEM
         , T.COD_AZI_CTP
         , T.D_CHANNEL
@@ -755,6 +773,10 @@ BEGIN
         , MC.COUNTRY_CODE AS COUNTRY_CODE
         , CS.COMPANY_SCOPE
       FROM AW_MR9_REVM01_000001 T
+      /* 按公司+收入客户编码（分户）匹配主分户映射，后续客商匹配统一使用映射后的主户编码。 */
+      LEFT JOIN CUST_BRANCH_MAP CM
+        ON CM.COD_AZIENDA = TRIM(T.COD_AZIENDA)
+       AND CM.CUST_BRANCH_CODE = NULLIF(LTRIM(TRIM(T.CUST_CODE), '0'), '')
       LEFT JOIN CHANNEL_LEVEL_DIM CL
         ON CL.CHANNEL_L3_CODE = TRIM(T.D_CHANNEL)
       /* ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
@@ -763,7 +785,7 @@ BEGIN
         ON CSC.COMPANY_CODE = TRIM(T.COD_AZIENDA)
       LEFT JOIN SAP_CUST_MDG_MAP SM
         ON SM.SAP_CLIENT = CSC.SAP_CLIENT
-       AND SM.CUST_KEY = NULLIF(LTRIM(TRIM(T.CUST_CODE), '0'), '')
+       AND SM.CUST_KEY = NULLIF(LTRIM(TRIM(NVL(CM.CUST_HEAD_CODE, T.CUST_CODE)), '0'), '')
       LEFT JOIN MDG_CUST_COUNTRY MC
         ON MC.CUST_KEY = SM.CUST_MDG_KEY
       LEFT JOIN COMPANY10_SCOPE CS
@@ -828,10 +850,12 @@ BEGIN
               WHEN CUR_NODE.HQ = CTP_NODE.HQ THEN 'GIN-集团内'
               ELSE 'GEX-集团外'
           END AS GRP_SCOPE
-        , TRIM(R.CUST_CODE) AS CUST_CODE
-        , R.CUST_NAME
-        , NULL AS CUST_HEAD_CODE
-        , NULL AS CUST_HEAD_NAME
+        /* 客商输出取主分户映射后的主户编码/名称。
+           ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+        , R.CUST_HEAD_CODE AS CUST_CODE
+        , R.CUST_HEAD_NAME AS CUST_NAME
+        , R.CUST_HEAD_CODE
+        , R.CUST_HEAD_NAME
         , NULL AS CUST_BRANCH_CODE
         , NULL AS CUST_BRANCH_NAME
         , R.COD_AZI_CTP
