@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261124 18:04
- * 本次修改：ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
- * 上次修改：ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
+ * 最后更新时间：20261124 19:06
+ * 本次修改：ALTER BY 20261124 19:06 SHIQINGFENG.EX 性质匹配由ON内多分支OR改为按批次分段等值关联，消除嵌套循环超时。
+ * 上次修改：ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
  *
  * 脚本名称  ：sum使用客户大表.sql
  * 功能描述  ：汇总装载往来账龄数据。
@@ -16,6 +16,8 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261124 19:06 SHIQINGFENG.EX 性质匹配由ON内多分支OR改为按批次分段等值关联，消除嵌套循环超时。
+ *   ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
  *   ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
  *   ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
  *   ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
@@ -852,30 +854,36 @@ policy_customer_dim AS (
             , d.com_3rd_name
 ),
 -- POLICY：读取目标月份有效的周转分析渠道规则，并按匹配键去重。
+-- ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
 policy_tov_rule_1 AS (
-    SELECT company_code
-         , LTRIM(NULLIF(TRIM(cust_code), ''), '0') AS cust_code
-         , MAX(tov_channel_code) AS tov_channel_code
-         , MAX(tov_channel_name) AS tov_channel_name
-      FROM dim.dim_rule_fi_mr_ar_tov_channel_mapping
-     WHERE CAST(batch_id AS INT) = 1
-       AND NVL(valid_fr, '202401') <= @dt_month
-       AND NVL(valid_to, '999999') >= @dt_month
-     GROUP BY company_code
-            , LTRIM(NULLIF(TRIM(cust_code), ''), '0')
+    SELECT b.cod_azienda AS company_code
+         , LTRIM(NULLIF(TRIM(a.cust_code), ''), '0') AS cust_code
+         , MAX(a.tov_channel_code) AS tov_channel_code
+         , MAX(a.tov_channel_name) AS tov_channel_name
+      FROM dim.dim_rule_fi_mr_ar_tov_channel_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(a.company_code)
+     WHERE CAST(a.batch_id AS INT) = 1
+       AND NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+     GROUP BY b.cod_azienda
+            , LTRIM(NULLIF(TRIM(a.cust_code), ''), '0')
 ),
 -- POLICY：周转分析渠道第二匹配方式按公司+三级公司分类去重。
+-- ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
 policy_tov_rule_2 AS (
-    SELECT company_code
-         , channel_l3_code
-         , MAX(tov_channel_code) AS tov_channel_code
-         , MAX(tov_channel_name) AS tov_channel_name
-      FROM dim.dim_rule_fi_mr_ar_tov_channel_mapping
-     WHERE CAST(batch_id AS INT) = 2
-       AND NVL(valid_fr, '202401') <= @dt_month
-       AND NVL(valid_to, '999999') >= @dt_month
-     GROUP BY company_code
-            , channel_l3_code
+    SELECT b.cod_azienda AS company_code
+         , a.channel_l3_code
+         , MAX(a.tov_channel_code) AS tov_channel_code
+         , MAX(a.tov_channel_name) AS tov_channel_name
+      FROM dim.dim_rule_fi_mr_ar_tov_channel_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(a.company_code)
+     WHERE CAST(a.batch_id AS INT) = 2
+       AND NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+     GROUP BY b.cod_azienda
+            , a.channel_l3_code
 ),
 -- POLICY：先按公司+客商、再按公司+三级分类匹配周转渠道；结果作为policy_tov_channel使用。
 policy_src_base AS (
@@ -1275,8 +1283,22 @@ ar_nature_rule AS (
             , acct_src_code
             , acct_type
 ),
--- 非DETAIL来源按DETAIL的batch 1→5规则做一次性匹配，并按 batch 优先级取最小命中。
+-- 非DETAIL来源的性质匹配事实；SAP六套系统性质已在明细段计算，此处排除。
+ar_nature_fact AS (
+    SELECT system_src
+         , ods_src
+         , company_code
+         , cust_code
+         , acct_src_code
+         , acct_type_code
+         , profitcenter_code
+      FROM standard_fact
+     WHERE system_src NOT IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810')
+),
+-- 按批次逐段等值关联性质规则，替代ON内多分支OR，避免退化为嵌套循环。
+-- ALTER BY 20261124 19:06 SHIQINGFENG.EX 性质匹配由ON内OR改为按批次分段等值关联，消除嵌套循环超时。
 ar_nature_candidate AS (
+    /* 信汇来源：公司+科目+客商 */
     SELECT f.system_src
          , f.ods_src
          , f.company_code
@@ -1288,52 +1310,157 @@ ar_nature_candidate AS (
          , r.nature_l1_name
          , r.nature_l2_name
          , r.nature_l3_name
-      FROM standard_fact f
-      LEFT JOIN ar_nature_rule r
-        ON (
-               /* ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇来源无SAP系统号，性质按batch 1/2/4优先级匹配，不比较系统号与科目类型。 */
-               (f.system_src = 'XH'
-                AND r.batch_id = 1
-                AND r.company_code = f.company_code
-                AND r.acct_src_code = f.acct_src_code
-                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
-            OR (f.system_src = 'XH'
-                AND r.batch_id = 2
-                AND r.company_code = f.company_code
-                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
-            OR (f.system_src = 'XH'
-                AND r.batch_id = 4
-                AND r.company_code = f.company_code
-                AND r.acct_src_code = f.acct_src_code)
-            OR (r.batch_id = 1
-                AND r.system_src = f.system_src
-                AND r.company_code = f.company_code
-                AND r.acct_src_code = f.acct_src_code
-                AND r.acct_type = f.acct_type_code
-                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
-            OR (r.batch_id = 2
-                AND r.system_src = f.system_src
-                AND r.company_code = f.company_code
-                AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), ''))
-            OR (r.batch_id = 3
-                AND r.system_src = f.system_src
-                AND r.company_code = f.company_code
-                AND r.acct_src_code = f.acct_src_code
-                AND r.acct_type = f.acct_type_code
-                AND r.profitcenter_code = NULLIF(LTRIM(TRIM(f.profitcenter_code), '0'), ''))
-            OR (r.batch_id = 4
-                AND r.system_src = f.system_src
-                AND r.company_code = f.company_code
-                AND r.acct_src_code = f.acct_src_code
-                AND r.acct_type = f.acct_type_code)
-            OR (r.batch_id = 5
-                AND r.system_src = f.system_src
-                AND r.acct_src_code = f.acct_src_code
-                AND r.acct_type = f.acct_type_code
-                AND NULLIF(LTRIM(TRIM(f.cust_code), '0'), '') LIKE r.cust_code)
-           )
-     WHERE f.system_src NOT IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810')
-       AND r.batch_id IS NOT NULL
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 1
+       AND r.company_code = f.company_code
+       AND r.acct_src_code = f.acct_src_code
+       AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), '')
+     WHERE f.system_src = 'XH'
+    UNION ALL
+    /* 信汇来源：公司+客商 */
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 2
+       AND r.company_code = f.company_code
+       AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), '')
+     WHERE f.system_src = 'XH'
+    UNION ALL
+    /* 信汇来源：公司+科目 */
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 4
+       AND r.company_code = f.company_code
+       AND r.acct_src_code = f.acct_src_code
+     WHERE f.system_src = 'XH'
+    UNION ALL
+    /* SAP来源批次1：系统+公司+科目+科目类型+客商 */
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 1
+       AND r.system_src = f.system_src
+       AND r.company_code = f.company_code
+       AND r.acct_src_code = f.acct_src_code
+       AND r.acct_type = f.acct_type_code
+       AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), '')
+     WHERE f.system_src <> 'XH'
+    UNION ALL
+    /* SAP来源批次2：系统+公司+客商 */
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 2
+       AND r.system_src = f.system_src
+       AND r.company_code = f.company_code
+       AND r.cust_code = NULLIF(LTRIM(TRIM(f.cust_code), '0'), '')
+     WHERE f.system_src <> 'XH'
+    UNION ALL
+    /* SAP来源批次3：系统+公司+科目+科目类型+利润中心 */
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 3
+       AND r.system_src = f.system_src
+       AND r.company_code = f.company_code
+       AND r.acct_src_code = f.acct_src_code
+       AND r.acct_type = f.acct_type_code
+       AND r.profitcenter_code = NULLIF(LTRIM(TRIM(f.profitcenter_code), '0'), '')
+     WHERE f.system_src <> 'XH'
+    UNION ALL
+    /* SAP来源批次4：系统+公司+科目+科目类型 */
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 4
+       AND r.system_src = f.system_src
+       AND r.company_code = f.company_code
+       AND r.acct_src_code = f.acct_src_code
+       AND r.acct_type = f.acct_type_code
+     WHERE f.system_src <> 'XH'
+    UNION ALL
+    /* SAP来源批次5：系统+科目+科目类型+客商通配 */
+    SELECT f.system_src
+         , f.ods_src
+         , f.company_code
+         , f.cust_code
+         , f.acct_src_code
+         , f.acct_type_code
+         , f.profitcenter_code
+         , r.batch_id
+         , r.nature_l1_name
+         , r.nature_l2_name
+         , r.nature_l3_name
+      FROM ar_nature_fact f
+      JOIN ar_nature_rule r
+        ON r.batch_id = 5
+       AND r.system_src = f.system_src
+       AND r.acct_src_code = f.acct_src_code
+       AND r.acct_type = f.acct_type_code
+       AND NULLIF(LTRIM(TRIM(f.cust_code), '0'), '') LIKE r.cust_code
+     WHERE f.system_src <> 'XH'
 ),
 -- 同一来源事实按 batch 优先级取最小命中，避免重复匹配与重复JOIN。
 ar_nature_pick AS (
