@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261124 18:50
-   * 本次修改：ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段，不再通过渠道BU关系表映射
-   * 上次修改：ALTER BY 20261124 18:25 SHIQINGFENG.EX 收入来源渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值。
+   * 最后更新时间：20261125 10:11
+   * 本次修改：ALTER BY 20261125 10:11 SHIQINGFENG.EX ARPM02的ME与MB账龄标识同时命中时按两个周转类别各出一行
+   * 上次修改：ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段，不再通过渠道BU关系表映射
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261125 10:11 SHIQINGFENG.EX ARPM02的ME与MB账龄标识同时命中时按两个周转类别各出一行
    *   ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段，不再通过渠道BU关系表映射
    *   ALTER BY 20261124 18:25 SHIQINGFENG.EX 收入来源渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值。
    *   ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
@@ -488,10 +489,9 @@ BEGIN
         , A.COD_PERIODO
         , A.COD_AZIENDA
         , '1122000000' AS COD_CONTO
-        , CASE
-              WHEN A.ME_AGE_FLAG IN ('AR', 'CA', 'A10') THEN 'ZAMOUNT'
-              WHEN A.MB_AGE_FLAG IN ('AR', 'CA', 'A10') THEN 'ZAMOUNT_L2'
-          END AS COD_CATEGORIA
+        /* ME、MB账龄标识同时命中时按两个周转类别各出一行，不再二选一。
+           ALTER BY 20261125 10:11 SHIQINGFENG.EX ME与MB账龄标识各自独立展开为周转类别 */
+        , C.COD_CATEGORIA
         , A.GRP_SCOPE
         , TRIM(A.CUST_CODE) AS CUST_CODE
         , A.CUST_NAME
@@ -532,6 +532,13 @@ BEGIN
         /* ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类，标识账龄表来源 */
         , 'ARPM02-账龄表' AS SRC_DETAIL
       FROM AW_MR9_ARPM02_000001 A
+      /* 周转类别维度展开：ME命中出ZAMOUNT、MB命中出ZAMOUNT_L2，两者都命中时各出一行。 */
+      /* ALTER BY 20261125 10:11 SHIQINGFENG.EX 新增周转类别维度展开 */
+      CROSS JOIN (
+        SELECT 'ZAMOUNT' AS COD_CATEGORIA FROM DUAL
+        UNION ALL
+        SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
+      ) C
       LEFT JOIN ARPM01_ADJ_SUM ADJ
         ON ADJ.COD_SCENARIO = A.COD_SCENARIO
       AND ADJ.COD_PERIODO = A.COD_PERIODO
@@ -561,6 +568,12 @@ BEGIN
       /* TOV_FLAG由AG过程统一打标，涵盖利润中心、账龄标识及BATCH_ID=1/2/3/4/6特殊取数剔除规则。
          ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为TOV_FLAG标识列 */
       AND A.TOV_FLAG = 'Y'
+      /* 每个周转类别只保留与其对应账龄标识命中的行。
+         ALTER BY 20261125 10:11 SHIQINGFENG.EX 周转类别与账龄标识按类别分别匹配 */
+      AND (
+            (C.COD_CATEGORIA = 'ZAMOUNT'    AND A.ME_AGE_FLAG IN ('AR', 'CA', 'A10'))
+            OR (C.COD_CATEGORIA = 'ZAMOUNT_L2' AND A.MB_AGE_FLAG IN ('AR', 'CA', 'A10'))
+          )
   ),
   /* IMOCC来源：不提前映射D_BG，集团范围与收入来源一致，按当前公司和对方公司的组织节点关系判断。 */
   IMOCC_SOURCE AS (
