@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261125 17:55
-   * 本次修改：ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
-   * 上次修改：ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
+   * 最后更新时间：20261125 18:28
+   * 本次修改：ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020
+   * 上次修改：ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020
    *   ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
    *   ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
    *   ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
@@ -647,6 +648,9 @@ BEGIN
        AND CTP_NODE.ELEM = I.CP_COMPANY_CODE
     WHERE I.DT_MONTH = V_YEARMONTH
       AND I.COMPANY_CODE IN ('1740', '2080')
+      /* 1740公司排除区组Z0020；AREA_GROUP_CODE为空的行照常保留。
+         ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020 */
+      AND (I.COMPANY_CODE <> '1740' OR NVL(I.AREA_GROUP_CODE, 'ZZZZ') <> 'Z0020')
       AND CASE
               WHEN CUR_NODE.SELF_NODE = CASE WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE) ELSE CTP_NODE.NODE END
                 AND CUR_NODE.HQ = CTP_NODE.HQ THEN 'SUB-子公司'
