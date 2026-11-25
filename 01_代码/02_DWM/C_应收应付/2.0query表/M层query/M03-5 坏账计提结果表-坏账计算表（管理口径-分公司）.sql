@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261109 18:00
- * 本次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
- * 上次修改：ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
+ * 最后更新时间：20261125 20:56
+ * 本次修改：ALTER BY 20261125 20:56 SHIQINGFENG.EX 坏账计提分公司口径限定公司范围：23%、26%、6701-6745、6801-6889（排除6847）
+ * 上次修改：ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *
  * 查询名称  ：坏账计提结果表-坏账计算表（管理口径-分公司）
  * 源表      ：AW_MR9_ARPM02_000001
  *
  * 修改历史：
+ *   ALTER BY 20261125 20:56 SHIQINGFENG.EX 坏账计提分公司口径限定公司范围：23%、26%、6701-6745、6801-6889（排除6847）
  *   ALTER BY 20261109 18:00 SHIQINGFENG.EX 金额全为0的记录不再输出。
  *   ALTER BY 20261102 18:56 SHIQINGFENG.EX 按 SQL 编码规范统一右对齐：FROM/JOIN 组关键字右端对齐（CROSS JOIN 顶格）、OR/ON 右对齐、WHERE 嵌套条件分层、CASE 表达式 WHEN/THEN/ELSE/END 分行，未修改业务逻辑。
  *   ALTER BY 20261102 17:35 SHIQINGFENG.EX 精简查询说明文件头：删除功能描述、宿主表、展示逻辑行，改为查询名称+源表版式，未修改业务主体。
@@ -83,6 +84,12 @@ SELECT COD_SCENARIO                                                       /* 场
  WHERE COD_SCENARIO = ${$Scenario.code}
    AND COD_PERIODO = ${$Period.code}
    AND COD_AZIENDA IN (${$Entity.code})
+   /* 分公司口径限定公司范围：23%、26%、6701-6745、6801-6889（排除6847）。
+      ALTER BY 20261125 20:56 SHIQINGFENG.EX 坏账计提分公司口径限定公司范围 */
+   AND (   COD_AZIENDA LIKE '23%'
+        OR COD_AZIENDA LIKE '26%'
+        OR COD_AZIENDA BETWEEN '6701' AND '6745'
+        OR (COD_AZIENDA BETWEEN '6801' AND '6889' AND COD_AZIENDA <> '6847'))
    AND MB_AGE_FLAG IN ('AR', 'OR', 'CA')
    AND COD_CATEGORIA IN ('ZAMOUNT')
  GROUP BY COD_SCENARIO
