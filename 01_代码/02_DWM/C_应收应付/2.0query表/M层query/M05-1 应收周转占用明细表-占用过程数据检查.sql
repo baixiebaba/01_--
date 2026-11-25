@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261110 19:49
- * 本次修改：ALTER BY 20261110 19:49 SHIQINGFENG.EX 优化查询性能：中文常量与组织节点判断预聚合、取数标记改左连接、维度描述下移到聚合后。
- * 上次修改：ALTER BY 20261110 18:45 SHIQINGFENG.EX 新增原始利润中心编码与名称，置于映射后周转利润中心之前。
+ * 最后更新时间：20261125 10:39
+ * 本次修改：ALTER BY 20261125 10:39 SHIQINGFENG.EX ARPM02的ME与MB账龄标识同时命中时按两个周转类别各出一行
+ * 上次修改：ALTER BY 20261110 19:49 SHIQINGFENG.EX 优化查询性能：中文常量与组织节点判断预聚合、取数标记改左连接、维度描述下移到聚合后。
  *
  * 查询名称  ：应收周转占用明细表-占用过程数据检查
  * 源表      ：AW_MR9_ARPM02_000001、AW_MR9_ARPM01_000001、TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001、DWD_FI_MR_AR_IMOCC_MI 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261125 10:39 SHIQINGFENG.EX ARPM02的ME与MB账龄标识同时命中时按两个周转类别各出一行
  *   ALTER BY 20261110 19:49 SHIQINGFENG.EX 优化查询性能：中文常量与组织节点判断预聚合、取数标记改左连接、维度描述下移到聚合后。
  *   ALTER BY 20261110 18:45 SHIQINGFENG.EX 新增原始利润中心编码与名称，置于映射后周转利润中心之前。
  *   ALTER BY 20261110 18:12 SHIQINGFENG.EX ARPM02利润中心改按AW_RUL_ARPPRC_000001映射：batch1公司+源利润中心 > batch2源利润中心 > 原值，复刻TOV。
@@ -108,12 +109,9 @@ TURNOVER_SOURCE AS (
          , A.COD_PERIODO
          , A.COD_AZIENDA
          , 'ARPM02' AS DATA_SOURCE
-         , CASE
-             WHEN A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
-               THEN 'ZAMOUNT'
-             WHEN A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
-               THEN 'ZAMOUNT_L2'
-           END AS COD_CATEGORIA
+        /* ME、MB账龄标识同时命中时按两个周转类别各出一行，不再二选一。
+           ALTER BY 20261125 10:39 SHIQINGFENG.EX ME与MB账龄标识各自独立展开为周转类别 */
+         , C.COD_CATEGORIA
          , 'ARPM02-账龄表' AS SRC_DETAIL
          , TRIM(A.CUST_CODE) AS CUST_CODE
          , A.CUST_NAME
@@ -153,6 +151,13 @@ TURNOVER_SOURCE AS (
          , NVL(ADJ.F7_GSUB_AMT, 0) AS F7_GSUB_AMT
          , NVL(ADJ.F8_ADJ_AMT, 0) AS F8_ADJ_AMT
       FROM AW_MR9_ARPM02_000001 A
+      /* 周转类别维度展开：ME命中出ZAMOUNT、MB命中出ZAMOUNT_L2，两者都命中时各出一行。 */
+      /* ALTER BY 20261125 10:39 SHIQINGFENG.EX 新增周转类别维度展开 */
+      CROSS JOIN (
+        SELECT 'ZAMOUNT' AS COD_CATEGORIA FROM DUAL
+        UNION ALL
+        SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
+      ) C
       LEFT JOIN ARPM01_ADJ_SUM ADJ
         ON ADJ.COD_SCENARIO = A.COD_SCENARIO
        AND ADJ.COD_PERIODO = A.COD_PERIODO
@@ -172,10 +177,11 @@ TURNOVER_SOURCE AS (
        AND A.GRP_SCOPE = (SELECT GRP_SCOPE_GEX FROM PARAM)
        AND A.COD_DEST2 IS NOT NULL
        AND A.COD_DEST2 <> 'ZZZZ'
-       /* 保留TOV要求的两类账龄标识范围，单条ARPM02记录只生成一个类别。 */
+       /* 每个周转类别只保留与其对应账龄标识命中的行，两者都命中时各出一行。
+          ALTER BY 20261125 10:39 SHIQINGFENG.EX 周转类别与账龄标识按类别分别匹配 */
        AND (
-             A.ME_AGE_FLAG IN ('AR', 'CA', 'A10')
-          OR A.MB_AGE_FLAG IN ('AR', 'CA', 'A10')
+             (C.COD_CATEGORIA = 'ZAMOUNT'    AND A.ME_AGE_FLAG IN ('AR', 'CA', 'A10'))
+          OR (C.COD_CATEGORIA = 'ZAMOUNT_L2' AND A.MB_AGE_FLAG IN ('AR', 'CA', 'A10'))
        )
 
      UNION ALL
