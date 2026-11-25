@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261125 18:28
-   * 本次修改：ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020
-   * 上次修改：ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
+   * 最后更新时间：20261125 20:52
+   * 本次修改：ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
+   * 上次修改：ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,8 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
+   *   ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
    *   ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020
    *   ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
    *   ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
@@ -728,18 +730,23 @@ BEGIN
                ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类维度 */
             , SRC_DETAIL
   ),
-  /* 主分户映射：公司+收入客户编码（分户）→ 主户编码/名称，按期间取有效版本。 */
+  /* 主分户映射：公司+收入客户编码（分户）→ 主户编码/名称，按期间取有效版本。
+     配置表公司允许%通配，用本次运行的会话公司清单展开成具体公司后再等值匹配。 */
   /* ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+  /* ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开 */
   CUST_BRANCH_MAP AS (
-    SELECT TRIM(COD_AZIENDA) AS COD_AZIENDA
-         , NULLIF(LTRIM(TRIM(CUST_BRANCH_CODE), '0'), '') AS CUST_BRANCH_CODE
-         , MAX(TRIM(CUST_HEAD_CODE)) AS CUST_HEAD_CODE
-         , MAX(TRIM(CUST_HEAD_NAME)) AS CUST_HEAD_NAME
-      FROM AW_RUL_ARPCUS_000001
-    WHERE VALID_FR <= V_YEARMONTH
-      AND NVL(VALID_TO, '999999') >= V_YEARMONTH
-    GROUP BY TRIM(COD_AZIENDA)
-            , NULLIF(LTRIM(TRIM(CUST_BRANCH_CODE), '0'), '')
+    SELECT TRIM(S.ELEM) AS COD_AZIENDA
+         , NULLIF(LTRIM(TRIM(A.CUST_BRANCH_CODE), '0'), '') AS CUST_BRANCH_CODE
+         , MAX(TRIM(A.CUST_HEAD_CODE)) AS CUST_HEAD_CODE
+         , MAX(TRIM(A.CUST_HEAD_NAME)) AS CUST_HEAD_NAME
+      FROM AW_RUL_ARPCUS_000001 A
+      JOIN SESSION_AZIENDA_LIST S
+        ON S.SESSION_ID = V_SESSION_ID
+       AND TRIM(S.ELEM) LIKE TRIM(A.COD_AZIENDA)
+    WHERE A.VALID_FR <= V_YEARMONTH
+      AND NVL(A.VALID_TO, '999999') >= V_YEARMONTH
+    GROUP BY TRIM(S.ELEM)
+            , NULLIF(LTRIM(TRIM(A.CUST_BRANCH_CODE), '0'), '')
   ),
   /* 收入明细基础行：补齐渠道分类层级、客商国家与公司架构范围，供四字段映射使用。 */
   REVENUE_SRC AS (
@@ -1375,6 +1382,13 @@ BEGIN
       , SESSION_USER AS USERUPD
     FROM MAPPED_FACT M
   WHERE M.GRP_SCOPE = 'GEX-集团外'
+    /* ZAMOUNT_L2只进指定公司：23%、26%、6701-6745、6801-6889（排除6847）。
+       ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数 */
+    AND (   M.COD_CATEGORIA <> 'ZAMOUNT_L2'
+         OR M.COD_AZIENDA LIKE '23%'
+         OR M.COD_AZIENDA LIKE '26%'
+         OR M.COD_AZIENDA BETWEEN '6701' AND '6745'
+         OR (M.COD_AZIENDA BETWEEN '6801' AND '6889' AND M.COD_AZIENDA <> '6847'))
     AND (NVL(AR_AMT, 0) <> 0
       OR NVL(REV_AMT, 0) <> 0
       OR NVL(F1_ODUE_AMT, 0) <> 0
