@@ -7,9 +7,9 @@
     /*******************************************************************************
     *                              存储过程说明
     *-----------------------------------------------------------------------------
-    * 最后更新时间：20261120 10:01
-    * 本次修改：ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
-    * 上次修改：ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
+    * 最后更新时间：20261125 16:32
+    * 本次修改：ALTER BY 20261125 16:32 SHIQINGFENG.EX 币种科目构成明细改取记账汇率原值，与1.0口径一致
+    * 上次修改：ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
     *
     * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -17,6 +17,7 @@
     * 目标表    ：AW_MR9_ARPM02_000001
     *
     * 修改历史：
+    *   ALTER BY 20261125 16:32 SHIQINGFENG.EX 币种科目构成明细改取记账汇率原值，与1.0口径一致
     *   ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
     *   ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
     *   ALTER BY 20261119 18:11 SHIQINGFENG.EX 手工行清零的对方行限定为本过程生成的抽取行
@@ -852,14 +853,13 @@
           , SUM(NVL(S.CALC_POSTING_RATE_BCY_AMT, 0)) AS POSTING_RATE_BCY_AMT
           /* 账龄调整副本金额已并入账龄行，不再单独输出币种明细段。 */
           /* ALTER BY 20261117 21:33 SHIQINGFENG.EX 币种明细排除账龄调整副本。 */
+          /* 构成金额恒取记账汇率原值，汇率折算只作用于主金额，与1.0的TESTO_5口径一致。 */
+          /* ALTER BY 20261125 16:32 SHIQINGFENG.EX 币种科目构成明细改取记账汇率原值，与1.0口径一致 */
           , LISTAGG(
                 CASE WHEN S.SRC_DETAIL = 'ZZT003_ADJ'
                      THEN NULL
                      ELSE NVL(S.ACCT_SRC_CODE, '') || ':'
-                          || TO_CHAR(NVL(CASE WHEN S.SRC_DETAIL LIKE 'ORG%'
-                                                  THEN ROUND(S.CALC_BCY_0_AMT,2)
-                                                  ELSE ROUND(S.BCY_0_AMT,2)
-                                              END, 0)) || '\'
+                          || TO_CHAR(NVL(ROUND(S.BCY_0_AMT,2), 0)) || '\'
                           || NVL(S.COD_VALUTA_ORIGINARIA, '') || ':'
                           || TO_CHAR(NVL(ROUND(S.QCY_0_AMT,2), 0))
                 END
