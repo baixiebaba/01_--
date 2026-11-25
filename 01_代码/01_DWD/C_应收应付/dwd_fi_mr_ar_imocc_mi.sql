@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261120 11:22
- * 本次修改：ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值。
- * 上次修改：ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
+ * 最后更新时间：20261124 18:52
+ * 本次修改：ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
+ * 上次修改：ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值。
  *
  * 脚本名称  ：dwd_fi_mr_ar_imocc_mi.sql
  * 功能描述  ：装载国际营销应收占用明细。
@@ -11,6 +11,7 @@
  * 目标表    ：test.dwd_fi_mr_ar_imocc_mi
  *
  * 修改历史：
+ *   ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
  *   ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值。
  *   ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
  *   ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围编码与名称改为按公司与国家映射表取值，国家取不到时用S810客户主数据兜底。
@@ -170,15 +171,18 @@ country_busrange_dim AS (
      GROUP BY country_code
 ),
 -- 按公司映射的业务范围，作为国家匹配不到时的兜底。
+-- ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
 company_busrange_dim AS (
-    SELECT company_code AS map_company_code
-         , MAX(bus_range_code) AS map_bus_range_code
-         , MAX(bus_range_name) AS map_bus_range_name
-      FROM dim.dim_rule_fi_mr_ar_busrange_mapping
-     WHERE batch_id = '3'
-       AND valid_fr <= @dt_month
-       AND COALESCE(valid_to, '999999') >= @dt_month
-     GROUP BY company_code
+    SELECT b.cod_azienda AS map_company_code
+         , MAX(a.bus_range_code) AS map_bus_range_code
+         , MAX(a.bus_range_name) AS map_bus_range_name
+      FROM dim.dim_rule_fi_mr_ar_busrange_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(a.company_code)
+     WHERE a.batch_id = '3'
+       AND a.valid_fr <= @dt_month
+       AND COALESCE(a.valid_to, '999999') >= @dt_month
+     GROUP BY b.cod_azienda
 ),
 -- 国家编码对应中文名称。
 country_name_dim AS (
