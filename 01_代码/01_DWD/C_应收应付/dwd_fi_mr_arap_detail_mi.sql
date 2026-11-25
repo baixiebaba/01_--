@@ -1,9 +1,9 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261124 18:04
- * 本次修改：ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
- * 上次修改：ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
+ * 最后更新时间：20261124 20:14
+ * 本次修改：ALTER BY 20261124 20:14 SHIQINGFENG.EX 负数账龄按绝对值分段，与1.0账龄分段口径对齐。
+ * 上次修改：ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
  *
  * 脚本名称  ：dwd_fi_mr_arap_detail_mi.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
@@ -18,6 +18,8 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
+ *   ALTER BY 20261124 20:14 SHIQINGFENG.EX 负数账龄按绝对值分段，与1.0账龄分段口径对齐。
+ *   ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
  *   ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
  *   ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
  *   ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5改为等值连接，消除LIKE全表放大导致的超时。
@@ -1799,21 +1801,24 @@ ar_nature_pick AS (
        AND p.batch_id = c.batch_id
      GROUP BY c.fact_key
 ),
--- 按有效期聚合业务范围映射规则。
+-- 按有效期聚合业务范围映射规则；公司编码含通配符，先按公司主数据展开为实际公司。
+-- ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
 ar_busrange_rule AS (
-    SELECT CAST(batch_id AS INT) AS batch_id
-         , company_code
-         , channel_l2_code
-         , nature_l3_name
-         , MAX(bus_range_code) AS bus_range_code
-         , MAX(bus_range_name) AS bus_range_name
-      FROM dim.dim_rule_fi_mr_ar_busrange_mapping
-     WHERE NVL(valid_fr, '202401') <= @dt_month
-       AND NVL(valid_to, '999999') >= @dt_month
-     GROUP BY CAST(batch_id AS INT)
-            , company_code
-            , channel_l2_code
-            , nature_l3_name
+    SELECT CAST(a.batch_id AS INT) AS batch_id
+         , b.cod_azienda AS company_code
+         , a.channel_l2_code
+         , a.nature_l3_name
+         , MAX(a.bus_range_code) AS bus_range_code
+         , MAX(a.bus_range_name) AS bus_range_name
+      FROM dim.dim_rule_fi_mr_ar_busrange_mapping a
+      LEFT JOIN ods.odsfima_azienda b
+        ON b.cod_azienda LIKE TRIM(a.company_code)
+     WHERE NVL(a.valid_fr, '202401') <= @dt_month
+       AND NVL(a.valid_to, '999999') >= @dt_month
+     GROUP BY CAST(a.batch_id AS INT)
+            , b.cod_azienda
+            , a.channel_l2_code
+            , a.nature_l3_name
 ),
 -- 非商显、非日立公司按1（公司+二级分类）→2（公司+三级性质）→3（公司）映射。
 ar_busrange_candidate AS (
@@ -2170,9 +2175,11 @@ SELECT @dt_month
              , COALESCE(a.acct_cert_item, '')
            )
        )
+  -- 负数账龄（到期日在基准日之后）按绝对值落段，与1.0的账龄分段口径一致，避免兜底进5年以上段。
+  -- ALTER BY 20261124 20:14 SHIQINGFENG.EX 负数账龄按绝对值分段，与1.0账龄分段口径对齐。
   LEFT JOIN aging_seg_cfg seg
-    ON a.aging_days >= seg.aging_seg_fr
-   AND a.aging_days <= seg.aging_seg_to
+    ON ABS(a.aging_days) >= seg.aging_seg_fr
+   AND ABS(a.aging_days) <= seg.aging_seg_to
       LEFT JOIN customer_supplier_dim c
         ON c.cust_sap_code = a.cust_head_code
        AND c.cust_sap_client = a.system_src
