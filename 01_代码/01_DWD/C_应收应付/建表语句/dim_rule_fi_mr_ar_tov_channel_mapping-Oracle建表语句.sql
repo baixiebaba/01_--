@@ -13,7 +13,11 @@
  *   7. 源表 TOV_CHANNEL_NAME 的注释为 "周转分析周转分析渠道名称渠道名称"(原文重复),
  *      此处按 "周转分析渠道名称" 落库, 如需与源表逐字一致请改回
  *   7. 约束名/索引名控制在 30 字节以内, 兼容 Oracle 12.1 及以下版本的标识符长度限制
- */
+  * 最后更新：20261126 SHIQINGFENG.EX 按实际库 all_tab_columns 全量复核对齐
+ *
+ * 变更记录：
+ *   ALTER BY 20261126 17:36 SHIQINGFENG.EX 列/顺序/类型/NOT NULL/COMMENT 与线上一致，全量复核对齐。
+*/
 
 CREATE TABLE DIM_RULE_FI_MR_AR_TOV_CHANNEL_MAPPING (
       RULEINNERID           NUMBER(19)      NOT NULL

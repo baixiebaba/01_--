@@ -1,9 +1,10 @@
 -- 往来账龄汇总表（Oracle）
 -- 目标表：TGK_FIMA_HISENSE.DWD_FI_MR_ARAP_SUM_MI
 -- 表类型：汇总事实表；数据分层：DWD（Doris → Oracle 镜像，无审计列）
--- 最后更新：20261102 SHIQINGFENG.EX 字段与顺序按实际库 all_tab_columns 对齐
+-- 最后更新：20261126 SHIQINGFENG.EX 按实际库 all_tab_columns 全量复核对齐
 --
 -- 变更记录：
+--   ALTER BY 20261126 17:36 SHIQINGFENG.EX 列/顺序/类型/COMMENT 与线上92列一致，全量复核对齐。
 --   20261102  补 TOV_CHANNEL_NAME、CHANNEL_BU_NAME、CC_CUST_GROUP_NAME（column_id 90/91/92）。
 --             与 Doris 92 列完全对齐；对应 DDL 见 03_产出/2026-11-02_镜像表字段核对/01_补列DDL.sql
 --   20261102  与实际库对齐：补 MATERIAL_GROUP_CODE、MATERIAL_GROUP_NAME、CHANNEL_BU_CODE

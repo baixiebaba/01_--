@@ -1,9 +1,11 @@
 -- 国际营销应收占用明细表（Apache Doris）
 -- 目标表：test.dwd_fi_mr_ar_imocc_mi
 -- 表类型：事实表；数据分层：DWD
--- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+-- 最后更新：20261126 SHIQINGFENG.EX 按实际库 SHOW CREATE TABLE 全量对齐
 --
 -- 变更记录：
+--   20261126  按实际库 SHOW CREATE TABLE 全量对齐：补 marketing_dept_code / marketing_dept_name 2 列；副本数改为 3。
+--   线上现有分区：p2026076(202607), p2026086(202608)（AUTO PARTITION 运行时自动创建，建表语句保留空 () 不固化）。
 --   20261102  与实际库对齐：删除重复且实际不存在的 src_profitcenter_code / src_profitcenter_name，
 --             profitcenter_code / profitcenter_name 只保留实际位置；load_dt 由 DATE 改为 DATETIME；
 --             目标库由 dwd 改为 test（当前实际只存在于 test）。
@@ -46,6 +48,8 @@ CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_ar_imocc_mi (
     , bus_range_name VARCHAR(200) COMMENT '业务范围名称'
     , profitcenter_code VARCHAR(30) COMMENT '利润中心编码'
     , profitcenter_name VARCHAR(200) COMMENT '利润中心名称'
+    , marketing_dept_code VARCHAR(30) COMMENT '业务管理单元编码'
+    , marketing_dept_name VARCHAR(200) COMMENT '业务管理单元名称'
     , bcy_code VARCHAR(5) COMMENT '本位币币种'
     , qcy_code VARCHAR(5) COMMENT '交易币币种'
     , imocc_cny_amt DECIMALV3(27, 9) COMMENT '国际营销应收占用金额-人民币'
@@ -60,9 +64,9 @@ DUPLICATE KEY(
 )
 COMMENT '国际营销应收占用明细表'
 AUTO PARTITION BY LIST (dt_month) ()
-DISTRIBUTED BY HASH(`dt_month`) BUCKETS 5
+DISTRIBUTED BY HASH(dt_month) BUCKETS 5
 PROPERTIES (
-    "replication_allocation" = "tag.location.default: 1",
+    "replication_allocation" = "tag.location.default: 3",
     "min_load_replica_num" = "-1",
     "is_being_synced" = "false",
     "storage_medium" = "hdd",

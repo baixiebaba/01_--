@@ -11,7 +11,11 @@
  *   5. 分桶/副本/存储等 Doris 属性在 Oracle 无对应, 已移除
  *   6. Oracle 不支持 CREATE TABLE 内联 COMMENT, 注释统一用 COMMENT ON COLUMN 单独下发
  *   7. 约束名/索引名控制在 30 字节以内, 兼容 Oracle 12.1 及以下版本的标识符长度限制
- */
+  * 最后更新：20261126 SHIQINGFENG.EX 按实际库 all_tab_columns 全量复核对齐
+ *
+ * 变更记录：
+ *   ALTER BY 20261126 17:36 SHIQINGFENG.EX 列/顺序/类型/NOT NULL/COMMENT 与线上一致，全量复核对齐。
+*/
 
 
 CREATE TABLE DIM_RULE_FI_MR_AR_BUSDEPT_MAPPING (

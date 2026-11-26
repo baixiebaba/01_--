@@ -13,7 +13,11 @@
  *   7. 约束名/索引名控制在 30 字节以内, 兼容 Oracle 12.1 及以下版本的标识符长度限制
  *   8. ALTER BY 20261029 18:10 SHIQINGFENG.EX 补 material_group_code / material_group_name 两列
  *      (Doris 侧已是 18 列, 原 Oracle 镜像漏建这两列, 导致 batch_id=6 按物料组映射时报 ORA-00904)
- */
+  * 最后更新：20261126 SHIQINGFENG.EX 按实际库 all_tab_columns 全量复核对齐
+ *
+ * 变更记录：
+ *   ALTER BY 20261126 17:36 SHIQINGFENG.EX UNIQUE_KEY 列顺序按实际库调整至 MATERIAL_GROUP_CODE 之前，与 Doris 源表及镜像库一致。
+*/
 
 CREATE TABLE DIM_RULE_FI_MR_AR_PROFIT_MAPPING (
       RULEINNERID               NUMBER(19)      NOT NULL
@@ -31,9 +35,10 @@ CREATE TABLE DIM_RULE_FI_MR_AR_PROFIT_MAPPING (
     , SRC_PROFITCENTER_NAME     VARCHAR2(255)
     , PROFITCENTER_CODE         VARCHAR2(255)
     , PROFITCENTER_NAME         VARCHAR2(255)
+    /* ALTER BY 20261126 17:36 SHIQINGFENG.EX UNIQUE_KEY按实际库列顺序前移至物料组两列之前 */
+    , UNIQUE_KEY                VARCHAR2(1024)  NOT NULL
     , MATERIAL_GROUP_CODE       VARCHAR2(255)
     , MATERIAL_GROUP_NAME       VARCHAR2(255)
-    , UNIQUE_KEY                VARCHAR2(1024)  NOT NULL
     , CONSTRAINT PK_DIM_RULE_AR_PROFIT_MAP PRIMARY KEY (RULEINNERID)
 );
 

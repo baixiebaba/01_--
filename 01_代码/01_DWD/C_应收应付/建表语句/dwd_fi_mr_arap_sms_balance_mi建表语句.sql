@@ -1,9 +1,11 @@
 -- sms返利余额表-月报（Apache Doris）
 -- 目标表：test.dwd_fi_mr_arap_sms_balance_mi
 -- 表类型：事实表；数据分层：DWD
--- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+-- 最后更新：20261126 SHIQINGFENG.EX 按实际库 SHOW CREATE TABLE 全量对齐
 --
 -- 变更记录：
+--   20261126  按实际库 SHOW CREATE TABLE 全量对齐：副本数改为 3；列、类型、KEY、分布、PROPERTIES 全量复核对齐。
+--   线上现有分区：p2026086(202608), p2026096(202609), p2026106(202610), p2028066(202806)（AUTO PARTITION 运行时自动创建，建表语句保留空 () 不固化）。
 --   20261102  与实际库对齐：补 update_dt DATETIME（实际存在、原文件缺）；分布列由 company_code 改为 dt_month。
 --
 -- 说明：DUPLICATE KEY 与实际库一致，仅 dt_month 单列。
@@ -30,9 +32,9 @@ DUPLICATE KEY(
 )
 COMMENT 'sms返利余额表-月报'
 AUTO PARTITION BY LIST (dt_month) ()
-DISTRIBUTED BY HASH(`dt_month`) BUCKETS 5
+DISTRIBUTED BY HASH(dt_month) BUCKETS 5
 PROPERTIES (
-    "replication_allocation" = "tag.location.default: 1",
+    "replication_allocation" = "tag.location.default: 3",
     "min_load_replica_num" = "-1",
     "is_being_synced" = "false",
     "storage_medium" = "hdd",

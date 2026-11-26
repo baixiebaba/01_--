@@ -1,9 +1,10 @@
 -- 客户账期明细表（Apache Doris）
 -- 目标表：test.dwd_fi_mr_ar_cterm_md
 -- 表类型：明细表；数据分层：DWD
--- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+-- 最后更新：20261126 SHIQINGFENG.EX 按实际库 SHOW CREATE TABLE 全量对齐
 --
 -- 变更记录：
+--   20261126  按实际库 SHOW CREATE TABLE 全量对齐：列、类型、KEY、分布、PROPERTIES 与线上一致，全量复核对齐。
 --   20261102  与实际库对齐：load_dt 由 DATE 改为 DATETIME（实际为 datetime）。
 
 CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_ar_cterm_md (
@@ -20,7 +21,7 @@ DUPLICATE KEY(
     , cust_code
 )
 COMMENT '客户账期明细表'
-DISTRIBUTED BY HASH(`company_code`) BUCKETS 5
+DISTRIBUTED BY HASH(company_code) BUCKETS 5
 PROPERTIES (
     "replication_allocation" = "tag.location.default: 1",
     "min_load_replica_num" = "-1",

@@ -15,7 +15,11 @@
  *   6. Oracle 不支持 CREATE TABLE 内联 COMMENT, 注释统一用 COMMENT ON COLUMN 单独下发
  *   7. 表名 42 个字符, 超过 30 字节, 仅适用于 Oracle 12.2+ (标识符上限 128);
  *      若目标库为 12.1 及以下, 需另行缩短表名并同步修改装载脚本
- */
+  * 最后更新：20261126 SHIQINGFENG.EX 按实际库 all_tab_columns 全量复核对齐
+ *
+ * 变更记录：
+ *   ALTER BY 20261126 17:36 SHIQINGFENG.EX 列/顺序/类型/NOT NULL/COMMENT 与线上一致，全量复核对齐。
+*/
 
 
 /* ========== 步骤 0: 删除此前误建的缩写名表 (确认无误后再执行) ==========

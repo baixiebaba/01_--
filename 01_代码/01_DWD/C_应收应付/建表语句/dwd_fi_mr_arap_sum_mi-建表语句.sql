@@ -1,9 +1,11 @@
 -- 往来账龄汇总表（Apache Doris）
 -- 目标表：test.dwd_fi_mr_arap_sum_mi
 -- 表类型：汇总事实表；数据分层：DWD
--- 最后更新：20261102 SHIQINGFENG.EX 字段与类型按实际库 SHOW CREATE TABLE 对齐
+-- 最后更新：20261126 SHIQINGFENG.EX 按实际库 SHOW CREATE TABLE 全量对齐
 --
 -- 变更记录：
+--   20261126  按实际库 SHOW CREATE TABLE 全量对齐：副本数改为 3；列、类型、KEY、分布、PROPERTIES 全量复核对齐。
+--   线上现有分区：p2026056(202605), p2026086(202608), p2026096(202609)（AUTO PARTITION 运行时自动创建，建表语句保留空 () 不固化）。
 --   20261102  与实际库对齐：
 --             ① 补 6 列：tov_channel_name、channel_bu_code、channel_bu_name、
 --                cc_cust_group_name、material_group_code、material_group_name；
@@ -114,9 +116,9 @@ DUPLICATE KEY(
 )
 COMMENT '往来账龄汇总表'
 AUTO PARTITION BY LIST (dt_month) ()
-DISTRIBUTED BY HASH(`dt_month`) BUCKETS 5
+DISTRIBUTED BY HASH(dt_month) BUCKETS 5
 PROPERTIES (
-    "replication_allocation" = "tag.location.default: 1",
+    "replication_allocation" = "tag.location.default: 3",
     "min_load_replica_num" = "-1",
     "is_being_synced" = "false",
     "storage_medium" = "hdd",

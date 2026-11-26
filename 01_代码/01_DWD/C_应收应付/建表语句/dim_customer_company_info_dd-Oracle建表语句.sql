@@ -6,7 +6,11 @@
  *   2) 分桶/副本/存储等 Doris 属性在 Oracle 无对应, 已移除
  *   3) varchar(n) → VARCHAR2(n); datetime → DATE
  *   4) Oracle 不支持 CREATE TABLE 内联 COMMENT, 注释统一用 COMMENT ON COLUMN 单独下发
- */
+  * 最后更新：20261126 SHIQINGFENG.EX 按实际库 all_tab_columns 全量复核对齐
+ *
+ * 变更记录：
+ *   ALTER BY 20261126 17:36 SHIQINGFENG.EX 列/顺序/类型/NOT NULL/COMMENT 与线上一致，全量复核对齐。
+*/
 
 CREATE TABLE DIM_CUSTOMER_COMPANY_INFO_DD (
       CUST_CODE             VARCHAR2(30)
