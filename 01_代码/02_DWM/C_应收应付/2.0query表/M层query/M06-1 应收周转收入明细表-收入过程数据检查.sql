@@ -1,14 +1,15 @@
 /*******************************************************************************
  *                                  查询说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261110 19:40
- * 本次修改：ALTER BY 20261110 19:40 SHIQINGFENG.EX 输出新增数据分类字段SRC_DETAIL，标识收入数据来源。
- * 上次修改：ALTER BY 20261110 19:35 SHIQINGFENG.EX 账套事业部改按公司预聚合连接，修复多事业部公司扇出导致未映射利润中心收入重复计算，并下移维度名称函数、移除逐行解密调用以提升查询性能。
+ * 最后更新时间：20261126 19:12
+ * 本次修改：ALTER BY 20261126 19:12 SHIQINGFENG.EX 收入过程数据检查取消客商非空限制，与TOV过程口径一致
+ * 上次修改：ALTER BY 20261110 19:40 SHIQINGFENG.EX 输出新增数据分类字段SRC_DETAIL，标识收入数据来源。
  *
  * 查询名称  ：应收周转收入明细表-收入过程数据检查
  * 源表      ：AW_MR9_REVM01_000001、TGK_FIMA_HISENSE.AW_RUL_ARPPRC_000001、TGK_FIMA_HISENSE.DIM_RULE_FI_MR_AR_PROFIT_MAPPING、TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 等，详见正文。
  *
  * 修改历史：
+ *   ALTER BY 20261126 19:12 SHIQINGFENG.EX 收入过程数据检查取消客商非空限制，与TOV过程口径一致
  *   ALTER BY 20261110 19:40 SHIQINGFENG.EX 输出新增数据分类字段SRC_DETAIL，标识收入数据来源。
  *   ALTER BY 20261110 19:35 SHIQINGFENG.EX 账套事业部改按公司预聚合连接，修复多事业部公司扇出导致未映射利润中心收入重复计算，并下移维度名称函数、移除逐行解密调用以提升查询性能。
  *   ALTER BY 20261110 18:14 SHIQINGFENG.EX 收入利润中心映射改按AW_RUL_ARPPRC_000001：ARPPRC公司级 > ARPPRC利润中心级 > DIM_RULE物料组(batch6) > 原值，复刻TOV映射链并补齐缺失的batch6层。
@@ -237,7 +238,8 @@ REVENUE_KEY_AGG AS (
          , R.INCOME_PC_MAP_STATUS
          , SUM(R.REV_AMT) AS REV_AMT
       FROM REVENUE_CALC R
-     WHERE R.CUST_CODE IS NOT NULL
+     /* 与TOV过程同步：收入不再限制客商非空。
+        ALTER BY 20261126 19:12 SHIQINGFENG.EX 收入过程数据检查取消客商非空限制，与过程口径一致 */
      GROUP BY R.COD_SCENARIO
             , R.COD_PERIODO
             , R.COD_AZIENDA

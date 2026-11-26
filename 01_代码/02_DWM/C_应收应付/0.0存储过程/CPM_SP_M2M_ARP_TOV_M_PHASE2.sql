@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261126 10:06
-   * 本次修改：ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载
-   * 上次修改：ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
+   * 最后更新时间：20261126 19:02
+   * 本次修改：ALTER BY 20261126 19:02 SHIQINGFENG.EX 收入取数取消客商非空限制，客商为空的收入按未匹配收入落表
+   * 上次修改：ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261126 19:02 SHIQINGFENG.EX 收入取数取消客商非空限制，客商为空的收入按未匹配收入落表
    *   ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载
    *   ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
    *   ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
@@ -962,8 +963,9 @@ BEGIN
         UNION ALL
         SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
       ) C
-    WHERE R.CUST_CODE IS NOT NULL
-      AND NVL(R.REV_AMT, 0) <> 0
+    /* 收入不再限制客商非空，客商为空的收入按未匹配收入落表。
+       ALTER BY 20261126 19:02 SHIQINGFENG.EX 收入取数取消客商非空限制 */
+    WHERE NVL(R.REV_AMT, 0) <> 0
   ),
   /* 周转预映射：收入匹配前先完成利润中心与账套事业部映射。 */
   TURNOVER_MAPPED AS (
