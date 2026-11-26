@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261125 18:32
-   * 本次修改：ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
-   * 上次修改：ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
+   * 最后更新时间：20261126 18:42
+   * 本次修改：ALTER BY 20261126 18:42 SHIQINGFENG.EX 底稿调整行按科目反写账龄标识AR/OR/AS/AP/OP/AC/CA/CL/RF/A10，修复调整行不计提坏账
+   * 上次修改：ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
    *
    * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2
    * 功能描述  ：DWD->DWM往来账龄数据抽取
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM01_000001
    *
    * 修改历史：
+   *   ALTER BY 20261126 18:42 SHIQINGFENG.EX 底稿调整行按科目反写账龄标识AR/OR/AS/AP/OP/AC/CA/CL/RF/A10，修复调整行不计提坏账
    *   ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
    *   ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
    *   ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
@@ -1403,9 +1404,44 @@ BEGIN
        , NULL AS ACCT_SRC_CODE
        , NULL AS ACCT_REC_CODE
        , NULL AS ACCT_MAP_CODE
-       , NULL AS LE_AGE_FLAG
-       , NULL AS ME_AGE_FLAG
-       , NULL AS MB_AGE_FLAG
+       /* 底稿调整行按科目反写账龄标识，供账龄分配与坏账计提使用。
+          ALTER BY 20261126 18:42 SHIQINGFENG.EX 底稿调整行按科目反写账龄标识 */
+       , CASE TRIM(A.COD_CONTO)
+           WHEN '1122000000' THEN 'AR'
+           WHEN '122101F'   THEN 'OR'
+           WHEN '1123000000' THEN 'AS'
+           WHEN '2202000000' THEN 'AP'
+           WHEN '224199F'   THEN 'OP'
+           WHEN '2203000000' THEN 'AC'
+           WHEN '1460000000' THEN 'CA'
+           WHEN '2204000000' THEN 'CL'
+           WHEN '1124001000' THEN 'RF'
+           WHEN '1531000000' THEN 'A10'
+         END AS LE_AGE_FLAG
+       , CASE TRIM(A.COD_CONTO)
+           WHEN '1122000000' THEN 'AR'
+           WHEN '122101F'   THEN 'OR'
+           WHEN '1123000000' THEN 'AS'
+           WHEN '2202000000' THEN 'AP'
+           WHEN '224199F'   THEN 'OP'
+           WHEN '2203000000' THEN 'AC'
+           WHEN '1460000000' THEN 'CA'
+           WHEN '2204000000' THEN 'CL'
+           WHEN '1124001000' THEN 'RF'
+           WHEN '1531000000' THEN 'A10'
+         END AS ME_AGE_FLAG
+       , CASE TRIM(A.COD_CONTO)
+           WHEN '1122000000' THEN 'AR'
+           WHEN '122101F'   THEN 'OR'
+           WHEN '1123000000' THEN 'AS'
+           WHEN '2202000000' THEN 'AP'
+           WHEN '224199F'   THEN 'OP'
+           WHEN '2203000000' THEN 'AC'
+           WHEN '1460000000' THEN 'CA'
+           WHEN '2204000000' THEN 'CL'
+           WHEN '1124001000' THEN 'RF'
+           WHEN '1531000000' THEN 'A10'
+         END AS MB_AGE_FLAG
        , A.GRP_SCOPE
        , A.D_CHANNEL
        , A.D_CHANNEL_BU

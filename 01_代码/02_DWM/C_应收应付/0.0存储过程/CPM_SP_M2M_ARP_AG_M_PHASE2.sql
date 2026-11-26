@@ -9,7 +9,6 @@
     *-----------------------------------------------------------------------------
     * 最后更新时间：20261125 16:32
     * 本次修改：ALTER BY 20261125 16:32 SHIQINGFENG.EX 币种科目构成明细改取记账汇率原值，与1.0口径一致
-    * 上次修改：ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
     *
     * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
@@ -849,8 +848,8 @@
           , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_14_AMT ELSE 0 END) AS ORG_QCY_14_AMT
           , SUM(CASE WHEN (S.SRC_DETAIL LIKE 'ORG%' OR S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.QCY_15_AMT ELSE 0 END) AS ORG_QCY_15_AMT
           /* 补充金额在CURRENT_AGG中统一关联SUPPLEMENT_AGG，不在明细层重复汇总。 */
-          , SUM(NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0)) AS CLOSING_RATE_BCY_AMT
-          , SUM(NVL(S.CALC_POSTING_RATE_BCY_AMT, 0)) AS POSTING_RATE_BCY_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.BCY_0_AMT ELSE NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0) END) AS CLOSING_RATE_BCY_AMT
+          , SUM(CASE WHEN (S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.BCY_0_AMT ELSE NVL(S.CALC_POSTING_RATE_BCY_AMT, 0) END) AS POSTING_RATE_BCY_AMT
           /* 账龄调整副本金额已并入账龄行，不再单独输出币种明细段。 */
           /* ALTER BY 20261117 21:33 SHIQINGFENG.EX 币种明细排除账龄调整副本。 */
           /* 构成金额恒取记账汇率原值，汇率折算只作用于主金额，与1.0的TESTO_5口径一致。 */
