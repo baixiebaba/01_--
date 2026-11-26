@@ -1,5 +1,5 @@
 -- sms返利余额表-月报（Apache Doris）
--- 目标表：test.dwd_fi_mr_arap_sms_balance_mi
+-- 目标表：dwd.dwd_fi_mr_arap_sms_balance_mi
 -- 表类型：事实表；数据分层：DWD
 -- 最后更新：20261126 SHIQINGFENG.EX 按实际库 SHOW CREATE TABLE 全量对齐
 --
@@ -10,7 +10,7 @@
 --
 -- 说明：DUPLICATE KEY 与实际库一致，仅 dt_month 单列。
 
-CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sms_balance_mi (
+CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_arap_sms_balance_mi (
       dt_month VARCHAR(6) COMMENT '年月YYYYMM'
     , company_code VARCHAR(8) COMMENT '组织'
     , orgname VARCHAR(20) COMMENT '分公司'

@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
+CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M(
     P_SCENARIO   IN VARCHAR2
   , P_PERIODO    IN VARCHAR2
   , P_BG         IN VARCHAR2
@@ -7,51 +7,17 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261126 19:02
-   * 本次修改：ALTER BY 20261126 19:02 SHIQINGFENG.EX 收入取数取消客商非空限制，客商为空的收入按未匹配收入落表
-   * 上次修改：ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载
+   * 最后更新时间：20261126 19:30
+   * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+   * 上次修改：
    *
-   * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
+   * 过程名称  ：CPM_SP_M2M_ARP_TOV_M
    * 功能描述  ：装载应收周转计算汇总表
    * 源表      ：AW_MR9_ARPM02_000001、DWD_FI_MR_AR_IMOCC_MI、AW_MR9_REVM01_000001、AW_MR8_CPRS01_000001、DATI_SALDI_LORDI、AW_RUL_ARPPRC_000001、AW_RUL_ARPCUS_000001、AW_RUL_CP2SAP_000001、DIM_RULE_FI_MR_AR_NF_MAPPING、DIM_RULE_FI_MR_AR_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_COUNTRY_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_BUSDEPT_MAPPING、DIM_RULE_FI_MR_BMU_TO_PROFITCENTER、DWD_FI_MR_SAP_KNA1_DD、DIM_CUSTOMER_BASE_INFO_DD
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
-   *   ALTER BY 20261126 19:02 SHIQINGFENG.EX 收入取数取消客商非空限制，客商为空的收入按未匹配收入落表
-   *   ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载
-   *   ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
-   *   ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
-   *   ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020
-   *   ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
-   *   ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
-   *   ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
-   *   ALTER BY 20261125 10:11 SHIQINGFENG.EX ARPM02的ME与MB账龄标识同时命中时按两个周转类别各出一行
-   *   ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段，不再通过渠道BU关系表映射
-   *   ALTER BY 20261124 18:25 SHIQINGFENG.EX 收入来源渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值。
-   *   ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断
-   *   ALTER BY 20261110 19:06 SHIQINGFENG.EX 会话表初始化不再显式写DATEUPD，改由表默认值SYSDATE
-   *   ALTER BY 20261110 19:03 SHIQINGFENG.EX GB科目与组织节点成员初始化进会话表，科目与DEST1改用独立会话表
-   *   ALTER BY 20261110 17:30 SHIQINGFENG.EX 账龄与收入来源利润中心改按AW_RUL_ARPPRC_000001映射
-   *   ALTER BY 20261110 11:25 SHIQINGFENG.EX ARPM02的050节点判断由逐行EXISTS改为LEFT JOIN
-   *   ALTER BY 20261110 11:22 SHIQINGFENG.EX 会话表HIE装载时拼FIMA_/GB_前缀区分两棵组织树，免加字段
-   *   ALTER BY 20261110 11:14 SHIQINGFENG.EX 特殊来源改为公共底层CTE单次扫描GB余额表，降低大表重复扫描耗时
-   *   ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类字段SRC_DETAIL，标识周转各数据来源
-   *   ALTER BY 20261109 18:22 SHIQINGFENG.EX 利润中心事业部映射去重，避免配置重复行导致金额翻倍
-   *   ALTER BY 20261109 18:12 SHIQINGFENG.EX 修复周转行事业部二次映射，ARPM03周转金额不再按命中事业部数翻倍
-   *   ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录
-   *   ALTER BY 20261109 16:38 SHIQINGFENG.EX 去掉全部锁定判断，取数、删除、装载都按参数事业部全量执行
-   *   ALTER BY 20261109 16:20 SHIQINGFENG.EX 入参取消公司参数，删除范围改为按事业部，取数仍按事业部推导的公司清单限制
-   *   ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为AG过程维护的TOV_FLAG标识列
-   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度
-   *   ALTER BY 20261029 18:20 SHIQINGFENG.EX 收入利润中心映射新增BATCH_ID=6，优先级BATCH_ID=2>6>收入原利润中心。
-   *   ALTER BY 20261027 18:47 SHIQINGFENG.EX 还原ARPM02的AR_AMT在050节点和其他公司的计算公式。
-   *   ALTER BY 20261027 18:33 SHIQINGFENG.EX ARPM02的AR_AMT按050节点和其他公司调整计算公式。
-   *   ALTER BY 20261027 16:19 SHIQINGFENG.EX 特殊数据源保留原始组织范围，固定入表公司4330和1100并增加独立删除逻辑。
-   *   ALTER BY 20261027 16:04 SHIQINGFENG.EX 增加两段目标表装载日志，区分主装载和特殊数据源装载。
-   *   ALTER BY 20261027 15:51 SHIQINGFENG.EX 新增智动精工和模具周转取数，按场景、公司范围及P_BG事业部范围装载。
-   *   20261020 新增最终颗粒度口径字段D_GRAN_CAL，固定写入ARTO_CUST。
-   *   20261020 增加AW_RUL_ARPTOV_000001特殊取数配置，支持BATCH_ID=1至4剔除和BATCH_ID=6按公司、二级性质取数。
+   *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
    *******************************************************************************/
   V_SCENARIO   VARCHAR2(30);
   V_PERIODO    VARCHAR2(30);
@@ -147,21 +113,21 @@ BEGIN
     );
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+  VALUES ('CPM_SP_M2M_ARP_TOV_M', 'BEGIN 开始执行', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
   COMMIT;
 
   /* 按事业部删除当期本过程数据。 */
   DELETE FROM AW_MR9_ARPM03_000001 D
   WHERE D.COD_SCENARIO = V_SCENARIO
     AND D.COD_PERIODO = V_PERIODO
-    AND D.PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M_PHASE2'
+    AND D.PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M'
     AND (
           P_BG = 'ALL'
       OR INSTR(',' || P_BG || ',', ',' || D.D_BG || ',') > 0
     );
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', '当前批次删除完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+  VALUES ('CPM_SP_M2M_ARP_TOV_M', '当前批次删除完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
 
   /* 目标表装载：先汇总周转，再匹配收入；事业部映射及负周转剔除均在合并后执行。 */
   BEGIN
@@ -208,8 +174,7 @@ BEGIN
     , USERUPD
   )
   WITH
-  /* 应收周转利润中心映射：batch1按公司+源利润中心（一公司一行），batch2仅按源利润中心，源利润中心去前导零匹配。
-     ALTER BY 20261110 17:30 SHIQINGFENG.EX 利润中心映射改按AW_RUL_ARPPRC_000001，替换原DIM_RULE的BATCH_ID=2规则 */
+  
   ARPPRC_RULE_1 AS (
     SELECT TRIM(COD_AZIENDA) AS COD_AZIENDA
         , NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '') AS SRC_PROFITCENTER_CODE
@@ -230,7 +195,7 @@ BEGIN
       AND NVL(VALID_TO, '999999') >= V_YEARMONTH
     GROUP BY NULLIF(LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0'), '')
   ),
-  /* ALTER BY 20261029 18:20 SHIQINGFENG.EX BATCH_ID=6规则先按公司主数据展开，事实侧等号关联且物料组为空不匹配。 */
+  
   PROFIT_CENTER_RULE_6 AS (
     SELECT A.COD_AZIENDA AS COMPANY_CODE
         , TRIM(PM.MATERIAL_GROUP_CODE) AS MATERIAL_GROUP_CODE
@@ -246,8 +211,7 @@ BEGIN
     GROUP BY A.COD_AZIENDA
            , TRIM(PM.MATERIAL_GROUP_CODE)
   ),
-  /* 公司分类层级：按三级渠道反查一级、二级编码，收入来源未自带分类编码时使用。
-     ALTER BY 20261124 18:25 SHIQINGFENG.EX 收入渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值 */
+  
   CHANNEL_LEVEL_DIM AS (
     SELECT TRIM(COD) AS CHANNEL_L3_CODE
         , MAX(NULLIF(TRIM(COD_ELEGER5), '')) AS CHANNEL_L2_CODE
@@ -265,8 +229,7 @@ BEGIN
       AND TRIM(NODE) IN ('01020', '050')
     GROUP BY TRIM(ELEM)
   ),
-  /* 公司对应SAP版本号：取公司SAP映射规则有效期内的客户端，S800B/S800C等变体归一到S800。
-     ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值 */
+  
   COMPANY_SAP_CLIENT AS (
     SELECT TRIM(COD_AZIENDA) AS COMPANY_CODE
         , MAX(REGEXP_SUBSTR(TRIM(SAP_CLIENT), 'S[0-9]{3}')) AS SAP_CLIENT
@@ -276,9 +239,7 @@ BEGIN
       AND NVL(VALID_TO, '999999') >= V_YEARMONTH
     GROUP BY TRIM(COD_AZIENDA)
   ),
-  /* 收入客商为SAP编码，先经KNA1的ZKUNNR_MDG转MDG编码（为空回退SAP编码），再按MDG编码匹配MDG主数据取国家。
-     ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
-     ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值 */
+  
   SAP_CUST_MDG_MAP AS (
     SELECT 'S' || TRIM(MANDT) AS SAP_CLIENT
         , NULLIF(LTRIM(TRIM(KUNNR), '0'), '') AS CUST_KEY
@@ -287,8 +248,7 @@ BEGIN
       FROM TGK_FIMA_HISENSE.DWD_FI_MR_SAP_KNA1_DD
     GROUP BY 'S' || TRIM(MANDT), NULLIF(LTRIM(TRIM(KUNNR), '0'), '')
   ),
-  /* MDG客商主数据国家：按MDG编码匹配，作为收入客商唯一国家来源。
-     ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致 */
+  
   MDG_CUST_COUNTRY AS (
     SELECT NULLIF(LTRIM(TRIM(CUST_CODE), '0'), '') AS CUST_KEY
         , MAX(TRIM(COUNTRY_CODE)) AS COUNTRY_CODE
@@ -399,9 +359,7 @@ BEGIN
       AND (P_BG = 'ALL'
           OR INSTR(',' || P_BG || ',', ',' || A.COD_BG || ',') > 0)
   ),
-  /* 利润中心所属事业部映射：保留利润中心在P_BG范围内匹配到的全部事业部，最终与公司事业部比较。
-     配置表存在同一利润中心+事业部重复维护行，去重防止映射阶段整行翻倍。
-     ALTER BY 20261109 18:22 SHIQINGFENG.EX 利润中心事业部映射去重，避免配置重复行导致金额翻倍 */
+  
   PCR_BG_MAP AS (
     SELECT DISTINCT LTRIM(TRIM(P.COD_DEST2), '0') AS COD_DEST2
         , P.COD_BG
@@ -512,8 +470,7 @@ BEGIN
         , A.COD_PERIODO
         , A.COD_AZIENDA
         , '1122000000' AS COD_CONTO
-        /* ME、MB账龄标识同时命中时按两个周转类别各出一行，不再二选一。
-           ALTER BY 20261125 10:11 SHIQINGFENG.EX ME与MB账龄标识各自独立展开为周转类别 */
+        
         , C.COD_CATEGORIA
         , A.GRP_SCOPE
         , TRIM(A.CUST_CODE) AS CUST_CODE
@@ -527,15 +484,14 @@ BEGIN
         , A.NATURE_L2_NAME
         , A.D_CHANNEL
         , A.D_ONOFFLINE
-        /* 账龄利润中心按ARPPRC映射：batch1公司+源利润中心 > batch2源利润中心 > 原值。
-           ALTER BY 20261110 17:30 SHIQINGFENG.EX 新增ARPPRC利润中心映射 */
+        
         , NVL(P1.COD_DEST2, NVL(P2.COD_DEST2, A.COD_DEST2)) AS COD_DEST2
         , A.COD_DEST3
         , A.D_SALE_DEPT
         , A.D_CHANNEL_BU
         , A.D_CC_CUSTGRP
         , A.COD_VALUTA
-        /* ALTER BY 20261110 11:25 SHIQINGFENG.EX 050节点判断由逐行EXISTS改为LEFT JOIN会话表去重结果集。 */
+        
         , CASE
               WHEN R10_050.ELEM IS NOT NULL THEN CASE
                          WHEN NVL(A.UREB_AMT, 0) > NVL(A.BCY_ADJ_INCL_0_AMT, 0) THEN 0
@@ -552,11 +508,11 @@ BEGIN
         , NVL(A.INV_SAMPLE_AMT, 0) AS F6_INVSM_AMT
         , NVL(ADJ.F7_GSUB_AMT, 0) AS F7_GSUB_AMT
         , NVL(ADJ.F8_ADJ_AMT, 0) AS F8_ADJ_AMT
-        /* ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类，标识账龄表来源 */
+        
         , 'ARPM02-账龄表' AS SRC_DETAIL
       FROM AW_MR9_ARPM02_000001 A
       /* 周转类别维度展开：ME命中出ZAMOUNT、MB命中出ZAMOUNT_L2，两者都命中时各出一行。 */
-      /* ALTER BY 20261125 10:11 SHIQINGFENG.EX 新增周转类别维度展开 */
+      
       CROSS JOIN (
         SELECT 'ZAMOUNT' AS COD_CATEGORIA FROM DUAL
         UNION ALL
@@ -588,11 +544,9 @@ BEGIN
       AND A.COD_AZIENDA IN (
           SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
       )
-      /* TOV_FLAG由AG过程统一打标，涵盖利润中心、账龄标识及BATCH_ID=1/2/3/4/6特殊取数剔除规则。
-         ALTER BY 20261109 11:10 SHIQINGFENG.EX ARPM02取数限制条件前置为TOV_FLAG标识列 */
+      
       AND A.TOV_FLAG = 'Y'
-      /* 每个周转类别只保留与其对应账龄标识命中的行。
-         ALTER BY 20261125 10:11 SHIQINGFENG.EX 周转类别与账龄标识按类别分别匹配 */
+      
       AND (
             (C.COD_CATEGORIA = 'ZAMOUNT'    AND A.ME_AGE_FLAG IN ('AR', 'CA', 'A10'))
             OR (C.COD_CATEGORIA = 'ZAMOUNT_L2' AND A.MB_AGE_FLAG IN ('AR', 'CA', 'A10'))
@@ -605,7 +559,7 @@ BEGIN
         , I.COMPANY_CODE AS COD_AZIENDA
         , '1122000000' AS COD_CONTO
         , 'ZAMOUNT' AS COD_CATEGORIA
-        /* ALTER BY 20261111 10:54 SHIQINGFENG.EX IMOCC集团范围改按组织节点关系判断 */
+        
         , CASE
               WHEN CUR_NODE.SELF_NODE = CASE WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE) ELSE CTP_NODE.NODE END
                 AND CUR_NODE.HQ = CTP_NODE.HQ THEN 'SUB-子公司'
@@ -639,7 +593,7 @@ BEGIN
         , 0 AS F6_INVSM_AMT
         , 0 AS F7_GSUB_AMT
         , 0 AS F8_ADJ_AMT
-        /* ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类，标识国际营销占用来源 */
+        
         , 'IMOCC-国际营销占用' AS SRC_DETAIL
       FROM DWD_FI_MR_AR_IMOCC_MI I
       LEFT JOIN NODE_MAP CUR_NODE
@@ -652,8 +606,7 @@ BEGIN
        AND CTP_NODE.ELEM = I.CP_COMPANY_CODE
     WHERE I.DT_MONTH = V_YEARMONTH
       AND I.COMPANY_CODE IN ('1740', '2080')
-      /* 1740公司排除区组Z0020；AREA_GROUP_CODE为空的行照常保留。
-         ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020 */
+      
       AND (I.COMPANY_CODE <> '1740' OR NVL(I.AREA_GROUP_CODE, 'ZZZZ') <> 'Z0020')
       AND CASE
               WHEN CUR_NODE.SELF_NODE = CASE WHEN CUR_NODE.IS_HITACHI = 1 THEN NVL(CTP_NODE.NODES, CTP_NODE.NODE) ELSE CTP_NODE.NODE END
@@ -728,14 +681,13 @@ BEGIN
             , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_NAME, NATURE_L2_NAME
             , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU
             , D_CC_CUSTGRP, COD_VALUTA
-            /* 数据分类参与分组，M02与IMOCC同键数据不合并，保留来源标识。
-               ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类维度 */
+            
             , SRC_DETAIL
   ),
   /* 主分户映射：公司+收入客户编码（分户）→ 主户编码/名称，按期间取有效版本。
      配置表公司允许%通配，用本次运行的会话公司清单展开成具体公司后再等值匹配。 */
-  /* ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
-  /* ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开 */
+  
+  
   CUST_BRANCH_MAP AS (
     SELECT TRIM(S.ELEM) AS COD_AZIENDA
          , NULLIF(LTRIM(TRIM(A.CUST_BRANCH_CODE), '0'), '') AS CUST_BRANCH_CODE
@@ -756,8 +708,7 @@ BEGIN
         , T.COD_PERIODO
         , T.COD_AZIENDA
         , 'S600100' AS COD_CONTO
-        /* 收入客商统一取主分户映射后的主户，映射不到回退收入原值；后续客商匹配均按该编码进行。
-           ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+        
         , NVL(CM.CUST_HEAD_CODE, T.CUST_CODE) AS CUST_CODE
         , NVL(CM.CUST_HEAD_NAME, T.CUST_NAME) AS CUST_NAME
         , NVL(CM.CUST_HEAD_CODE, T.CUST_CODE) AS CUST_HEAD_CODE
@@ -765,7 +716,7 @@ BEGIN
         , T.SRC_SYSTEM
         , T.COD_AZI_CTP
         , T.D_CHANNEL
-        /* ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段 */
+        
         , T.D_CHANNEL_BU
         , T.COD_DEST2 AS SRC_COD_DEST2
         , T.MATERIAL_GROUP_CODE
@@ -782,7 +733,7 @@ BEGIN
         , 0-T.GL_ORG_REV AS GL_ORG_REV
         , CL.CHANNEL_L1_CODE
         , CL.CHANNEL_L2_CODE
-        /* ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致 */
+        
         , MC.COUNTRY_CODE AS COUNTRY_CODE
         , CS.COMPANY_SCOPE
       FROM AW_MR9_REVM01_000001 T
@@ -792,8 +743,7 @@ BEGIN
        AND CM.CUST_BRANCH_CODE = NULLIF(LTRIM(TRIM(T.CUST_CODE), '0'), '')
       LEFT JOIN CHANNEL_LEVEL_DIM CL
         ON CL.CHANNEL_L3_CODE = TRIM(T.D_CHANNEL)
-      /* ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
-         ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值 */
+      
       LEFT JOIN COMPANY_SAP_CLIENT CSC
         ON CSC.COMPANY_CODE = TRIM(T.COD_AZIENDA)
       LEFT JOIN SAP_CUST_MDG_MAP SM
@@ -863,8 +813,7 @@ BEGIN
               WHEN CUR_NODE.HQ = CTP_NODE.HQ THEN 'GIN-集团内'
               ELSE 'GEX-集团外'
           END AS GRP_SCOPE
-        /* 客商输出取主分户映射后的主户编码/名称。
-           ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+        
         , R.CUST_HEAD_CODE AS CUST_CODE
         , R.CUST_HEAD_NAME AS CUST_NAME
         , R.CUST_HEAD_CODE
@@ -876,8 +825,7 @@ BEGIN
         , NULL AS NATURE_L2_NAME
         , NVL(R.D_CHANNEL, 'ZZZZ') AS D_CHANNEL
         , R.D_ONOFFLINE
-        /* 收入利润中心映射优先级：DIM_RULE公司+渠道分组 > ARPPRC公司级 > ARPPRC按利润中心 > DIM_RULE物料组 > 收入原利润中心。
-           ALTER BY 20261124 18:25 SHIQINGFENG.EX 渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值 */
+        
         , R.COD_DEST2
         /* 业务范围分三档：商显按国家取中国区/海外公共，日立非中国区按国家映射表，其余按公司+二级分类再回退公司。 */
         , CASE
@@ -888,8 +836,7 @@ BEGIN
               ELSE NVL(NVL(BR1.BUS_RANGE_CODE, BR3.BUS_RANGE_CODE), NVL(R.SRC_COD_DEST3, 'ZZZZ'))
           END AS COD_DEST3
         , NVL(NVL(BD.MARKETING_DEPT_CODE, BM.BMU_CODE), NVL(R.SRC_D_SALE_DEPT, 'ZZZZ')) AS D_SALE_DEPT
-        /* 收入渠道BU直接取收入表字段，不再通过渠道BU关系表映射。
-           ALTER BY 20261124 18:50 SHIQINGFENG.EX 收入渠道BU改取REVM01字段 */
+        
         , NVL(R.D_CHANNEL_BU, 'ZZZZ') AS D_CHANNEL_BU
         , NVL(CC.CRG_CUST_GROUP_CODE, 'ZZZZ') AS D_CC_CUSTGRP
         , 'CNY' AS COD_VALUTA
@@ -903,7 +850,7 @@ BEGIN
         , 0 AS F6_INVSM_AMT
         , 0 AS F7_GSUB_AMT
         , 0 AS F8_ADJ_AMT
-        /* ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类，标识收入模块M01来源 */
+        
         , 'REVM01-收入模块M01' AS SRC_DETAIL
       FROM REVENUE_PROFIT R
       LEFT JOIN TGK_FIMA_HISENSE.AZIENDA AZ
@@ -963,8 +910,7 @@ BEGIN
         UNION ALL
         SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
       ) C
-    /* 收入不再限制客商非空，客商为空的收入按未匹配收入落表。
-       ALTER BY 20261126 19:02 SHIQINGFENG.EX 收入取数取消客商非空限制 */
+    
     WHERE NVL(R.REV_AMT, 0) <> 0
   ),
   /* 周转预映射：收入匹配前先完成利润中心与账套事业部映射。 */
@@ -1105,11 +1051,10 @@ BEGIN
         , T.D_CHANNEL_BU
         , T.D_CC_CUSTGRP
         , T.COD_VALUTA
-        /* ALTER BY 20261109 18:12 SHIQINGFENG.EX 保留周转行已映射事业部，防止MAPPED_FACT二次展开导致金额翻倍 */
+        
         , T.D_BG
         , T.AR_AMT
-        /* 同一收入匹配键下只有一行承接收入，其余置0，避免多DEST3周转行各挂一次收入。
-           ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行 */
+        
         , CASE WHEN T.REV_ROW_NUM = 1 THEN NVL(R.REV_AMT, 0) ELSE 0 END AS REV_AMT
         , T.F1_ODUE_AMT
         , T.F2_EPAY_AMT
@@ -1121,8 +1066,7 @@ BEGIN
         , T.F8_ADJ_AMT
         , T.SRC_DETAIL
       FROM (
-             /* 按收入匹配键编号，AR绝对值最大的行优先承接收入，同额时按DEST3排序保证结果稳定。
-                ALTER BY 20261120 18:33 SHIQINGFENG.EX 收入按匹配键只回填AR绝对值最大的周转行 */
+             
              SELECT T.*
                   , ROW_NUMBER() OVER (
                         PARTITION BY T.COD_SCENARIO, T.COD_PERIODO, T.COD_AZIENDA
@@ -1231,7 +1175,7 @@ BEGIN
         , 0 AS F6_INVSM_AMT
         , 0 AS F7_GSUB_AMT
         , 0 AS F8_ADJ_AMT
-        /* ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类，标识核心利润调整来源 */
+        
         , 'ADJ-核心利润调整' AS SRC_DETAIL
       FROM (
         SELECT COD_SCENARIO
@@ -1264,9 +1208,7 @@ BEGIN
         SELECT 'ZAMOUNT_L2' AS COD_CATEGORIA FROM DUAL
       ) C
   ),
-  /* 合并已匹配周转、未匹配收入及CPRS；周转行带TURNOVER_MAPPED已映射的D_BG，收入/CPRS该列为NULL。
-     ALTER BY 20261109 18:12 SHIQINGFENG.EX MERGED_FACT保留周转行D_BG
-     ALTER BY 20261110 10:05 SHIQINGFENG.EX 三分支统一携带数据分类SRC_DETAIL */
+  
   MERGED_FACT AS (
     SELECT COD_SCENARIO, COD_PERIODO, COD_AZIENDA, COD_CONTO, COD_CATEGORIA
         , GRP_SCOPE, CUST_CODE, CUST_NAME, CUST_HEAD_CODE, CUST_HEAD_NAME
@@ -1335,8 +1277,7 @@ BEGIN
       FROM MERGED_FACT M
       LEFT JOIN PCR_BG_MAP PCR
         ON PCR.COD_DEST2 = LTRIM(TRIM(M.COD_DEST2), '0')
-       /* 周转行已在TURNOVER_MAPPED按事业部展开，此处锁定原映射只关联一次；无D_BG的收入/CPRS按全部命中事业部展开。
-          ALTER BY 20261109 18:12 SHIQINGFENG.EX 已映射周转行不再二次展开，修复周转金额按命中事业部数翻倍 */
+       
        AND (M.D_BG IS NULL OR PCR.COD_BG = M.D_BG)
       LEFT JOIN ATS_BG_MAP ATS
         ON ATS.COD_AZIENDA = M.COD_AZIENDA
@@ -1380,13 +1321,12 @@ BEGIN
       , SUM(F7_GSUB_AMT) AS F7_GSUB_AMT
       , SUM(F8_ADJ_AMT) AS F8_ADJ_AMT
       , SRC_DETAIL
-      , 'CPM_SP_M2M_ARP_TOV_M_PHASE2' AS PROVENIENZA
+      , 'CPM_SP_M2M_ARP_TOV_M' AS PROVENIENZA
       , SYSDATE AS DATEUPD
       , SESSION_USER AS USERUPD
     FROM MAPPED_FACT M
   WHERE M.GRP_SCOPE = 'GEX-集团外'
-    /* ZAMOUNT_L2只进指定公司：23%、26%、6701-6745、6801-6889（排除6847）。
-       ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数 */
+    
     AND (   M.COD_CATEGORIA <> 'ZAMOUNT_L2'
          OR M.COD_AZIENDA LIKE '23%'
          OR M.COD_AZIENDA LIKE '26%'
@@ -1407,15 +1347,14 @@ BEGIN
           , CUST_BRANCH_CODE, CUST_BRANCH_NAME, COD_AZI_CTP, COUNTRY_NAME, NATURE_L2_NAME
           , D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU
           , D_CC_CUSTGRP, COD_VALUTA
-          /* 数据分类参与分组，M02与IMOCC同键数据不合并，保留来源标识。
-             ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类维度 */
+          
           , SRC_DETAIL;
 END;
-  /* ALTER BY 20261027 16:04 SHIQINGFENG.EX 记录第一段主数据源装载完成，便于定位两段装载执行状态。 */
+  
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', '第一段目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+  VALUES ('CPM_SP_M2M_ARP_TOV_M', '第一段目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
 
-  /* ALTER BY 20261027 15:51 SHIQINGFENG.EX 新增智动精工和模具周转取数，按场景、公司范围及P_BG事业部范围装载。 */
+  
   /* 特殊数据源装载：独立写入默认事业部，避免利润中心映射缺失导致特殊来源被过滤。 */
 BEGIN
   INSERT INTO AW_MR9_ARPM03_000001 (
@@ -1530,7 +1469,7 @@ BEGIN
         , 0 AS AR_AMT
       FROM GB_SOURCE_RAW
     WHERE IS_ZHIDONG = 'Y'
-      /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 智动精工源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
+      
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG001_BU001,') > 0
@@ -1562,7 +1501,7 @@ BEGIN
         , SUM(IMPORTO) AS AR_AMT
       FROM GB_SOURCE_RAW
     WHERE IS_ZHIDONG = 'Y'
-      /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 智动精工源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
+      
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG001_BU001,') > 0
@@ -1592,7 +1531,7 @@ BEGIN
         , 0 AS AR_AMT
       FROM GB_SOURCE_RAW
     WHERE IS_MOJU = 'Y'
-      /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 模具源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
+      
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG004_BU001,') > 0
@@ -1642,7 +1581,7 @@ BEGIN
         , SUM(IMPORTO) AS AR_AMT
       FROM GB_SOURCE_RAW
     WHERE IS_MOJU = 'Y'
-      /* ALTER BY 20261027 16:19 SHIQINGFENG.EX 模具源数据保持原组织范围取数，且仅在默认事业部属于P_BG时装载。 */
+      
       AND (
             P_BG = 'ALL'
         OR INSTR(',' || P_BG || ',', ',BG004_BU001,') > 0
@@ -1734,20 +1673,19 @@ BEGIN
       , 0 AS F6_INVSM_AMT
       , 0 AS F7_GSUB_AMT
       , 0 AS F8_ADJ_AMT
-      /* ALTER BY 20261110 10:05 SHIQINGFENG.EX 新增数据分类，标识GB-1.0取数来源 */
+      
       , 'GB-1.0取数' AS SRC_DETAIL
-      , 'CPM_SP_M2M_ARP_TOV_M_PHASE2' AS PROVENIENZA
+      , 'CPM_SP_M2M_ARP_TOV_M' AS PROVENIENZA
       , SYSDATE AS DATEUPD
       , SESSION_USER AS USERUPD
     FROM SPECIAL_SOURCE_SUM S
   WHERE (NVL(S.AR_AMT, 0) <> 0 OR NVL(S.REV_AMT, 0) <> 0);
 END;
-  /* ALTER BY 20261027 16:04 SHIQINGFENG.EX 记录第二段特殊数据源装载完成，便于定位两段装载执行状态。 */
+  
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', '第二段目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+  VALUES ('CPM_SP_M2M_ARP_TOV_M', '第二段目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
 
-  /* 国际营销占用手工调整来源：取ARPM01法报调整(ZFAMOUNT/ARP_03_004)，事业部按利润中心优先、公司兜底。
-     ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载 */
+  
 BEGIN
   INSERT INTO AW_MR9_ARPM03_000001 (
       OID
@@ -1908,22 +1846,21 @@ BEGIN
       , 0 AS F7_GSUB_AMT
       , 0 AS F8_ADJ_AMT
       , 'IMOCC_ADJ-国际营销占用手工调整' AS SRC_DETAIL
-      , 'CPM_SP_M2M_ARP_TOV_M_PHASE2' AS PROVENIENZA
+      , 'CPM_SP_M2M_ARP_TOV_M' AS PROVENIENZA
       , SYSDATE AS DATEUPD
       , SESSION_USER AS USERUPD
     FROM ADJ_SOURCE S
    WHERE S.AR_AMT <> 0;
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', '手工调整来源装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+  VALUES ('CPM_SP_M2M_ARP_TOV_M', '手工调整来源装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
 END;
 
-  /* 主装载的零金额条件在聚合前生效，正负抵消的分组仍会落成全0行，装载后统一清理。
-     ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录 */
+  
   DELETE FROM AW_MR9_ARPM03_000001 D
   WHERE D.COD_SCENARIO = V_SCENARIO
     AND D.COD_PERIODO = V_PERIODO
-    AND D.PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M_PHASE2'
+    AND D.PROVENIENZA = 'CPM_SP_M2M_ARP_TOV_M'
     AND COD_AZIENDA IN (
               SELECT ELEM FROM SESSION_AZIENDA_LIST WHERE SESSION_ID = V_SESSION_ID
           )
@@ -1950,15 +1887,6 @@ END;
   WHERE SESSION_ID = V_SESSION_ID;
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', 'END 执行完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+  VALUES ('CPM_SP_M2M_ARP_TOV_M', 'END 执行完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
   COMMIT;
-EXCEPTION
-  WHEN OTHERS THEN
-    V_ERROR_COD := SQLCODE;
-    V_ERROR_MSG := SQLERRM;
-    ROLLBACK;
-    INSERT INTO ZTAB_CPM_LOG (CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-    VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', 'ERROR 执行报错', V_ERROR_COD || ':' || SUBSTR(V_ERROR_MSG, 1, 3900), SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
-    COMMIT;
-    RAISE;
-END CPM_SP_M2M_ARP_TOV_M_PHASE2;
+END CPM_SP_M2M_ARP_TOV_M;

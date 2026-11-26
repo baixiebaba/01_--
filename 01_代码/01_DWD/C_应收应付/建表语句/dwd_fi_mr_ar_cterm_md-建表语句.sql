@@ -1,5 +1,5 @@
 -- 客户账期明细表（Apache Doris）
--- 目标表：test.dwd_fi_mr_ar_cterm_md
+-- 目标表：dwd.dwd_fi_mr_ar_cterm_md
 -- 表类型：明细表；数据分层：DWD
 -- 最后更新：20261126 SHIQINGFENG.EX 按实际库 SHOW CREATE TABLE 全量对齐
 --
@@ -7,7 +7,7 @@
 --   20261126  按实际库 SHOW CREATE TABLE 全量对齐：列、类型、KEY、分布、PROPERTIES 与线上一致，全量复核对齐。
 --   20261102  与实际库对齐：load_dt 由 DATE 改为 DATETIME（实际为 datetime）。
 
-CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_ar_cterm_md (
+CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_ar_cterm_md (
       company_code VARCHAR(8) COMMENT '组织'
     , cust_code VARCHAR(30) COMMENT '客户编码'
     , pay_term_code VARCHAR(500) COMMENT '付款条件代码，多个值按代码升序以英文逗号分隔'

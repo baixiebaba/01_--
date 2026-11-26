@@ -1,18 +1,17 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261027 18:46
- * 本次修改：ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- * 上次修改：20260916 ADD BY shiqingfeng.ex 新增
+ * 最后更新时间：20261126 19:30
+ * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+ * 上次修改：
  *
  * 脚本名称  ：dwd_fi_mr_arap_sms_balance_mi.sql
  * 功能描述  ：装载SMS返利余额数据。
  * 源表      ：dw.dwd_ltc_cem_reportpay_balance_summary_dd。
- * 目标表    ：test.dwd_fi_mr_arap_sms_balance_mi
+ * 目标表    ：dwd.dwd_fi_mr_arap_sms_balance_mi
  *
  * 修改历史：
- *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- *   20260916 ADD BY shiqingfeng.ex 新增
+ *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
  ******************************************************************************/
 
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
@@ -25,7 +24,7 @@ SET @end_date = LAST_DAY(STR_TO_DATE(@year_month_day, '%Y%m%d'));
 -- 以上SET与下方单条INSERT OVERWRITE必须在同一session中依次执行。
 set enable_auto_create_when_overwrite=true;
 
-INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sms_balance_mi PARTITION (*)
+INSERT OVERWRITE TABLE dwd.dwd_fi_mr_arap_sms_balance_mi PARTITION (*)
 (
       dt_month        --年月YYYYMM
     , company_code    --组织

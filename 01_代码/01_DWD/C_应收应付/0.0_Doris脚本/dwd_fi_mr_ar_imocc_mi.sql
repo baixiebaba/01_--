@@ -1,34 +1,27 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261124 18:52
- * 本次修改：ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
- * 上次修改：ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值。
+ * 最后更新时间：20261126 19:30
+ * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+ * 上次修改：
  *
  * 脚本名称  ：dwd_fi_mr_ar_imocc_mi.sql
  * 功能描述  ：装载国际营销应收占用明细。
  * 源表      ：详见脚本正文（区组、产品、客商、组织等DW、DIM、ODS主数据及业务数据）。
- * 目标表    ：test.dwd_fi_mr_ar_imocc_mi
+ * 目标表    ：dwd.dwd_fi_mr_ar_imocc_mi
  *
  * 修改历史：
- *   ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
- *   ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值。
- *   ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG客户主数据，不再使用客户大表。
- *   ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围编码与名称改为按公司与国家映射表取值，国家取不到时用S810客户主数据兜底。
- *   ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称字段，按公司及119项目客户打标。
- *   ALTER BY 20261027 18:46 SHIQINGFENG.EX 新增统一DWD脚本文件头，未修改业务主体。
- *   20261014 MODIFY 替换MDG客户主数据及对方公司映射表为客商大表
- *   20260917 ADD BY shiqingfeng.ex 新增
+ *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
  ******************************************************************************/
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
---SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
-SET @year_month_day = '20260801';
+SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 以上SET与下方INSERT OVERWRITE必须在同一session中执行。
 set enable_auto_create_when_overwrite=true;
 
-INSERT OVERWRITE TABLE test.dwd_fi_mr_ar_imocc_mi PARTITION (*)
+INSERT OVERWRITE TABLE dwd.dwd_fi_mr_ar_imocc_mi PARTITION (*)
 (
       dt_month                 -- 年月
     , `year`                   -- 年份
@@ -171,7 +164,6 @@ country_busrange_dim AS (
      GROUP BY country_code
 ),
 -- 按公司映射的业务范围，作为国家匹配不到时的兜底。
--- ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
 company_busrange_dim AS (
     SELECT b.cod_azienda AS map_company_code
          , MAX(a.bus_range_code) AS map_bus_range_code
@@ -267,10 +259,8 @@ imocc_enriched AS (
          , a.custfundcode AS cust_branch_code
          , a.custfundname AS cust_branch_name
          -- S810客户对方公司映射，MR口径优先，未配置时为空。
-         -- ALTER BY 20261120 11:22 SHIQINGFENG.EX 对方公司改按S810客户映射表取值
-         , COALESCE(ct.cp_company_mr_code, ct.cp_company_code) AS cp_company_code
-         -- ALTER BY 20261113 17:20 SHIQINGFENG.EX 客商信息改取SAP客户主数据与MDG主数据
-         , COALESCE(mc.country_code, kc.country_code) AS country_code
+                  , COALESCE(ct.cp_company_mr_code, ct.cp_company_code) AS cp_company_code
+                  , COALESCE(mc.country_code, kc.country_code) AS country_code
          , COALESCE(mc.country_name, kn.country_name) AS country_name
          , mc.com_1st_code AS channel_l1_code
          , mc.com_1st_name AS channel_l1_name
@@ -349,8 +339,7 @@ SELECT @dt_month AS dt_month
      , channel_l3_name
      -- 业务范围：2080固定海外公共；1740本国用日立国内营销分公司公共，
      -- 其余国家按国家业务范围映射取值，映射不到再回退按公司映射。
-     -- ALTER BY 20261113 17:05 SHIQINGFENG.EX 业务范围按公司与国家映射表取值
-     , CASE WHEN company_code = '2080'
+          , CASE WHEN company_code = '2080'
               THEN '3000'
             WHEN company_code = '1740' AND country_code = 'CN'
               THEN '2200'
@@ -379,8 +368,7 @@ SELECT @dt_month AS dt_month
             ELSE '缺省'
         END profitcenter_name
      -- 业务管理单元：2080按119项目客户细分，其余公司（1740/8010）缺省。
-     -- ALTER BY 20261112 16:22 SHIQINGFENG.EX 新增业务管理单元编码与名称
-     , CASE WHEN company_code = '2080' AND cust_name LIKE '%119项目%'
+          , CASE WHEN company_code = '2080' AND cust_name LIKE '%119项目%'
               THEN 'BIPD2600.0135'
             WHEN company_code = '2080'
               THEN 'BIPD2600.0539'

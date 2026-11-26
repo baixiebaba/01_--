@@ -1,4 +1,4 @@
-  CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M_PHASE2(
+  CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_AG_M(
       P_SCENARIO  IN VARCHAR2
     , P_PERIODO   IN VARCHAR2
     , P_AZIENDA   IN VARCHAR2
@@ -7,41 +7,17 @@
     /*******************************************************************************
     *                              存储过程说明
     *-----------------------------------------------------------------------------
-    * 最后更新时间：20261125 16:32
-    * 本次修改：ALTER BY 20261125 16:32 SHIQINGFENG.EX 币种科目构成明细改取记账汇率原值，与1.0口径一致
-    * 上次修改：ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
+    * 最后更新时间：20261126 19:30
+    * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+    * 上次修改：
     *
-    * 过程名称  ：CPM_SP_M2M_ARP_AG_M_PHASE2
+    * 过程名称  ：CPM_SP_M2M_ARP_AG_M
     * 功能描述  ：ARPM01往来账龄计算底稿平铺为ARPM02账龄结果表
     * 源表      ：AW_MR9_ARPM01_000001、AW_MR9_ARPM02_000001、AW_RUL_ARPTOV_000001、DATI_CAMBIO、SQF_TEST
     * 目标表    ：AW_MR9_ARPM02_000001
     *
     * 修改历史：
-    *   ALTER BY 20261125 16:32 SHIQINGFENG.EX 币种科目构成明细改取记账汇率原值，与1.0口径一致
-    *   ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位
-    *   ALTER BY 20261120 09:51 SHIQINGFENG.EX 汇率折算系数保留10位小数，修复小币值币种期末汇率余额精度损失
-    *   ALTER BY 20261119 18:11 SHIQINGFENG.EX 手工行清零的对方行限定为本过程生成的抽取行
-    *   ALTER BY 20261119 18:07 SHIQINGFENG.EX 同键多性质分行时清零手工行金额，仅保留呆死金额与风险金额
-    *   ALTER BY 20261118 21:29 SHIQINGFENG.EX 补充来源仅在无账龄行时新增独立行，避免空性质行重复
-    *   ALTER BY 20261118 21:26 SHIQINGFENG.EX 账龄调整副本ZZT003_ADJ重新纳入本包，按性质匹配账龄行并入槽位，匹配不到按独立行新增
-    *   ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入
-    *   ALTER BY 20261117 21:03 SHIQINGFENG.EX 出库退货匹配去除一二三性质，多性质行按性质为空优先固定唯一落位行
-    *   ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货补充金额改三级匹配：优先1122、其次2204，均未命中按M01原值新增账龄为空独立行
-    *   ALTER BY 20261117 18:15 SHIQINGFENG.EX 业务键纳入一二三性质，年初上月按性质匹配，聚合按性质拆行
-    *   ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新，TOV取数直接限制标识列
-    *   ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总
-    *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-    *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
-    *   ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录
-    *   20261014 新增无账龄标识补充来源包，按业务键补充特殊来源本位币金额并固定EPAY空科目
-    *   20261010 撤销交易币折算本位币结果保留两位小数调整并恢复原精度
-    *   20261010 交易币折算本位币金额保留两位小数
-    *   20261010 RESULT_FACT最终将交易币字段映射为本位币字段
-    *   20261010 新增周转分析渠道和商冷客户群字段，直接对应ARPM01来源字段
-    *   20260924 直接读取第一个包已处理的汇率/税率金额，并同步处理账龄分段
-    *   20260923 SHIQINGFENG.EX 汇率评估标识为空时，交易币金额先换算人民币再换算成本位币
-    *   20260923 SHIQINGFENG.EX 重构ARPM02装载逻辑，保留INPUT_DEFORM并按OID MERGE更新
-    *   20260922 SHIQINGFENG.EX 新增ARPM02账龄结果表过程
+    *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
     ******************************************************************************/
     V_SCENARIO       VARCHAR2(30);
     V_PERIODO        VARCHAR2(30);
@@ -126,9 +102,8 @@
       );
 
     INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'BEGIN 开始执行' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    VALUES ('CPM_SP_M2M_ARP_AG_M' , 'BEGIN 开始执行' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
     COMMIT;
-
 
     /* 仅删除本过程上次生成的自动行，界面维护的INPUT_DEFORM行保留，后续MERGE按业务键复用其OID。 */
     DELETE FROM AW_MR9_ARPM02_000001
@@ -139,10 +114,10 @@
               FROM SESSION_AZIENDA_LIST
               WHERE SESSION_ID = V_SESSION_ID
       )
-      AND PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2';
+      AND PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M';
 
     INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '当前批次删除完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    VALUES ('CPM_SP_M2M_ARP_AG_M' , '当前批次删除完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
 
     /* 当前期间来源标准化、聚合及ARPM02字段平铺；ARPM01的ACCT_REC_CODE兼容映射为设计字段COD_CONTO。 */
     
@@ -169,8 +144,9 @@
                             WHEN B.TCURR = 'VND' THEN 100
                             ELSE 1
                         END AS RATE
-        FROM SQF_TEST B
+        FROM DWD_FI_MR_SAP_TCURR_DD B
       WHERE B.KURST = 'M'
+        AND B.MANDT = '600'
         AND TO_CHAR(99999999 - B.GDATU) = TO_CHAR(
               TRUNC(
                 ADD_MONTHS(
@@ -210,7 +186,7 @@
           , A.IS_REC_MB
           , A.GRP_SCOPE
           /* 账龄调整副本性质为空时取同键账龄行的性质，使其与主来源聚合到同一行；同键多性质按空优先、编码排序取第一行。 */
-          /* ALTER BY 20261117 21:33 SHIQINGFENG.EX 账龄调整副本按公司科目客商利润中心匹配账龄行，金额按账龄槽位并入。 */
+          
           , CASE WHEN A.SRC_DETAIL = 'ZZT003_ADJ'
                  THEN NVL(A.NATURE_L1_NAME
                         , (SELECT MAX(C.NATURE_L1_NAME) KEEP (
@@ -269,7 +245,7 @@
                  ELSE A.NATURE_L3_NAME
             END AS NATURE_L3_NAME
           , A.D_CHANNEL
-          /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU由ARPM01透传（列清单、目标列与MERGE值同步增加D_CHANNEL_BU）。 */
+          
           , A.D_CHANNEL_BU
           , A.D_CC_CUSTGRP
           , A.D_ONOFFLINE
@@ -320,7 +296,7 @@
                       THEN 1 / NULLIF(1 + NVL(A.TAX_RATE, 0), 0)
                   ELSE 1
               END AS TAX_FACTOR
-          /* ALTER BY 20261120 10:01 SHIQINGFENG.EX 折算系数取整复刻1.0口径，仅本位币与交易币均非人民币时保留5位，一侧为人民币时不取整 */
+          
           , CASE
                 WHEN TRIM(A.EXCHANGE_RATE_EVAL_FLAG) IS NULL
                   AND TRIM(A.COD_VALUTA_ORIGINARIA) IS NOT NULL
@@ -370,7 +346,7 @@
                 FROM SESSION_AZIENDA_LIST
                 WHERE SESSION_ID = V_SESSION_ID
         )
-        /* ALTER BY 20261118 21:26 SHIQINGFENG.EX 账龄调整副本ZZT003_ADJ重新纳入本包，按性质匹配账龄行并入槽位，匹配不到按独立行新增。 */
+        
         AND (
              (NVL(A.LE_AGE_FLAG, '|') <> '|' AND SRC_DETAIL LIKE 'ORG%')
              OR SRC_DETAIL = 'ZZT003_ADJ'
@@ -554,8 +530,8 @@
     ),
     /* 无账龄标识补充来源：按业务键与一二三性质聚合ARPM01本位币金额，NULL业务键保留并按NVL语义关联。 */
     /* EPAY空科目固定为1122000000；有账龄来源已由CURRENT_SOURCE处理，不重复进入本包。 */
-    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 聚合键纳入一二三性质，补充金额跟随性质行不再跨行合并。 */
-    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货移出本包，改走ZTSO04_AGG三级匹配，本包只保留其余补充来源。 */
+    
+    
     SUPPLEMENT_AGG AS (
       SELECT S.COD_AZIENDA
           , CASE WHEN S.SRC_DETAIL LIKE 'EPAY%'
@@ -597,8 +573,8 @@
               , S.COD_DEST2
     ),
     /* 出库退货补充金额：科目与性质均不参与匹配键，仅按公司、客商、利润中心聚合。 */
-    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增出库退货独立聚合，配套ZTSO04_TARGET三级匹配。 */
-    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 匹配键去除一二三性质。 */
+    
+    
     ZTSO04_AGG AS (
       SELECT S.COD_AZIENDA
           , S.CUST_CODE
@@ -622,7 +598,7 @@
               , S.COD_DEST2
     ),
     /* 取当前期间每个业务键与性质组合的维度基准行，ORG来源优先，其他来源作为兜底。 */
-    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 去重分区键纳入一二三性质，性质拆行不再被坍缩为单行。 */
+    
     CURRENT_DIM AS (
       SELECT COD_AZIENDA
           , COD_CONTO
@@ -679,7 +655,7 @@
     ),
     /* 当前期间按来源类别汇总，用于生成结果表的横向金额字段。 */
     /* 先按业务键与一二三性质聚合CURRENT_SOURCE，避免补充金额关联明细后重复放大。 */
-    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 聚合键纳入一二三性质，按性质拆分的行不再被合并。 */
+    
     CURRENT_SOURCE_AGG AS (
       SELECT S.COD_AZIENDA
           , S.COD_CONTO
@@ -852,9 +828,9 @@
           , SUM(CASE WHEN (S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.BCY_0_AMT ELSE NVL(S.CALC_CLOSING_RATE_BCY_AMT, 0) END) AS CLOSING_RATE_BCY_AMT
           , SUM(CASE WHEN (S.SRC_DETAIL = 'ZZT003_ADJ') THEN S.BCY_0_AMT ELSE NVL(S.CALC_POSTING_RATE_BCY_AMT, 0) END) AS POSTING_RATE_BCY_AMT
           /* 账龄调整副本金额已并入账龄行，不再单独输出币种明细段。 */
-          /* ALTER BY 20261117 21:33 SHIQINGFENG.EX 币种明细排除账龄调整副本。 */
+          
           /* 构成金额恒取记账汇率原值，汇率折算只作用于主金额，与1.0的TESTO_5口径一致。 */
-          /* ALTER BY 20261125 16:32 SHIQINGFENG.EX 币种科目构成明细改取记账汇率原值，与1.0口径一致 */
+          
           , LISTAGG(
                 CASE WHEN S.SRC_DETAIL = 'ZZT003_ADJ'
                      THEN NULL
@@ -875,8 +851,8 @@
               , S.NATURE_L3_NAME
     ),
     /* 出库退货匹配目标：按公司、客商、利润中心判定科目，优先1122000000，未命中再试2204000000，均未命中为空走独立行。 */
-    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增三级匹配目标判定，维度键不含科目，性质为空视作恒等。 */
-    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 目标判定去除一二三性质。 */
+    
+    
     ZTSO04_TARGET AS (
       SELECT T.*
           , CASE
@@ -902,7 +878,7 @@
         FROM ZTSO04_AGG T
     ),
     /* 出库退货落位行：同科目多性质行只取一行，优先性质为空，其次按性质编码排序，避免金额按行翻倍。 */
-    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 新增落位行固定逻辑，不分性质时金额仍只落唯一一行。 */
+    
     TARGET_ORG_ROW AS (
       SELECT R.COD_AZIENDA
           , R.COD_CONTO
@@ -937,7 +913,7 @@
       WHERE R.RN = 1
     ),
     /* 出库退货最终落位：目标科目与落位行性质绑定，同键金额只落一行。 */
-    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 新增落位结果集，供CURRENT_AGG按唯一行关联。 */
+    
     ZTSO04_MATCH AS (
       SELECT G.COD_AZIENDA
           , G.CUST_CODE
@@ -957,8 +933,8 @@
       WHERE G.TARGET_CONTO IS NOT NULL
     ),
     /* 出库退货独立行：1122与2204均未命中时按M01原值生成新行，只带出库退货金额；同键多行任取一行。 */
-    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增独立行来源，维度字段直接取M01原本值。 */
-    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 独立行匹配键同步去除一二三性质。 */
+    
+    
     ZTSO04_STANDALONE AS (
       SELECT G.COD_AZIENDA
           /* 科目取M01原本值；历史数据兜底回写前的空科目按1122000000落键，防止键丢失。 */
@@ -1024,9 +1000,9 @@
         AND G.TARGET_CONTO IS NULL
     ),
     /* 当前主来源已按业务键与性质聚合后，仅一次关联补充金额，保持NULL键的NVL匹配语义。 */
-    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 补充金额按业务键与一二三性质关联，性质为空视作恒等。 */
-    /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货改按三级匹配目标关联，目标科目限定只落一行，其余补充来源关联不变。 */
-    /* ALTER BY 20261117 21:03 SHIQINGFENG.EX 出库退货关联改用固定落位行，匹配键不含一二三性质。 */
+    
+    
+    
     CURRENT_AGG AS (
       SELECT A.*
           , NVL(B.OVERDUE_AMT, 0) AS OVERDUE_AMT
@@ -1154,17 +1130,17 @@
     ),
     /* 当前已有账龄行的业务键：补充来源命中这些键时金额挂到账龄行上，不再单独造行。 */
     /* 只取当前账龄行，年初与上月历史行无法承接补充金额，仍需独立成键。 */
-    /* ALTER BY 20261118 21:29 SHIQINGFENG.EX 新增账龄行键判定，补充来源仅在无账龄行时新增独立行。 */
+    
     AGING_KEYS AS (
       SELECT DISTINCT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2 FROM CURRENT_DIM
     ),
     /* 当前、年初、上月的业务键与一二三性质组合并集，支持当前月无数据但历史有余额的记录保留。 */
-    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 键并集纳入一二三性质，性质拆分行各自成键不被合并。 */
+    
     ALL_KEYS AS (
       SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
            , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM CURRENT_DIM
       UNION
-      /* ALTER BY 20261118 21:29 SHIQINGFENG.EX 补充来源键加无账龄行判定，已有账龄行的键不再造空性质独立行。 */
+      
       SELECT S.COD_AZIENDA, S.COD_CONTO, S.CUST_CODE, S.COD_DEST2
            , '' AS NATURE_L1_NAME, '' AS NATURE_L2_NAME, '' AS NATURE_L3_NAME
         FROM SUPPLEMENT_AGG S
@@ -1182,7 +1158,7 @@
       UNION
       SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
            , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM LM_HISTORY
-      /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 纳入出库退货独立行键，1122与2204均未命中的键不丢失。 */
+      
       UNION
       SELECT COD_AZIENDA, COD_CONTO, CUST_CODE, COD_DEST2
            , NATURE_L1_NAME, NATURE_L2_NAME, NATURE_L3_NAME FROM ZTSO04_STANDALONE
@@ -1221,7 +1197,7 @@
           , TAX_RATE, COD_VALUTA, COD_VALUTA_ORIGINARIA
           , PAY_TERM_CODE, PAY_TERM_DESC, EXCHANGE_RATE_EVAL_FLAG
         FROM LM_HISTORY
-      /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 新增出库退货独立行维度兜底，优先级最低，年初上月维度存在时以其为准。 */
+      
       UNION ALL
       SELECT 4 AS PRIORITY
           , COD_AZIENDA, COD_CONTO, COD_CATEGORIA, CUST_CODE, CUST_NAME
@@ -1235,7 +1211,7 @@
         FROM ZTSO04_STANDALONE
     ),
     /* 当前金额按来源平铺，历史字段仅作为BY/LM回接值，不参与本月金额计算。 */
-    /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 维度优先去重与年初上月回接均按一二三性质匹配，性质为空视作恒等。 */
+    
     RESULT_BASE AS (
       SELECT V_SCENARIO AS COD_SCENARIO
           , V_PERIODO AS COD_PERIODO
@@ -1321,7 +1297,7 @@
           , NVL(A.ORG_QCY_13_AMT, 0) AS ORG_QCY_13_AMT
           , NVL(A.ORG_QCY_14_AMT, 0) AS ORG_QCY_14_AMT
           , NVL(A.ORG_QCY_15_AMT, 0) AS ORG_QCY_15_AMT
-          /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 出库退货金额并入独立行来源，主来源命中取主来源，否则取独立行。 */
+          
           , NVL(A.SHP_NINV_AMT, NVL(S.SHP_NINV_AMT, 0)) AS SHP_NINV_AMT
           , NVL(A.RET_NTRF_AMT, NVL(S.RET_NTRF_AMT, 0)) AS RET_NTRF_AMT
           , NVL(A.OVERDUE_AMT, 0) AS OVERDUE_AMT
@@ -1386,7 +1362,7 @@
         AND NVL(L.NATURE_L1_NAME, 'ZZZZ') = NVL(K.NATURE_L1_NAME, 'ZZZZ')
         AND NVL(L.NATURE_L2_NAME, 'ZZZZ') = NVL(K.NATURE_L2_NAME, 'ZZZZ')
         AND NVL(L.NATURE_L3_NAME, 'ZZZZ') = NVL(K.NATURE_L3_NAME, 'ZZZZ')
-        /* ALTER BY 20261117 20:31 SHIQINGFENG.EX 关联出库退货独立行，其键与主来源不相交，仅独立行携带出库退货金额。 */
+        
         LEFT JOIN ZTSO04_STANDALONE S
           ON S.COD_AZIENDA = K.COD_AZIENDA
         AND S.COD_CONTO = K.COD_CONTO
@@ -1468,7 +1444,7 @@
           , R.CALC_BCY_15_AMT AS QCY_15_AMT
           , R.SHP_NINV_AMT
           , R.RET_NTRF_AMT
-          /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
+          
           , CASE WHEN R.LE_AGE_FLAG = 'CL' AND R.IS_REC_LG = 'N'
                       THEN R.ORG_BCY_1_AMT * (1 + NVL(R.TAX_RATE, 0))
                         + R.SHP_NINV_AMT + R.RET_NTRF_AMT
@@ -1570,7 +1546,7 @@
     /* 由于本过程生成的 OID 使用 NEWID()，重跑时必须从目标表复用人工行原有 OID。 */
     SELECT NVL(M.OID, NEWID()) AS OID
         , R.*
-        /* ALTER BY 20261105 18:26 SHIQINGFENG.EX BCY_ADJ_INCL_1_AMT纳入出库退货调整并将BCY_ADJ_INCL_0_AMT改为外层汇总 */
+        
         , R.BCY_ADJ_INCL_1_AMT
           + R.BCY_ADJ_INCL_2_AMT
           + R.BCY_ADJ_INCL_3_AMT
@@ -1587,7 +1563,7 @@
           + R.BCY_ADJ_INCL_14_AMT
           + R.BCY_ADJ_INCL_15_AMT AS BCY_ADJ_INCL_0_AMT
         , CASE WHEN M.OID IS NOT NULL THEN 'INPUT_DEFORM'
-                ELSE 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+                ELSE 'CPM_SP_M2M_ARP_AG_M'
             END AS PROVENIENZA
         , SYSDATE AS DATEUPD
         , SESSION_USER AS USERUPD
@@ -1645,7 +1621,7 @@
       AND M.COD_CONTO = R.COD_CONTO
       AND NVL(M.CUST_CODE, '#') = NVL(R.CUST_CODE, '#')
       AND NVL(M.COD_DEST2, '#') = NVL(R.COD_DEST2, '#')
-      /* ALTER BY 20261117 18:15 SHIQINGFENG.EX 人工行OID复用按一二三性质匹配，性质为空视作恒等。 */
+      
       AND NVL(M.NATURE_L1_NAME, 'ZZZZ') = NVL(R.NATURE_L1_NAME, 'ZZZZ')
       AND NVL(M.NATURE_L2_NAME, 'ZZZZ') = NVL(R.NATURE_L2_NAME, 'ZZZZ')
       AND NVL(M.NATURE_L3_NAME, 'ZZZZ') = NVL(R.NATURE_L3_NAME, 'ZZZZ')
@@ -1999,7 +1975,7 @@
       , S.USERUPD
       );
     END;
-    /* ALTER BY 20261027 17:43 SHIQINGFENG.EX 排除所有金额字段均为0的本过程自动生成记录。 */
+    
     /* 不删除 INPUT_DEFORM 人工行，避免清理自动结果时误删界面维护的数据。 */
     BEGIN
       DELETE FROM AW_MR9_ARPM02_000001 T
@@ -2011,7 +1987,7 @@
                 FROM SESSION_AZIENDA_LIST
                 WHERE SESSION_ID = V_SESSION_ID
         )
-        AND T.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+        AND T.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M'
         AND NVL(T.BY_BCY_0_AMT, 0) = 0
         AND NVL(T.LM_BCY_0_AMT, 0) = 0
         AND NVL(T.BCY_0_AMT, 0) = 0
@@ -2087,11 +2063,10 @@
         AND NVL(T.ADJ_RET_AMT, 0) = 0;
   END;
     INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , '目标表装载完成并清理全零金额记录' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    VALUES ('CPM_SP_M2M_ARP_AG_M' , '目标表装载完成并清理全零金额记录' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
     COMMIT;
 
-    /* 按周转取数限制条件回写TOV_FLAG，TOV取数直接限制该标识列。
-      ALTER BY 20261109 11:05 SHIQINGFENG.EX 新增M02周转取数标识TOV_FLAG更新 */
+    
   BEGIN
     UPDATE AW_MR9_ARPM02_000001 T
       SET T.TOV_FLAG = CASE
@@ -2178,7 +2153,7 @@
   END;
 
     /* 同键多性质分行时清零手工行金额，仅保留呆死金额和风险金额，避免与抽取行重复。 */
-    /* ALTER BY 20261119 18:07 SHIQINGFENG.EX 新增手工行金额清零，同键多性质分行时手工行只保留呆死金额与风险金额 */
+    
   BEGIN
     UPDATE AW_MR9_ARPM02_000001 T
       SET T.BY_BCY_0_AMT = 0
@@ -2350,8 +2325,7 @@
               FROM SESSION_AZIENDA_LIST
               WHERE SESSION_ID = V_SESSION_ID
       )
-      /* 同键存在性质不同的另一行时才处理，手工行单独成行时金额不被清掉。
-         ALTER BY 20261119 18:11 SHIQINGFENG.EX 对方行限定为本过程新生成的抽取行，两个手工行同键不同性质时互不清零 */
+      
       AND EXISTS (
             SELECT 1
               FROM AW_MR9_ARPM02_000001 X
@@ -2362,7 +2336,7 @@
                AND X.COD_CONTO = T.COD_CONTO
                AND NVL(X.CUST_CODE, '|') = NVL(T.CUST_CODE, '|')
                AND NVL(X.COD_DEST2, '|') = NVL(T.COD_DEST2, '|')
-               AND X.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M_PHASE2'
+               AND X.PROVENIENZA = 'CPM_SP_M2M_ARP_AG_M'
                AND X.OID <> T.OID
                AND (   NVL(X.NATURE_L1_NAME, '|') <> NVL(T.NATURE_L1_NAME, '|')
                     OR NVL(X.NATURE_L2_NAME, '|') <> NVL(T.NATURE_L2_NAME, '|')
@@ -2372,10 +2346,10 @@
   END;
 
     INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'TOV取数标识更新完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    VALUES ('CPM_SP_M2M_ARP_AG_M' , 'TOV取数标识更新完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
     COMMIT;
     /* 20261105 新增是否存续字段更新 */
-    CPM_SP_D2M_ARP_EXS_PHASE2(P_SCENARIO , P_PERIODO , P_AZIENDA , SESSION_USER);
+    CPM_SP_D2M_ARP_EXS(P_SCENARIO , P_PERIODO , P_AZIENDA , SESSION_USER);
 
     /* 清理当前会话数据。 */
     DELETE FROM SESSION_AZIENDA_LIST
@@ -2384,20 +2358,7 @@
     WHERE SESSION_ID = V_SESSION_ID;
 
     INSERT INTO ZTAB_CPM_LOG(CPM , STEP , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-    VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'END 执行完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
+    VALUES ('CPM_SP_M2M_ARP_AG_M' , 'END 执行完成' , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , V_AZIENDA);
     COMMIT;
 
-  EXCEPTION
-    WHEN OTHERS THEN
-      ROLLBACK;
-      DELETE FROM SESSION_AZIENDA_LIST
-      WHERE SESSION_ID = V_SESSION_ID;
-      DELETE FROM SESSION_V_REF_AZIENDA
-      WHERE SESSION_ID = V_SESSION_ID;
-      V_ERROR_COD := SQLCODE;
-      V_ERROR_MSG := SUBSTR(SQLERRM, 1, 4000);
-      INSERT INTO ZTAB_CPM_LOG(CPM , STEP , REMARK , EXECTIME , CREATEBY , COD_SCENARIO , COD_PERIODO , COD_AZIENDA)
-      VALUES ('CPM_SP_M2M_ARP_AG_M_PHASE2' , 'ERROR 执行报错' , V_ERROR_COD || ':' || V_ERROR_MSG , SYSDATE , SESSION_USER , V_SCENARIO , V_PERIODO , NVL(V_AZIENDA, P_AZIENDA));
-      COMMIT;
-      RAISE;
-  END CPM_SP_M2M_ARP_AG_M_PHASE2;
+  END CPM_SP_M2M_ARP_AG_M;

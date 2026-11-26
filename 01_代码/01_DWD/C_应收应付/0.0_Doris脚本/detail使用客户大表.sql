@@ -1,15 +1,15 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261126 18:10
- * 本次修改：ALTER BY 20261126 18:10 SHIQINGFENG.EX BSEG落表新增本月未清项目，未清分支排除BSEG中已取的全部凭证。
- * 上次修改：ALTER BY 20261126 15:02 SHIQINGFENG.EX BSEG已清项目独立落表，src_bsad改读dwd_fi_mr_arap_bseg_mi。
+ * 最后更新时间：20261126 19:30
+ * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+ * 上次修改：
  *
  * 脚本名称  ：detail使用客户大表.sql
  * 功能描述  ：装载往来账龄明细及账龄相关辅助来源数据。
- * 源表      ：六套SAP BSID、BSIK，test.dwd_fi_mr_arap_bseg_mi（BSEG已清与本月未清项目落表）
+ * 源表      ：六套SAP BSID、BSIK，dwd.dwd_fi_mr_arap_bseg_mi（BSEG已清与本月未清项目落表）
  *             及脚本正文引用的客商、组织、汇率和规则表。
- * 目标表    ：test.dwd_fi_mr_arap_detail_mi
+ * 目标表    ：dwd.dwd_fi_mr_arap_detail_mi
  * 版本说明  ：备用版本 —— 使用客户大表 dim_fi_mr_customer_map_dd / dim_fi_mr_customer_dd。
  *             客户大表正在改造、存在数据问题，暂不启用（2026-10-30 业务确认）。
  *             待改造完成并验证通过后，再把本文件内容覆盖到 dwd_fi_mr_arap_detail_mi.sql 并推 hidata。
@@ -17,25 +17,11 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
- *   ALTER BY 20261126 18:10 SHIQINGFENG.EX BSEG落表新增本月未清项目，未清分支排除BSEG中已取的全部凭证。
- *   ALTER BY 20261126 15:02 SHIQINGFENG.EX BSEG已清项目独立落表，src_bsad改读dwd_fi_mr_arap_bseg_mi。
- *   ALTER BY 20261126 14:52 SHIQINGFENG.EX 客户与供应商已清项目按koart合并取数，删除src_bsak，BSEG每套只读一次。
- *   ALTER BY 20261126 14:41 SHIQINGFENG.EX 未清项目排除条件改读前置的已清项目CTE，BSEG只读一次。
- *   ALTER BY 20261126 14:40 SHIQINGFENG.EX 未清项目NOT EXISTS外层表补b别名并限定关联字段，修复字段二义性报错。
- *   ALTER BY 20261126 14:02 SHIQINGFENG.EX 客户与供应商未清项目排除BSEG中已清账凭证，消除未清与已清分支重复取数。
- *   ALTER BY 20261125 21:48 SHIQINGFENG.EX 六套SAP客户与供应商已清项目及客户提前回款统一改取BKPF和BSEG。
- *   ALTER BY 20261124 20:14 SHIQINGFENG.EX 负数账龄按绝对值分段，与1.0账龄分段口径对齐。
- *   ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
- *   ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
- *   ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空。
- *   ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5改为等值连接，消除LIKE全表放大导致的超时。
- *   ALTER BY 20261124 15:03 SHIQINGFENG.EX S800客户已清项目改取BKPF和BSEG。
- *   ALTER BY 20261124 14:34 SHIQINGFENG.EX S800供应商已清项目改取BKPF和BSEG。
- *   ADD   BY 20260910 09:30 SHIQINGFENG.EX 新增
+ *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
  ******************************************************************************/
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
---SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
-SET @year_month_day = '20260801';
+SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 账龄关键日期：参数月月末DATE。
@@ -54,10 +40,9 @@ set enable_auto_create_when_overwrite=true;
 -- ============================================================================
 -- 第一段：统驭科目凭证行项目。
 -- 处理六套SAP的BSID/BSAD/BSIK/BSAK；S800已清项目改取BKPF+BSEG，其余系统保留原表。
--- ALTER BY 20261124 15:03 SHIQINGFENG.EX S800已清项目改取BKPF和BSEG
 -- 按参数月覆盖目标月份分区。
 -- ============================================================================
-INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_detail_mi PARTITION (*)
+INSERT OVERWRITE TABLE dwd.dwd_fi_mr_arap_detail_mi PARTITION (*)
 (
       dt_month                 -- 年月
     , `year`                   -- 年份
@@ -424,8 +409,6 @@ src_cepct AS (
       FROM ods.odss810_cepct
 ),
 -- 客户与供应商已清及本月未清项目：改读BSEG落表结果，避免detail脚本重复扫描六套BSEG视图。
--- ALTER BY 20261126 15:02 SHIQINGFENG.EX src_bsad改读test.dwd_fi_mr_arap_bseg_mi落表结果
--- ALTER BY 20261126 18:10 SHIQINGFENG.EX src_bsad同时承载已清与本月未清四类标识
 src_bsad AS (
     SELECT system_src
          , ods_src
@@ -453,7 +436,7 @@ src_bsad AS (
          , zlsch
          , pays_tran
          , sgtxt
-      FROM test.dwd_fi_mr_arap_bseg_mi
+      FROM dwd.dwd_fi_mr_arap_bseg_mi
      WHERE dt_month = @dt_month
 ),
 -- 客户未清项目：仅保留参数月末前已过账且非A/S状态的记录。
@@ -463,8 +446,7 @@ src_bsid AS (
      WHERE b.budat <= @key_date_sap
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 客户未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S600'
@@ -484,8 +466,7 @@ src_bsid AS (
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 客户未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S700'
@@ -503,8 +484,7 @@ src_bsid AS (
      WHERE b.budat <= @key_date_sap
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 客户未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S800'
@@ -523,8 +503,7 @@ src_bsid AS (
      WHERE b.budat <= @key_date_sap
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 客户未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S900'
@@ -543,8 +522,7 @@ src_bsid AS (
        AND b.mandt = '610'
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 客户未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S610'
@@ -563,8 +541,7 @@ src_bsid AS (
        AND b.mandt = '810'
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 客户未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S810'
@@ -582,8 +559,7 @@ src_bsik AS (
      WHERE b.budat <= @key_date_sap
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 供应商未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S600'
@@ -603,8 +579,7 @@ src_bsik AS (
      WHERE budat <= @key_date_sap
        AND COALESCE(bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 供应商未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S700'
@@ -622,8 +597,7 @@ src_bsik AS (
      WHERE b.budat <= @key_date_sap
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 供应商未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S800'
@@ -641,8 +615,7 @@ src_bsik AS (
      WHERE b.budat <= @key_date_sap
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 供应商未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S900'
@@ -661,8 +634,7 @@ src_bsik AS (
        AND b.mandt = '610'
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 供应商未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S610'
@@ -681,8 +653,7 @@ src_bsik AS (
        AND b.mandt = '810'
        AND COALESCE(b.bstat, '') NOT IN ('A', 'S')
        AND (COALESCE(b.dmbtr, 0) <> 0 OR COALESCE(b.wrbtr, 0) <> 0)
-       -- ALTER BY 20261126 18:10 SHIQINGFENG.EX 供应商未清排除BSEG中已取的全部凭证（已清与本月未清）
-       AND NOT EXISTS (
+              AND NOT EXISTS (
            SELECT 1
              FROM src_bsad bc
             WHERE bc.system_src = 'S810'
@@ -710,7 +681,6 @@ account_cfg AS (
        AND s.mitkz IN ('D', 'K')
 ),
 -- 合并三类同构行项目源，并标记应收/应付及客商类型。
--- ALTER BY 20261126 18:10 SHIQINGFENG.EX 已清与本月未清四类标识统一按BSEG_AK/BSEG_IK识别供应商侧
 unioned_items AS (
     SELECT 'D' AS acct_type_code
          , 'CUSTOMER' AS object_source
@@ -824,7 +794,6 @@ items_with_aging_date AS (
        AND system_cfg.company_code IS NULL
 ),
 -- 主户公司范围：配置表内的公司不使用分户，分户编码置空后按主户匹配。
--- ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空
 cust_range_dim AS (
     SELECT DISTINCT TRIM(company_code) AS company_code
       FROM dim.dim_rule_fi_mr_ar_cust_range
@@ -916,8 +885,7 @@ normalized_items AS (
          , STR_TO_DATE(NULLIF(TRIM(a.augdt), ''), '%Y%m%d') AS clearing_dt
          , NULLIF(LTRIM(TRIM(a.cust_head_code), '0'), '') AS cust_head_code
          -- 配置表范围内的公司不使用分户。
-         -- ALTER BY 20261124 17:31 SHIQINGFENG.EX 分户编码按主户公司范围配置表置空
-         , CASE
+                  , CASE
                WHEN cr.company_code IS NOT NULL THEN NULL
                ELSE NULLIF(LTRIM(TRIM(a.filkd), '0'), '')
            END AS cust_branch_code
@@ -1358,8 +1326,7 @@ profitcenter_candidate AS (
                          , MAX(channel_bu_code) AS channel_bu_code
                       FROM dim.dim_rule_mrs_mr3_channel_bu_relation
                      -- 关系表按期间取版本，避免新旧版本同时命中。
-                     -- ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系补充生效期间限制
-                     WHERE SUBSTR(start_time, 1, 6) <= @dt_month
+                                          WHERE SUBSTR(start_time, 1, 6) <= @dt_month
                        AND NVL(SUBSTR(end_time, 1, 6), '999999') >= @dt_month
                      GROUP BY TRIM(com_3rd_code)
               ) bu
@@ -1546,8 +1513,7 @@ ar_nature_candidate AS (
     UNION ALL
     -- 优先级5：公司+科目+客商。规则客商为纯通配符'%'时按任意客商匹配，单独走等值连接；
     -- 其余带通配的规则才走 LIKE，避免千万行明细与非等值条件做嵌套循环。
-    -- ALTER BY 20261124 15:21 SHIQINGFENG.EX 性质批次5拆分等值连接，消除LIKE放大
-    SELECT b.fact_key
+        SELECT b.fact_key
          , r.batch_id
          , r.nature_l1_name
          , r.nature_l2_name
@@ -1593,7 +1559,6 @@ ar_nature_pick AS (
      GROUP BY c.fact_key
 ),
 -- 按有效期聚合业务范围映射规则；公司编码含通配符，先按公司主数据展开为实际公司。
--- ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
 ar_busrange_rule AS (
     SELECT CAST(a.batch_id AS INT) AS batch_id
          , b.cod_azienda AS company_code
@@ -1967,8 +1932,7 @@ SELECT @dt_month
            )
        )
   -- 负数账龄（到期日在基准日之后）按绝对值落段，与1.0的账龄分段口径一致，避免兜底进5年以上段。
-  -- ALTER BY 20261124 20:14 SHIQINGFENG.EX 负数账龄按绝对值分段，与1.0账龄分段口径对齐。
-  LEFT JOIN aging_seg_cfg seg
+    LEFT JOIN aging_seg_cfg seg
     ON ABS(a.aging_days) >= seg.aging_seg_fr
    AND ABS(a.aging_days) <= seg.aging_seg_to
       LEFT JOIN customer_supplier_dim c
@@ -2009,8 +1973,7 @@ SELECT @dt_month
                  , MAX(channel_bu_name) AS channel_bu_name
               FROM dim.dim_rule_mrs_mr3_channel_bu_relation
              -- 关系表按期间取版本，避免新旧版本同时命中。
-             -- ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系补充生效期间限制
-             WHERE SUBSTR(start_time, 1, 6) <= @dt_month
+                          WHERE SUBSTR(start_time, 1, 6) <= @dt_month
                AND NVL(SUBSTR(end_time, 1, 6), '999999') >= @dt_month
              GROUP BY TRIM(com_3rd_code)
       ) bu
@@ -2045,7 +2008,7 @@ SELECT @dt_month
 -- 第二段：非统驭科目月末累计余额。
 -- 本段必须在第一段覆盖完成后追加；单独重复执行会产生重复余额行。
 -- ============================================================================
-INSERT INTO test.dwd_fi_mr_arap_detail_mi
+INSERT INTO dwd.dwd_fi_mr_arap_detail_mi
 (
       dt_month                 -- 年月
     , `year`                   -- 年份

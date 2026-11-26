@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
+CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M(
     P_SCENARIO   IN VARCHAR2
   , P_PERIODO   IN VARCHAR2
   , P_AZIENDA   IN VARCHAR2
@@ -9,19 +9,17 @@ CREATE OR REPLACE PROCEDURE CPM_SP_S2S_TDAYS_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261113 16:35
-   * 本次修改：ALTER BY 20261113 16:35 SHIQINGFENG.EX 目标公司为空的配置不再装载，删除与插入统一按运行参数的公司和事业部限定
-   * 上次修改：ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
+   * 最后更新时间：20261126 19:30
+   * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+   * 上次修改：
    *
-   * 过程名称  ：CPM_SP_S2S_TDAYS_M_PHASE2
+   * 过程名称  ：CPM_SP_S2S_TDAYS_M
    * 功能描述  ：周转计算配置驱动的S2S装载过程。
    * 源表      ：AW_RUL_TOVCAL_000001配置的SOURCE_TABLE。
    * 目标表    ：AW_RUL_TOVCAL_000001配置的TARGET_TABLE，当前业务目标为AW_MR7_ARPA01_000001。
    *
    * 修改历史：
-   *   ALTER BY 20261113 16:35 SHIQINGFENG.EX 目标公司为空的配置不再装载，删除与插入统一按运行参数的公司和事业部限定
-   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度
-   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU维度改为配置驱动
+   *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
    ******************************************************************************/
   V_SCENARIO       VARCHAR2(30);
   V_PERIODO        VARCHAR2(30);
@@ -294,7 +292,7 @@ BEGIN
 
   /* 第三阶段：记录过程开始日志。 */
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_S2S_TDAYS_M_PHASE2', 'BEGIN 开始执行', '配置表=AW_RUL_TOVCAL_000001;模块=' || TRIM(P_EXP) || ';期间=' || V_YEARMONTH, SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
+  VALUES ('CPM_SP_S2S_TDAYS_M', 'BEGIN 开始执行', '配置表=AW_RUL_TOVCAL_000001;模块=' || TRIM(P_EXP) || ';期间=' || V_YEARMONTH, SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
 
   /* 第四阶段：读取有效周转配置——每条决定来源表、目标表、目标维度及最多10组筛选。 */
   V_ERROR_STAGE := '读取有效配置';
@@ -312,7 +310,7 @@ BEGIN
          , D_ONOFFLINE
          , D_SALE_DEPT
          , D_CHANNEL
-         /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 1030新增渠道BU维度（配置表 AW_RUL_TOVCAL 新增列后按配置取数）。 */
+         
          , D_CHANNEL_BU
          , D_CC_CUSTGRP
          , COD_DEST3
@@ -347,7 +345,7 @@ BEGIN
       RAISE_APPLICATION_ERROR(-20015, '有效期配置非法，规则=' || V_ERROR_RULE);
     END IF;
 
-    /* ALTER BY 20261113 16:35 SHIQINGFENG.EX 目标公司为空的配置直接排除，不再作为无公司限制的兜底配置装载。 */
+    
     IF TRIM(R.COD_AZIENDA) IS NULL THEN
       CONTINUE;
     END IF;
@@ -377,7 +375,7 @@ BEGIN
       V_DELETE_SQL := 'DELETE FROM ' || V_TARGET_OBJECT
         || ' D WHERE D.COD_SCENARIO = ''' || REPLACE(V_SCENARIO, '''', '''''') || ''''
         || ' AND D.COD_PERIODO = ''' || REPLACE(V_PERIODO, '''', '''''') || ''''
-        || ' AND D.PROVENIENZA = ''CPM_SP_S2S_TDAYS_M_PHASE2'''
+        || ' AND D.PROVENIENZA = ''CPM_SP_S2S_TDAYS_M'''
         || ' AND D.COD_AZIENDA IN (SELECT L.ELEM FROM SESSION_AZIENDA_LIST L'
         || ' WHERE L.SESSION_ID = ' || V_SESSION_ID || ')';
       /* P_BG为具体清单时按清单限定事业部删除范围，P_BG=ALL时不限制事业部。 */
@@ -389,7 +387,7 @@ BEGIN
       V_TARGET_SEEN(V_TARGET_OBJECT) := TRUE;
 
       INSERT INTO ZTAB_CPM_LOG (CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-      VALUES ('CPM_SP_S2S_TDAYS_M_PHASE2', '目标表删除完成', 'TARGET=' || V_TARGET_OBJECT || ';删除范围=参数公司|事业部=' || P_BG || ';来源=CPM_SP_S2S_TDAYS_M_PHASE2', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
+      VALUES ('CPM_SP_S2S_TDAYS_M', '目标表删除完成', 'TARGET=' || V_TARGET_OBJECT || ';删除范围=参数公司|事业部=' || P_BG || ';来源=CPM_SP_S2S_TDAYS_M', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
     END IF;
 
     /* 第六阶段：拼装动态取数装载SQL——内层按10组条件聚合18个金额，外层算6个周转天数。 */
@@ -400,8 +398,7 @@ BEGIN
 
     /* 直接动态写入目标表：参数和配置目标维度使用绑定变量，来源表、目标表及HIE表使用安全拼接。 */
     /* AGG先按来源类别、币种聚合18个金额；外层SELECT再计算6个周转天数。 */
-    /* ALTER BY 20261113 16:35 SHIQINGFENG.EX 来源公司不再强制等于目标公司，
-       仅受运行参数公司范围约束，配置筛选组可再按来源公司过滤，支持跨公司归集。 */
+    
     V_SQL := 'INSERT INTO ' || V_TARGET_OBJECT || '('
       || 'OID, COD_SCENARIO, COD_PERIODO, D_BG, COD_CONTO, COD_AZIENDA, D_GRAN_CAL, COD_CATEGORIA'
       || ', D_CHANNEL, D_ONOFFLINE, COD_DEST2, COD_DEST3, D_SALE_DEPT, D_CHANNEL_BU, D_CC_CUSTGRP, COD_VALUTA'
@@ -461,7 +458,7 @@ BEGIN
     /* 同表读写边界：目标删除先于本目标首次写入；来源等于目标时排除本过程来源， */
     /* 避免同一过程前一条配置刚写入的结果被后一条配置再次读取并重复累加。 */
     IF V_SOURCE_OBJECT = V_TARGET_OBJECT THEN
-      V_SQL := V_SQL || CHR(10) || '     AND NVL(S.PROVENIENZA, ''ZZZZ'') <> ''' || 'CPM_SP_S2S_TDAYS_M_PHASE2' || '''';
+      V_SQL := V_SQL || CHR(10) || '     AND NVL(S.PROVENIENZA, ''ZZZZ'') <> ''' || 'CPM_SP_S2S_TDAYS_M' || '''';
     END IF;
 
     /* 第七阶段：逐组追加配置筛选条件。 */
@@ -509,7 +506,7 @@ BEGIN
       || ', CASE WHEN A.LY_MTD_CSM_AMT = 0 THEN 0 ELSE ((A.LY_LM_OCP_AMT + A.LY_END_OCP_AMT) / 2 * 30) / A.LY_MTD_CSM_AMT END'
       || ', CASE WHEN A.LY_YTD_CSM_AMT = 0 THEN 0 ELSE ((A.LY_BEG_OCP_AMT / 2 + A.LY_YTD_OCP_AMT - A.LY_END_OCP_AMT / 2) * 30) / A.LY_YTD_CSM_AMT END'
       || ', P.IS_MTR_FLAG'
-      || ', ''' || 'CPM_SP_S2S_TDAYS_M_PHASE2' || ''''
+      || ', ''' || 'CPM_SP_S2S_TDAYS_M' || ''''
       || ', SYSDATE'
       || ', P.USERUPD'
       || CHR(10) || '  FROM AGG A CROSS JOIN PARAMS P';
@@ -549,7 +546,7 @@ BEGIN
 
   /* 第十阶段：记录完成日志、清理SESSION范围并提交。 */
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_S2S_TDAYS_M_PHASE2', '目标表装载完成', '配置数量=' || V_CONFIG_COUNT || ';插入数量=' || V_INSERT_COUNT, SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
+  VALUES ('CPM_SP_S2S_TDAYS_M', '目标表装载完成', '配置数量=' || V_CONFIG_COUNT || ';插入数量=' || V_INSERT_COUNT, SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
 
   /* 成功路径清理当前数据库SESSION的实际公司范围；字段和条件与参考TOV过程一致。 */
   DELETE FROM SESSION_AZIENDA_LIST
@@ -559,24 +556,7 @@ BEGIN
    WHERE SESSION_ID = V_SESSION_ID;
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_S2S_TDAYS_M_PHASE2', 'END 执行完成', '配置数量=' || V_CONFIG_COUNT || ';插入数量=' || V_INSERT_COUNT, SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
+  VALUES ('CPM_SP_S2S_TDAYS_M', 'END 执行完成', '配置数量=' || V_CONFIG_COUNT || ';插入数量=' || V_INSERT_COUNT, SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
   COMMIT;
   /* 异常处理：回滚、清理SESSION、记错误日志后重抛。 */
-EXCEPTION
-  WHEN OTHERS THEN
-    V_ERROR_COD := SQLCODE;
-    V_ERROR_MSG := SUBSTR(SQLERRM, 1, 3500);
-    ROLLBACK;
-
-    /* 异常路径使用与成功路径完全相同的SESSION字段和SESSION_ID条件清理范围。 */
-    DELETE FROM SESSION_AZIENDA_LIST
-     WHERE SESSION_ID = V_SESSION_ID;
-
-    DELETE FROM SESSION_V_REF_AZIENDA
-     WHERE SESSION_ID = V_SESSION_ID;
-
-    INSERT INTO ZTAB_CPM_LOG (CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-    VALUES ('CPM_SP_S2S_TDAYS_M_PHASE2', 'ERROR 执行报错', SUBSTR('阶段=' || V_ERROR_STAGE || ';规则=' || V_ERROR_RULE || ';SOURCE=' || V_ERROR_SOURCE || ';TARGET=' || V_ERROR_TARGET || ';错误=' || V_ERROR_COD || ':' || V_ERROR_MSG, 1, 4000), SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, SUBSTR(P_BG || '|' || V_AZIENDA, 1, 4000));
-    COMMIT;
-    RAISE;
-END CPM_SP_S2S_TDAYS_M_PHASE2;
+END CPM_SP_S2S_TDAYS_M;

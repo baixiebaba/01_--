@@ -1,5 +1,5 @@
 -- 往来BSEG已清凭证行项目表（Apache Doris）
--- 目标表：test.dwd_fi_mr_arap_bseg_mi
+-- 目标表：dwd.dwd_fi_mr_arap_bseg_mi
 -- 表类型：事实表（BSEG取数中间落表）；数据分层：DWD
 -- 最后更新：20261126 SHIQINGFENG.EX 新增
 --
@@ -7,7 +7,7 @@
 --       DUPLICATE KEY 取前四列前缀，加速未清项目排除条件的等值匹配。
 --       装载脚本：0.0_Doris脚本/dwd_fi_mr_arap_bseg_mi.sql
 
-CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_bseg_mi (
+CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_arap_bseg_mi (
       dt_month VARCHAR(6) COMMENT '年月YYYYMM，取参数月'
     , system_src VARCHAR(20) COMMENT '来源系统S600/S700/S800/S900/S610/S810'
     , ods_src VARCHAR(30) COMMENT '数据来源BSEG_D/BSEG_K/BSAD_EPAY'

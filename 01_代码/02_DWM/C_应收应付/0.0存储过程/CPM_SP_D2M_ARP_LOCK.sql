@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_LOCK_PHASE2(
+CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_LOCK(
     P_SCENARIO   IN VARCHAR2
   , P_PERIODO    IN VARCHAR2
   , P_AZIENDA    IN VARCHAR2
@@ -7,18 +7,17 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_LOCK_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261105 14:07
-   * 本次修改：ALTER BY 20261105 14:07 SHIQINGFENG.EX 公司范围改用SESSION_AZIENDA_LIST会话表
-   * 上次修改：ALTER BY 20261105 14:00 SHIQINGFENG.EX 新增应收应付二期D2M公司锁定过程
+   * 最后更新时间：20261126 19:30
+   * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+   * 上次修改：
    *
-   * 过程名称  ：CPM_SP_D2M_ARP_LOCK_PHASE2
+   * 过程名称  ：CPM_SP_D2M_ARP_LOCK
    * 功能描述  ：按场景、期间和会话公司范围将D2M锁定记录的ARP_FLAG更新为Y，并记录更新用户和更新时间
    * 源表      ：TGK_FIMA_HISENSE.V_REF_AZIENDA、TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
    * 目标表    ：TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
    *
    * 修改历史：
-   *   ALTER BY 20261105 14:07 SHIQINGFENG.EX 公司范围改用SESSION_AZIENDA_LIST会话表
-   *   ALTER BY 20261105 14:00 SHIQINGFENG.EX 新增应收应付二期D2M公司锁定过程
+   *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
    *******************************************************************************/
   V_SESSION_ID NUMBER;
 BEGIN
@@ -48,8 +47,7 @@ BEGIN
         OR P_AZIENDA = 'ALL'
      );
 
-  /* 锁定本次场景期间内的D2M记录，已为Y的不重复更新。
-     ALTER BY 20261105 14:07 SHIQINGFENG.EX 公司范围改用SESSION_AZIENDA_LIST会话表 */
+  
   UPDATE TGK_FIMA_HISENSE.AW_RUL_DWMCRS_000001
      SET ARP_FLAG = 'Y'
        , USERUPD  = SESSION_USER
@@ -71,4 +69,4 @@ BEGIN
    WHERE SESSION_ID = V_SESSION_ID;
 
   COMMIT;
-END CPM_SP_D2M_ARP_LOCK_PHASE2;
+END CPM_SP_D2M_ARP_LOCK;

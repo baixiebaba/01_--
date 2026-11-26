@@ -18,8 +18,8 @@
 
 | 当前生效（不使用客户大表） | 备用（使用客户大表） | 目标表 |
 |---|---|---|
-| `dwd_fi_mr_arap_detail_mi.sql` | `detail使用客户大表.sql` | `test.dwd_fi_mr_arap_detail_mi` |
-| `dwd_fi_mr_arap_sum_mi.sql` | `sum使用客户大表.sql` | `test.dwd_fi_mr_arap_sum_mi` |
+| `dwd_fi_mr_arap_detail_mi.sql` | `detail使用客户大表.sql` | `dwd.dwd_fi_mr_arap_detail_mi` |
+| `dwd_fi_mr_arap_sum_mi.sql` | `sum使用客户大表.sql` | `dwd.dwd_fi_mr_arap_sum_mi` |
 
 两对文件**业务逻辑必须完全一致**，唯一允许的差异就是「客商维度是否依赖客户大表」。
 

@@ -1,14 +1,14 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261124 19:06
- * 本次修改：ALTER BY 20261124 19:06 SHIQINGFENG.EX 性质匹配由ON内多分支OR改为按批次分段等值关联，消除嵌套循环超时。
- * 上次修改：ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
+ * 最后更新时间：20261126 19:30
+ * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+ * 上次修改：
  *
  * 脚本名称  ：dwd_fi_mr_arap_sum_mi.sql
  * 功能描述  ：汇总装载往来账龄数据。
  * 源表      ：详见脚本正文（往来账龄明细及八类业务来源）。
- * 目标表    ：test.dwd_fi_mr_arap_sum_mi
+ * 目标表    ：dwd.dwd_fi_mr_arap_sum_mi
  * 版本说明  ：★ 当前生效版本（2026-10-30 起）—— 客商维度不依赖客户大表
  *             dim_fi_mr_customer_map_dd / dim_fi_mr_customer_dd。
  *             生效原因：客户大表仍在改造、存在数据问题，暂不启用（2026-10-30 业务确认）。
@@ -17,19 +17,12 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
- *   ALTER BY 20261124 19:06 SHIQINGFENG.EX 性质匹配由ON内多分支OR改为按批次分段等值关联，消除嵌套循环超时。
- *   ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
- *   ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
- *   ALTER BY 20261119 15:43 SHIQINGFENG.EX 信汇应收应付补充一二三级性质映射，按公司+科目+客商、公司+客商、公司+科目三级优先级匹配规则。
- *   ALTER BY 20261118 21:57 SHIQINGFENG.EX OVERDUE与POLICY利润中心映射批次号改为batch_id=4（旧利润中心映射新利润中心）。
- *   ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0，batch5客商改按通配匹配。
- *   ALTER BY 20261102 16:10 SHIQINGFENG.EX 去除无意义CAST：CAST(NULL AS 类型)占位改为NULL，日期串CAST(STR_TO_DATE(...) AS DATE)外层包装删除；保留日期列CAST(...AS STRING)（源表varchar与datetime混用需显式统一）、batch_id字符转INT、zbd1t转INT、currdec转INT及金额DECIMALV3精度转换。
- *   ADD   BY 20260915 15:40 SHIQINGFENG.EX 新增
+ *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
  ******************************************************************************/
 
 -- 业务输入：运行月份基准日，格式YYYYMMDD，约定为参数月01日。
---SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
-SET @year_month_day = '20260801';
+SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM。
 SET @dt_month = LEFT(@year_month_day, 6);
 -- 统计截止日期：取参数月份月末，供EPAY baseline_dt判断。
@@ -41,7 +34,7 @@ set enable_auto_create_when_overwrite=true;
 -- 目标表装载：九类来源统一为窄事实接口后合并、汇总并一次覆盖目标分区。
 -- DETAIL保留真实账龄段；其余来源无精确账龄，统一写入账龄段1。
 -- ============================================================================
-INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sum_mi PARTITION (*)
+INSERT OVERWRITE TABLE dwd.dwd_fi_mr_arap_sum_mi PARTITION (*)
 (
       dt_month                 -- 年月
     , `year`                   -- 年份
@@ -143,7 +136,7 @@ cterm_dedup AS (
          , cust_code
          , MAX(pay_term_code) AS pay_term_code
          , MAX(pay_term_desc) AS pay_term_desc
-      FROM test.dwd_fi_mr_ar_cterm_md
+      FROM dwd.dwd_fi_mr_ar_cterm_md
      GROUP BY system_src
             , company_code
             , cust_code
@@ -242,7 +235,7 @@ ecls_match AS (
     SELECT d.acct_map_code
          , d.cust_code
          , d.pays_tran
-      FROM test.dwd_fi_mr_arap_detail_mi d
+      FROM dwd.dwd_fi_mr_arap_detail_mi d
       JOIN ecls_channel_bu cb
         ON cb.channel_bu_code = d.channel_bu_code
      WHERE d.dt_month = @dt_month
@@ -278,7 +271,7 @@ detail_rule_base AS (
                 AND d.acct_map_code LIKE '1122%' THEN 'UREB'
            END AS ufee_ureb_flag
          , CASE WHEN em.acct_map_code IS NOT NULL THEN 'Y' END AS ecls_flag
-      FROM test.dwd_fi_mr_arap_detail_mi d
+      FROM dwd.dwd_fi_mr_arap_detail_mi d
       LEFT JOIN tax_rate_rule_1 t1
         ON t1.company_code = d.company_code
        AND t1.cust_code = d.cust_head_code
@@ -644,8 +637,7 @@ overdue_profitcenter_rule AS (
          , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
          , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
-     -- ALTER BY 20261118 21:57 SHIQINGFENG.EX 利润中心映射批次号改为batch_id=4，对应旧利润中心映射新利润中心。
-     WHERE CAST(pm.batch_id AS INT) = 4
+          WHERE CAST(pm.batch_id AS INT) = 4
        AND NVL(pm.valid_fr, '202401') <= @dt_month
        AND NVL(pm.valid_to, '999999') >= @dt_month
      GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
@@ -730,7 +722,7 @@ sms_sum AS (
          , sname
          , SUM(yue) AS amount
          , leibie
-      FROM test.dwd_fi_mr_arap_sms_balance_mi a 
+      FROM dwd.dwd_fi_mr_arap_sms_balance_mi a 
       LEFT JOIN (
                   SELECT DISTINCT TRIM(ent_sap700_code) AS ent_sap700_code
                        , TRIM(cod_azienda) AS cod_azienda
@@ -873,7 +865,6 @@ policy_customer_dim AS (
         ON ctp.cust_code = m.cust_sap_code
 ),
 -- POLICY：读取目标月份有效的周转分析渠道规则，并按匹配键去重。
--- ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
 policy_tov_rule_1 AS (
     SELECT b.cod_azienda AS company_code
          , LTRIM(NULLIF(TRIM(a.cust_code), ''), '0') AS cust_code
@@ -889,7 +880,6 @@ policy_tov_rule_1 AS (
             , LTRIM(NULLIF(TRIM(a.cust_code), ''), '0')
 ),
 -- POLICY：周转分析渠道第二匹配方式按公司+三级公司分类去重。
--- ALTER BY 20261124 18:52 SHIQINGFENG.EX 周转渠道规则公司编码先按公司主数据展开，事实侧等值匹配。
 policy_tov_rule_2 AS (
     SELECT b.cod_azienda AS company_code
          , a.channel_l3_code
@@ -950,8 +940,7 @@ policy_src_base AS (
                  , MAX(channel_bu_name) AS channel_bu_name
               FROM dim.dim_rule_mrs_mr3_channel_bu_relation
              -- 关系表按期间取版本，避免新旧版本同时命中。
-             -- ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系补充生效期间限制
-             WHERE SUBSTR(start_time, 1, 6) <= @dt_month
+                          WHERE SUBSTR(start_time, 1, 6) <= @dt_month
                AND NVL(SUBSTR(end_time, 1, 6), '999999') >= @dt_month
              GROUP BY com_3rd_code
       ) bu
@@ -1083,8 +1072,7 @@ policy_profitcenter_rule AS (
          , MAX(NULLIF(LTRIM(TRIM(pm.profitcenter_code), '0'), '')) AS profitcenter_code
          , MAX(NULLIF(TRIM(pm.profitcenter_name), '')) AS profitcenter_name
       FROM dim.dim_rule_fi_mr_ar_profit_mapping pm
-     -- ALTER BY 20261118 21:57 SHIQINGFENG.EX 利润中心映射批次号改为batch_id=4，对应旧利润中心映射新利润中心。
-     WHERE CAST(pm.batch_id AS INT) = 4
+          WHERE CAST(pm.batch_id AS INT) = 4
        AND NVL(pm.valid_fr, '202401') <= @dt_month
        AND NVL(pm.valid_to, '999999') >= @dt_month
      GROUP BY NULLIF(LTRIM(TRIM(pm.src_profitcenter_code), '0'), '')
@@ -1279,7 +1267,6 @@ standard_fact AS (
     SELECT * FROM writeoff_fact
 ),
 -- 读取与DETAIL一致的三级性质规则；规则有效期按目标月份过滤。
--- ALTER BY 20261118 20:29 SHIQINGFENG.EX 三级性质规则增加系统号匹配，客商与利润中心去前导0
 ar_nature_rule AS (
     SELECT CAST(batch_id AS INT) AS batch_id
          , CONCAT('S', TRIM(system_src)) AS system_src
@@ -1315,7 +1302,6 @@ ar_nature_fact AS (
      WHERE system_src NOT IN ('S600', 'S700', 'S800', 'S900', 'S610', 'S810')
 ),
 -- 按批次逐段等值关联性质规则，替代ON内多分支OR，避免退化为嵌套循环。
--- ALTER BY 20261124 19:06 SHIQINGFENG.EX 性质匹配由ON内OR改为按批次分段等值关联，消除嵌套循环超时。
 ar_nature_candidate AS (
     /* 信汇来源：公司+科目+客商 */
     SELECT f.system_src
@@ -1801,7 +1787,7 @@ SELECT p.dt_month
 
 -- ============================================================================
 -- 上线前核对项
--- 1. 本脚本仅保留一条 INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_sum_mi PARTITION (*)；完整重跑会一次覆盖写入本次来源覆盖到的目标分区，禁止再执行任何后续追加写入。
+-- 1. 本脚本仅保留一条 INSERT OVERWRITE TABLE dwd.dwd_fi_mr_arap_sum_mi PARTITION (*)；完整重跑会一次覆盖写入本次来源覆盖到的目标分区，禁止再执行任何后续追加写入。
 -- 2. 执行前须先完成 detail 层；DETAIL排除 acct_map_code 为1122000095、2202000095，两个科目仅由XH应收/XH应付构造。
 -- 3. 九类来源均先输出统一窄事实接口，再以 UNION ALL 合并；最终按完整报告维度（含system_src、ods_src）汇总，避免跨来源误并。
 -- 4. DETAIL保留真实 aging_seg_code；其他来源统一设置为'1'，最终0桶由1至15桶汇总，保证0桶等于1至15桶之和。
@@ -1816,7 +1802,7 @@ SELECT p.dt_month
 -- 使用DETAIL已装载的BSID/BSAD数据，按baseline_dt、渠道、凭证月份和凭证类型筛选提前回款；按公司+客商+利润中心聚合负数。
 -- 本段必须在前面的Sum覆盖装载完成后执行。
 -- ============================================================================
-INSERT INTO test.dwd_fi_mr_arap_sum_mi
+INSERT INTO dwd.dwd_fi_mr_arap_sum_mi
 (
       dt_month                 -- 年月
     , `year`                   -- 年份
@@ -1927,7 +1913,7 @@ epay_detail AS (
          , d.system_src
          , d.bcy_amt
          , d.qcy_amt
-      FROM test.dwd_fi_mr_arap_detail_mi d
+      FROM dwd.dwd_fi_mr_arap_detail_mi d
      WHERE d.dt_month = @dt_month
        AND (d.ods_src = 'BSID' OR d.ods_src LIKE 'BSAD%')
        AND d.acct_map_code LIKE '1122%'

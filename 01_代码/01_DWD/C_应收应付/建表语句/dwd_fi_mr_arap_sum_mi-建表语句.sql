@@ -1,5 +1,5 @@
 -- 往来账龄汇总表（Apache Doris）
--- 目标表：test.dwd_fi_mr_arap_sum_mi
+-- 目标表：dwd.dwd_fi_mr_arap_sum_mi
 -- 表类型：汇总事实表；数据分层：DWD
 -- 最后更新：20261126 SHIQINGFENG.EX 按实际库 SHOW CREATE TABLE 全量对齐
 --
@@ -16,7 +16,7 @@
 -- 说明：DUPLICATE KEY 与实际库一致，仅 dt_month 单列；如需多列前缀索引，
 --       把 KEY 补成 dt_month, year, month, company_code, cust_code。
 
-CREATE TABLE IF NOT EXISTS test.dwd_fi_mr_arap_sum_mi (
+CREATE TABLE IF NOT EXISTS dwd.dwd_fi_mr_arap_sum_mi (
       dt_month VARCHAR(6) COMMENT '年月YYYYMM'
     , `year` VARCHAR(4) COMMENT '年份'
     , `month` VARCHAR(2) COMMENT '月份'

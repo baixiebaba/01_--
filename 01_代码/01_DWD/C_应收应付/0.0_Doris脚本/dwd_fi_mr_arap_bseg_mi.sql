@@ -1,23 +1,23 @@
 /*******************************************************************************
  *                                  脚本说明
  *-----------------------------------------------------------------------------
- * 最后更新时间：20261126 18:10
- * 本次修改：ALTER BY 20261126 18:10 SHIQINGFENG.EX 新增参数月凭证未清取数，已清与未清分别标记BSEG_AD/BSEG_AK与BSEG_ID/BSEG_IK。
- * 上次修改：ALTER BY 20261126 15:02 SHIQINGFENG.EX 新增BSEG已清凭证行项目落表脚本。
+ * 最后更新时间：20261126 19:30
+ * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+ * 上次修改：
  *
  * 脚本名称  ：dwd_fi_mr_arap_bseg_mi.sql
  * 功能描述  ：装载六套SAP BKPF+BSEG的已清、本月未清与提前回款凭证行项目，供往来账龄明细脚本读取。
  * 源表      ：六套SAP odssap_zs{{600,700,800,900,610,810}}_bkpf_v / _bseg_v，
  *             ods.odsfima_aw_rul_revaaz_000001（S700公司编码映射）。
- * 目标表    ：test.dwd_fi_mr_arap_bseg_mi
+ * 目标表    ：dwd.dwd_fi_mr_arap_bseg_mi
  *
  * 修改历史：
- *   ALTER BY 20261126 18:10 SHIQINGFENG.EX 新增参数月凭证未清取数，已清与未清分别标记BSEG_AD/BSEG_AK与BSEG_ID/BSEG_IK。
- *   ALTER BY 20261126 15:02 SHIQINGFENG.EX 新增BSEG已清凭证行项目落表脚本。
+ *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
  ******************************************************************************/
 
 -- 业务输入：运行月份基准日，须与 dwd_fi_mr_arap_detail_mi.sql 的 @year_month_day 保持一致。
-SET @year_month_day = '20260801';
+SET @year_month_day = DATE_FORMAT((CURDATE() - INTERVAL 7 DAY), '%Y%m01');
+--SET @year_month_day = '20260801';
 -- 分区月份：YYYYMM，写入 dt_month。
 SET @dt_month = LEFT(@year_month_day, 6);
 -- SAP日期比较值：参数月月末YYYYMMDD。
@@ -29,7 +29,7 @@ set enable_auto_create_when_overwrite=true;
 -- ============================================================================
 -- 按参数月覆盖写入BSEG已清凭证行项目分区，load_dt 取当前时间。
 -- ============================================================================
-INSERT OVERWRITE TABLE test.dwd_fi_mr_arap_bseg_mi PARTITION (*)
+INSERT OVERWRITE TABLE dwd.dwd_fi_mr_arap_bseg_mi PARTITION (*)
 (
       dt_month
     , system_src
@@ -68,7 +68,6 @@ s700_company_map AS (
       FROM ods.odsfima_aw_rul_revaaz_000001
      WHERE NULLIF(TRIM(ent_sap700_code), '') IS NOT NULL
 ),
--- ALTER BY 20261126 18:10 SHIQINGFENG.EX 六套SAP BKPF+BSEG已清、本月未清与提前回款凭证行项目，每套只扫一次BSEG同时产出已清和未清两类。
 -- 已清口径：月末后清账（augdt>月末），用于回溯月末未清快照；未清口径：至今未清（augdt=00000000）且为参数月凭证。
 src_bseg AS (
     SELECT 'S600' AS system_src

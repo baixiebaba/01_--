@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
+CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M(
     P_SCENARIO  IN VARCHAR2
   , P_PERIODO   IN VARCHAR2
   , P_AZIENDA   IN VARCHAR2
@@ -7,39 +7,17 @@ CREATE OR REPLACE PROCEDURE CPM_SP_D2M_ARP_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261126 18:42
-   * 本次修改：ALTER BY 20261126 18:42 SHIQINGFENG.EX 底稿调整行按科目反写账龄标识AR/OR/AS/AP/OP/AC/CA/CL/RF/A10，修复调整行不计提坏账
-   * 上次修改：ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
+   * 最后更新时间：20261126 19:30
+   * 本次修改：ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
+   * 上次修改：
    *
-   * 过程名称  ：CPM_SP_D2M_ARP_M_PHASE2
+   * 过程名称  ：CPM_SP_D2M_ARP_M
    * 功能描述  ：DWD->DWM往来账龄数据抽取
    * 源表      ：DWD_FI_MR_ARAP_SUM_MI、AW_MR9_REVM01_000001、AW_RUL_ARPPRC_000001、AW_RUL_ARPCUS_000001、AW_RUL_CP2SAP_000001、DIM_RULE_FI_MR_AR_PROFIT_MAPPING、DIM_RULE_FI_MR_AR_NF_MAPPING、DIM_RULE_FI_MR_AR_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_COUNTRY_BUSRANGE_MAPPING、DIM_RULE_FI_MR_AR_BUSDEPT_MAPPING、DIM_RULE_FI_MR_BMU_TO_PROFITCENTER、DWD_FI_MR_SAP_KNA1_DD、DIM_CUSTOMER_BASE_INFO_DD、AW_MR9_ARPM01_000001（底稿调整数据自读）
    * 目标表    ：AW_MR9_ARPM01_000001
    *
    * 修改历史：
-   *   ALTER BY 20261126 18:42 SHIQINGFENG.EX 底稿调整行按科目反写账龄标识AR/OR/AS/AP/OP/AC/CA/CL/RF/A10，修复调整行不计提坏账
-   *   ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
-   *   ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码
-   *   ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值
-   *   ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
-   *   ALTER BY 20261124 18:14 SHIQINGFENG.EX 收入来源渠道分组、利润中心、业务范围、业务管理单元改按映射规则表取值。
-   *   ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制。
-   *   ALTER BY 20261118 22:04 SHIQINGFENG.EX 利润中心映射改用AW_RUL_ARPPRC_000001应收周转利润中心映射表，并补充按公司兜底。
-   *   ALTER BY 20261117 15:32 SHIQINGFENG.EX 取消公司2023本位币乘100补偿，币种小数位统一由DWD按TCURX还原。
-   *   ALTER BY 20261117 11:35 SHIQINGFENG.EX 交易币去除尾随空格，修复同一币种被拆成多个分组
-   *   ALTER BY 20261104 14:05 SHIQINGFENG.EX 调整副本SRC_DETAIL改按D_ADJ_TYPE映射
-   *   ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
-   *   ALTER BY 20261102 15:49 SHIQINGFENG.EX 移除D_TOV_CHAN维度取数
-   *   ALTER BY 20261102 15:00 SHIQINGFENG.EX 新增渠道BU维度D_CHANNEL_BU
-   *   ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）
-   *   ALTER BY 20261029 18:10 SHIQINGFENG.EX 收入利润中心映射新增BATCH_ID=6（按公司+物料组），优先级BATCH_ID=2>6>收入原利润中心
-   *   ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%
-   *   ALTER BY 20261027 14:08 SHIQINGFENG.EX M01收入按BATCH_ID=2映射转为往来利润中心
-   *   20261010 修正账龄标识对应科目映射、来源字段作用域及未命中时保留原科目
-   *   20260924 汇率和税率处理由AG过程负责，D2M仅完成ARPM01来源装载及重分类标识回写
-   *   20260923 修正日立公司GRP_SCOPE对方公司节点取数逻辑
-   *   20260921 SHIQINGFENG.EX 新增重分类标识及集团归属范围更新
-   *   20260920 SHIQINGFENG.EX 新增
+   *   ALTER BY 20261126 19:30 SHIQINGFENG.EX 新增
    *******************************************************************************/
   V_SCENARIO      VARCHAR2(30);
   V_PERIODO       VARCHAR2(30);
@@ -68,8 +46,7 @@ BEGIN
   V_YEARMONTH := SUBSTR(V_SCENARIO, 1, 4) || V_PERIODO;
   V_LAST_DAY := LAST_DAY(TO_DATE(V_YEARMONTH || '01', 'YYYYMMDD'));
 
-  /* LOCK_FLAG=N保留全部允许进数公司，LOCK_FLAG=Y再排除已锁定公司。
-     ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+  
   INSERT INTO SESSION_AZIENDA_LIST (SESSION_ID, HIE, NODE, ELEM, LOCK_FLAG)
   SELECT DISTINCT V_SESSION_ID AS SESSION_ID
        , A.HIE AS HIE
@@ -124,11 +101,10 @@ BEGIN
     );
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_D2M_ARP_M_PHASE2', 'BEGIN 开始执行', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
+  VALUES ('CPM_SP_D2M_ARP_M', 'BEGIN 开始执行', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
   COMMIT;
 
-  /* 按SRC_DETAIL对应的LOCK_FLAG公司范围删除旧批次，保留已锁定来源。
-     ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+  
   DELETE FROM AW_MR9_ARPM01_000001 T
    WHERE T.COD_SCENARIO = V_SCENARIO
      AND T.COD_PERIODO = V_PERIODO
@@ -142,11 +118,11 @@ BEGIN
                     ELSE 'N'
                   END
      )
-     AND T.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+     AND T.PROVENIENZA = 'CPM_SP_D2M_ARP_M'
      ;
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_D2M_ARP_M_PHASE2', '当前批次删除完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
+  VALUES ('CPM_SP_D2M_ARP_M', '当前批次删除完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
 BEGIN
   /* 统一标准事实接口并写入目标表 */
   INSERT INTO AW_MR9_ARPM01_000001 (
@@ -230,7 +206,7 @@ BEGIN
   )
   WITH
   /* 应收周转利润中心映射BATCH_ID=1：按公司映射周转利润中心。 */
-  /* ALTER BY 20261118 22:07 SHIQINGFENG.EX 利润中心映射改用AW_RUL_ARPPRC_000001应收周转利润中心映射表，按批次号顺序排列。 */
+  
   PROFIT_CENTER_RULE_1 AS (
     SELECT TRIM(COD_AZIENDA) AS COD_AZIENDA
          , MAX(COD_DEST2) AS PROFITCENTER_CODE
@@ -241,8 +217,8 @@ BEGIN
      GROUP BY TRIM(COD_AZIENDA)
   ),
   /* 应收周转利润中心映射BATCH_ID=2：按源利润中心映射周转利润中心，按源利润中心去前导零去重。 */
-  /* ALTER BY 20261118 22:07 SHIQINGFENG.EX 规则CTE改名为PROFIT_CENTER_RULE_2，按批次号命名。 */
-  /* ALTER BY 20261027 14:08 SHIQINGFENG.EX 收入利润中心按有效期及BATCH_ID=2映射为往来利润中心；按源利润中心去前导零去重。 */
+  
+  
   PROFIT_CENTER_RULE_2 AS (
     SELECT LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0') AS SRC_PROFITCENTER_CODE
          , MAX(COD_DEST2) AS PROFITCENTER_CODE
@@ -252,7 +228,7 @@ BEGIN
        AND NVL(VALID_TO, '999999') >= V_YEARMONTH
      GROUP BY LTRIM(TRIM(SRC_PROFITCENTER_CODE), '0')
   ),
-  /* ALTER BY 20261029 18:10 SHIQINGFENG.EX 新增BATCH_ID=6利润中心映射（按公司+物料组）。 */
+  
   PROFIT_CENTER_RULE_6 AS (
     SELECT A.COD_AZIENDA AS COMPANY_CODE
          , TRIM(PM.MATERIAL_GROUP_CODE) AS MATERIAL_GROUP_CODE
@@ -268,8 +244,7 @@ BEGIN
      GROUP BY A.COD_AZIENDA
             , TRIM(PM.MATERIAL_GROUP_CODE)
   ),
-  /* 公司分类层级：按三级渠道反查一级、二级编码，收入来源未自带分类编码时使用。
-     ALTER BY 20261124 18:14 SHIQINGFENG.EX 新增收入来源四字段映射规则 */
+  
   CHANNEL_LEVEL_DIM AS (
     SELECT TRIM(COD) AS CHANNEL_L3_CODE
          , MAX(NULLIF(TRIM(COD_ELEGER5), '')) AS CHANNEL_L2_CODE
@@ -287,8 +262,7 @@ BEGIN
        AND TRIM(NODE) IN ('01020', '050')
      GROUP BY TRIM(ELEM)
   ),
-  /* 公司对应SAP版本号：取公司SAP映射规则有效期内的客户端，S800B/S800C等变体归一到S800。
-     ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值 */
+  
   COMPANY_SAP_CLIENT AS (
     SELECT TRIM(COD_AZIENDA) AS COMPANY_CODE
          , MAX(REGEXP_SUBSTR(TRIM(SAP_CLIENT), 'S[0-9]{3}')) AS SAP_CLIENT
@@ -298,9 +272,7 @@ BEGIN
        AND NVL(VALID_TO, '999999') >= V_YEARMONTH
      GROUP BY TRIM(COD_AZIENDA)
   ),
-  /* 收入客商为SAP编码，先经KNA1的ZKUNNR_MDG转MDG编码（为空回退SAP编码），再按MDG编码匹配MDG主数据取国家。
-     ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
-     ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值 */
+  
   SAP_CUST_MDG_MAP AS (
     SELECT 'S' || TRIM(MANDT) AS SAP_CLIENT
          , NULLIF(LTRIM(TRIM(KUNNR), '0'), '') AS CUST_KEY
@@ -309,8 +281,7 @@ BEGIN
       FROM TGK_FIMA_HISENSE.DWD_FI_MR_SAP_KNA1_DD
      GROUP BY 'S' || TRIM(MANDT), NULLIF(LTRIM(TRIM(KUNNR), '0'), '')
   ),
-  /* MDG客商主数据国家：按MDG编码匹配，作为收入客商唯一国家来源。
-     ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致 */
+  
   MDG_CUST_COUNTRY AS (
     SELECT NULLIF(LTRIM(TRIM(CUST_CODE), '0'), '') AS CUST_KEY
          , MAX(TRIM(COUNTRY_CODE)) AS COUNTRY_CODE
@@ -475,8 +446,7 @@ BEGIN
          , EXCHANGE_RATE_EVAL_FLAG
          , TAX_RATE
          , BCY_CODE AS COD_VALUTA
-         /* 交易币为CHAR定长带尾随空格，不去空格同一币种会分成两组。
-            ALTER BY 20261117 11:35 SHIQINGFENG.EX 交易币去除尾随空格，修复分组不聚合 */
+         
          , TRIM(QCY_CODE) AS COD_VALUTA_ORIGINARIA
          , NVL(BCY_0_AMT, 0) AS BCY_0_AMT
          , NVL(BCY_1_AMT, 0) AS BCY_1_AMT
@@ -516,8 +486,7 @@ BEGIN
      WHERE DT_MONTH = V_YEARMONTH
        /* 限制需要进数范围的公司和客商，在D打标为Y或为空的 */
        AND NVL(IS_APAR_FLAG, 'Y') = 'Y'
-       /* 锁定来源取LOCK_FLAG=Y公司，其余来源取LOCK_FLAG=N公司。
-          ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+       
        AND EXISTS (
              SELECT 1 AS MATCH_FLAG
                FROM SESSION_AZIENDA_LIST S
@@ -532,8 +501,8 @@ BEGIN
 
   /* 主分户映射：公司+收入客户编码（分户）→ 主户编码/名称，按期间取有效版本。
      配置表公司允许%通配，用本次运行的会话公司清单展开成具体公司后再等值匹配。 */
-  /* ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
-  /* ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开 */
+  
+  
   CUST_BRANCH_MAP AS (
     SELECT TRIM(S.ELEM) AS COD_AZIENDA
          , NULLIF(LTRIM(TRIM(A.CUST_BRANCH_CODE), '0'), '') AS CUST_BRANCH_CODE
@@ -550,11 +519,10 @@ BEGIN
   ),
 
   /* 收入明细基础行：补齐渠道分类层级、客商国家与公司架构范围，供四字段映射使用。 */
-  /* ALTER BY 20261124 18:14 SHIQINGFENG.EX 收入来源四字段改按规则表映射，新增基础行CTE */
+  
   M01_BASE AS (
     SELECT T.COD_AZIENDA
-         /* 收入客商统一取主分户映射后的主户，映射不到回退收入原值；后续客商匹配均按该编码进行。
-            ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+         
          , NVL(CM.CUST_HEAD_CODE, T.CUST_CODE) AS CUST_CODE
          , NULLIF(LTRIM(TRIM(NVL(CM.CUST_HEAD_CODE, T.CUST_CODE)), '0'), '') AS CUST_KEY
          , NVL(CM.CUST_HEAD_NAME, T.CUST_NAME) AS CUST_NAME
@@ -576,7 +544,7 @@ BEGIN
          , T.D_ADJ_TYPE
          , CL.CHANNEL_L1_CODE
          , CL.CHANNEL_L2_CODE
-         /* ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致 */
+         
          , MC.COUNTRY_CODE AS COUNTRY_CODE
          , CS.COMPANY_SCOPE
       FROM TGK_FIMA_HISENSE.AW_MR9_REVM01_000001 T
@@ -586,8 +554,7 @@ BEGIN
        AND CM.CUST_BRANCH_CODE = NULLIF(LTRIM(TRIM(T.CUST_CODE), '0'), '')
       LEFT JOIN CHANNEL_LEVEL_DIM CL
         ON CL.CHANNEL_L3_CODE = TRIM(T.D_CHANNEL)
-      /* ALTER BY 20261125 14:30 SHIQINGFENG.EX 收入客商国家改按MDG客商编码匹配MDG主数据取country_code，与detail口径一致
-         ALTER BY 20261125 14:57 SHIQINGFENG.EX 收入客商国家匹配增加公司SAP版本号，避免同一SAP编码在多套系统的客户串值 */
+      
       LEFT JOIN COMPANY_SAP_CLIENT CSC
         ON CSC.COMPANY_CODE = TRIM(T.COD_AZIENDA)
       LEFT JOIN SAP_CUST_MDG_MAP SM
@@ -599,19 +566,18 @@ BEGIN
         ON CS.COMPANY_CODE = T.COD_AZIENDA
      WHERE T.COD_SCENARIO = V_SCENARIO
        AND T.COD_PERIODO = V_PERIODO
-       /* 出库未开、退货未办均为锁定来源，只取LOCK_FLAG=Y公司。
-          ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+       
        AND T.COD_AZIENDA IN (
              SELECT S.ELEM AS ELEM
                FROM SESSION_AZIENDA_LIST S
               WHERE S.SESSION_ID = V_SESSION_ID
                 AND S.LOCK_FLAG = 'Y'
        )
-       /* ALTER BY 20261028 19:31 SHIQINGFENG.EX 收入取数限定S600101%/S600102%，排除SRC_DETAIL含LM数据，ADJM01仅保留D_ADJ_TYPE=REV_01_201。 */
+       
        AND (T.COD_CONTO LIKE 'S600101%' OR T.COD_CONTO LIKE 'S600102%')
        AND NVL(T.SRC_DETAIL, 'ZZZZ') NOT LIKE '%LM'
        AND (NVL(T.SRC_DETAIL, 'ZZZZ') <> 'ADJM01' OR T.D_ADJ_TYPE = 'REV_01_201')
-       /* ALTER BY 20261030 18:24 ZHOUHONG.EX 收入取数排除类别GA00_PA_IN、GA00_PA_OUT（内部购销配对，金额正负互抵，不计收入）。 */
+       
        AND NVL(T.COD_CATEGORIA, 'ZZZZ') NOT IN ('GA00_PA_IN', 'GA00_PA_OUT')
   ),
   /* 渠道分组映射：批次1→2→3→4顺序回退，全部未命中取默认零售-传统零售。 */
@@ -660,8 +626,7 @@ BEGIN
          , CASE WHEN M.COD_CONTO LIKE 'S600101%' THEN 'ZTSO04_CK'
                 WHEN M.COD_CONTO LIKE 'S600102%' THEN 'ZTSO04_TH'
            END AS SRC_DETAIL
-         /* 客商输出取主分户映射后的主户编码/名称。
-            ALTER BY 20261125 17:55 SHIQINGFENG.EX 收入客商按公司+分户匹配主分户映射取主户，后续客商匹配改用主户编码 */
+         
          , M.CUST_HEAD_CODE AS CUST_CODE
          , M.CUST_HEAD_NAME AS CUST_NAME
          , M.CUST_HEAD_CODE
@@ -679,12 +644,11 @@ BEGIN
          , NULL AS MB_AGE_FLAG
          , NULL AS GRP_SCOPE
          , M.D_CHANNEL
-         /* ALTER BY 20261102 15:00 SHIQINGFENG.EX 渠道BU跟D_CHANNEL一样从来源继承（M01是出库/退货，无周转渠道但有三类渠道）。 */
+         
          , M.D_CHANNEL_BU
          , NULL AS D_CC_CUSTGRP
          , M.D_ONOFFLINE
-         /* 业务范围分三档：商显按国家取中国区/海外公共，日立非中国区按国家映射表，其余按公司+二级分类再回退公司。
-            ALTER BY 20261124 18:14 SHIQINGFENG.EX 渠道分组、利润中心、业务范围、业务管理单元改按规则表映射 */
+         
          , M.COD_DEST2
          , CASE
                WHEN M.COMPANY_SCOPE = 'SX' AND UPPER(TRIM(M.COUNTRY_CODE)) = 'CN' THEN '2000'
@@ -903,12 +867,11 @@ BEGIN
        , QCY_15_AMT
        , SYSTEM_SRC
        , D_ADJ_TYPE
-       , 'CPM_SP_D2M_ARP_M_PHASE2' AS PROVENIENZA
+       , 'CPM_SP_D2M_ARP_M' AS PROVENIENZA
        , SYSDATE AS DATEUPD
        , SESSION_USER AS USERUPD
     FROM AGG_FACT;
 END;
-
 
   /* 更新重分类标识及集团归属范围：按账套+公司+有效客商开窗（管理分公司加利润中心），
      科目由ACCT_SRC_CODE传入重分类函数，有主户时优先主户编码。 */
@@ -1009,8 +972,7 @@ BEGIN
               ON A.COD_AZIENDA = AZ.COD_AZIENDA
            WHERE A.COD_SCENARIO = V_SCENARIO
              AND A.COD_PERIODO = V_PERIODO
-             /* 重分类按SRC_DETAIL选择LOCK_FLAG公司范围。
-                ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+             
              AND (
                    EXISTS (
                      SELECT 1 AS MATCH_FLAG
@@ -1037,7 +999,7 @@ BEGIN
                      )
                 )
              )
-             AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+             AND A.PROVENIENZA = 'CPM_SP_D2M_ARP_M'
              AND (A.SRC_DETAIL LIKE 'ORG%'
                    OR A.SRC_DETAIL LIKE 'ZTSO04%'
                  )
@@ -1274,8 +1236,7 @@ BEGIN
        , T.USERUPD = SESSION_USER;
 END;
 
-  /* 非ORG来源且科目为空的记录回写默认应收科目，按来源选择LOCK_FLAG公司。
-     ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+  
 BEGIN
   UPDATE AW_MR9_ARPM01_000001 T
      SET COD_CONTO = '1122000000'
@@ -1291,13 +1252,11 @@ BEGIN
                     ELSE 'N'
                   END
      )
-     AND T.PROVENIENZA = 'CPM_SP_D2M_ARP_M_PHASE2'
+     AND T.PROVENIENZA = 'CPM_SP_D2M_ARP_M'
      AND T.SRC_DETAIL NOT LIKE 'ORG%'
      AND T.COD_CONTO IS NULL;
 END;
-  /* 手工调整数据复制为调整副本：SRC_DETAIL按D_ADJ_TYPE映射，客商分户优先回退主户，插行不走重分类、随下轮批清理。
-     ALTER BY 20261104 11:45 SHIQINGFENG.EX 新增底稿手工调整数据插行装载
-     ALTER BY 20261104 14:05 SHIQINGFENG.EX 副本SRC_DETAIL改按D_ADJ_TYPE映射 */
+  
 BEGIN
   INSERT INTO AW_MR9_ARPM01_000001 (
       OID
@@ -1404,8 +1363,7 @@ BEGIN
        , NULL AS ACCT_SRC_CODE
        , NULL AS ACCT_REC_CODE
        , NULL AS ACCT_MAP_CODE
-       /* 底稿调整行按科目反写账龄标识，供账龄分配与坏账计提使用。
-          ALTER BY 20261126 18:42 SHIQINGFENG.EX 底稿调整行按科目反写账龄标识 */
+       
        , CASE TRIM(A.COD_CONTO)
            WHEN '1122000000' THEN 'AR'
            WHEN '122101F'   THEN 'OR'
@@ -1500,15 +1458,14 @@ BEGIN
        , NULL AS SYSTEM_SRC
        , A.D_ADJ_TYPE
        , A.COD_CONTO
-       , 'CPM_SP_D2M_ARP_M_PHASE2' AS PROVENIENZA
+       , 'CPM_SP_D2M_ARP_M' AS PROVENIENZA
        , SYSDATE AS DATEUPD
        , SESSION_USER AS USERUPD
     FROM AW_MR9_ARPM01_000001 A
    WHERE A.COD_SCENARIO = V_SCENARIO
      AND A.COD_PERIODO = V_PERIODO
      AND A.COD_CATEGORIA = 'ZFAMOUNT'
-     /* ZZT003_ADJ取LOCK_FLAG=Y公司，其余调整副本取LOCK_FLAG=N公司。
-        ALTER BY 20261123 11:35 SHIQINGFENG.EX 锁定范围改为按SRC_DETAIL和LOCK_FLAG控制 */
+     
      AND EXISTS (
            SELECT 1 AS MATCH_FLAG
              FROM SESSION_AZIENDA_LIST S
@@ -1522,7 +1479,7 @@ BEGIN
 END;
   /* 目标表装载完成，提交事务。 */
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_D2M_ARP_M_PHASE2', '目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
+  VALUES ('CPM_SP_D2M_ARP_M', '目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
   COMMIT;
 
   /* 清理会话数据后记录执行完成。 */
@@ -1532,24 +1489,6 @@ END;
    WHERE SESSION_ID = V_SESSION_ID;
 
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
-  VALUES ('CPM_SP_D2M_ARP_M_PHASE2', 'END 执行完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
+  VALUES ('CPM_SP_D2M_ARP_M', 'END 执行完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, V_AZIENDA);
   COMMIT;
-/*
-EXCEPTION
-  WHEN OTHERS THEN
-    ROLLBACK;
-    DELETE FROM SESSION_AZIENDA_LIST
-     WHERE SESSION_ID = V_SESSION_ID;
-    DELETE FROM SESSION_V_REF_AZIENDA
-     WHERE SESSION_ID = V_SESSION_ID;
-    V_ERROR_COD := SQLCODE;
-    V_ERROR_MSG := SUBSTR(SQLERRM, 1, 4000);
-    INSERT INTO ZTAB_CPM_LOG(
-        CPM, STEP, REMARK, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA
-    ) VALUES (
-        'CPM_SP_D2M_ARP_M_PHASE2', 'ERROR 执行报错', V_ERROR_COD || ':' || V_ERROR_MSG,
-        SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_AZIENDA
-    );
-    COMMIT;
-    RAISE;*/
-END CPM_SP_D2M_ARP_M_PHASE2;
+END CPM_SP_D2M_ARP_M;
