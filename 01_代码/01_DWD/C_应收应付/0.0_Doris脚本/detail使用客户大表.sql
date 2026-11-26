@@ -2,7 +2,7 @@
  *                                  脚本说明
  *-----------------------------------------------------------------------------
  * 最后更新时间：20261125 21:48
- * 本次修改：ALTER BY 20261125 21:48 SHIQINGFENG.EX 六套SAP客户与供应商已清项目统一改取BKPF和BSEG。
+ * 本次修改：ALTER BY 20261125 21:48 SHIQINGFENG.EX 六套SAP客户与供应商已清项目及客户提前回款统一改取BKPF和BSEG。
  * 上次修改：ALTER BY 20261124 20:14 SHIQINGFENG.EX 负数账龄按绝对值分段，与1.0账龄分段口径对齐。
  *
  * 脚本名称  ：detail使用客户大表.sql
@@ -17,7 +17,7 @@
  *             两文件必须同步维护：任何业务逻辑改动都要同时改。
  *
  * 修改历史：
- *   ALTER BY 20261125 21:48 SHIQINGFENG.EX 六套SAP客户与供应商已清项目统一改取BKPF和BSEG。
+ *   ALTER BY 20261125 21:48 SHIQINGFENG.EX 六套SAP客户与供应商已清项目及客户提前回款统一改取BKPF和BSEG。
  *   ALTER BY 20261124 20:14 SHIQINGFENG.EX 负数账龄按绝对值分段，与1.0账龄分段口径对齐。
  *   ALTER BY 20261124 18:52 SHIQINGFENG.EX 业务范围映射公司编码先按公司主数据展开，事实侧等值匹配。
  *   ALTER BY 20261124 18:04 SHIQINGFENG.EX 渠道BU关系表补充生效期间限制，按start_time/end_time取期间版本。
@@ -771,68 +771,312 @@ src_bsad AS (
        AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
 
     UNION ALL
-    -- 提前回款部分取已清表BSAD，清账日期限制在参数月份首日至月末。
-    SELECT 'S600' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
-      FROM ods.odsslt_s600_bsad
-     WHERE augdt >= @year_month_day
-       AND augdt <= @key_date_sap
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       AND COALESCE(rstgr,'|') = '400'
+    -- 提前回款部分取BKPF和BSEG，清账日期限制在参数月份首日至月末。
+    -- S600原BSAD_EPAY分支暂时注释保留，待BSEG_EPAY对数通过后再确认是否删除。
+    -- ALTER BY 20261125 21:48 SHIQINGFENG.EX S600提前回款项目改取BKPF和BSEG
+    -- SELECT 'S600' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber AS gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, pays_tran, sgtxt
+    --   FROM ods.odsslt_s600_bsad
+    --  WHERE augdt >= @year_month_day
+    --    AND augdt <= @key_date_sap
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    --    AND COALESCE(rstgr,'|') = '400'
+
+    SELECT 'S600' AS system_src
+         , 'BSAD_EPAY' AS ods_src
+         , s.bukrs AS bukrs
+         , s.kunnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , s.rstgr AS rstgr
+         , s.zlsch AS zlsch
+         , s.pays_tran AS pays_tran                -- 仅S600的BSEG视图有此字段
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs600_bkpf_v h
+      JOIN ods.odssap_zs600_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
+     WHERE s.augdt >= @year_month_day             -- 当月清账
+       AND s.augdt <= @key_date_sap
+       AND s.koart = 'D'
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
+       AND COALESCE(s.rstgr, '|') = '400'
 
     UNION ALL
 
-    SELECT 'S700' AS system_src, 'BSAD_EPAY' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.kunnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, b.rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
-      FROM ods.odsslt_s700_bsad b
+    -- S700原BSAD_EPAY分支暂时注释保留，待BSEG_EPAY对数通过后再确认是否删除。
+    -- ALTER BY 20261125 21:48 SHIQINGFENG.EX S700提前回款项目改取BKPF和BSEG
+    -- SELECT 'S700' AS system_src, 'BSAD_EPAY' AS ods_src, COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), b.bukrs) AS bukrs, b.kunnr AS cust_head_code, b.hkont, b.prctr, b.gsber, b.filkd, b.waers, b.blart, b.belnr, b.gjahr, b.buzei, b.budat, b.bldat, b.zfbdt, b.zbd1t, b.augdt, b.shkzg, b.dmbtr, b.wrbtr, b.bstat, b.rstgr, b.zlsch, NULL AS pays_tran, b.sgtxt
+    --   FROM ods.odsslt_s700_bsad b
+    --   LEFT JOIN s700_company_map hm
+    --     ON hm.ent_sap700_code = TRIM(b.bukrs)
+    --  WHERE augdt >= @year_month_day
+    --    AND augdt <= @key_date_sap
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    --    AND COALESCE(rstgr,'|') = '400'
+
+    SELECT 'S700' AS system_src
+         , 'BSAD_EPAY' AS ods_src
+         , COALESCE(NULLIF(TRIM(hm.cod_azienda), ''), s.bukrs) AS bukrs
+         , s.kunnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , s.rstgr AS rstgr
+         , s.zlsch AS zlsch
+         , NULL AS pays_tran                       -- BSEG无此字段，与其余提前回款分支保持一致
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs700_bkpf_v h
+      JOIN ods.odssap_zs700_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
       LEFT JOIN s700_company_map hm
-        ON hm.ent_sap700_code = TRIM(b.bukrs)
-     WHERE augdt >= @year_month_day
-       AND augdt <= @key_date_sap
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       AND COALESCE(rstgr,'|') = '400'
+        ON hm.ent_sap700_code = TRIM(s.bukrs)
+     WHERE s.augdt >= @year_month_day             -- 当月清账
+       AND s.augdt <= @key_date_sap
+       AND s.koart = 'D'
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
+       AND COALESCE(s.rstgr, '|') = '400'
 
     UNION ALL
 
-    SELECT 'S800' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
-      FROM ods.odsslt_s800_bsad
-     WHERE augdt >= @year_month_day
-       AND augdt <= @key_date_sap
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       AND COALESCE(rstgr,'|') = '400'
+    -- S800原BSAD_EPAY分支暂时注释保留，待BSEG_EPAY对数通过后再确认是否删除。
+    -- ALTER BY 20261125 21:48 SHIQINGFENG.EX S800提前回款项目改取BKPF和BSEG
+    -- SELECT 'S800' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    --   FROM ods.odsslt_s800_bsad
+    --  WHERE augdt >= @year_month_day
+    --    AND augdt <= @key_date_sap
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    --    AND COALESCE(rstgr,'|') = '400'
+
+    SELECT 'S800' AS system_src
+         , 'BSAD_EPAY' AS ods_src
+         , s.bukrs AS bukrs
+         , s.kunnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , s.rstgr AS rstgr
+         , s.zlsch AS zlsch
+         , NULL AS pays_tran                       -- BSEG无此字段，与其余提前回款分支保持一致
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs800_bkpf_v h
+      JOIN ods.odssap_zs800_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
+     WHERE s.augdt >= @year_month_day             -- 当月清账
+       AND s.augdt <= @key_date_sap
+       AND s.koart = 'D'
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
+       AND COALESCE(s.rstgr, '|') = '400'
 
     UNION ALL
 
-    SELECT 'S900' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
-      FROM ods.odsslt_s900_bsad
-     WHERE augdt >= @year_month_day
-       AND augdt <= @key_date_sap
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       AND COALESCE(rstgr,'|') = '400'
+    -- S900原BSAD_EPAY分支暂时注释保留，待BSEG_EPAY对数通过后再确认是否删除。
+    -- ALTER BY 20261125 21:48 SHIQINGFENG.EX S900提前回款项目改取BKPF和BSEG
+    -- SELECT 'S900' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    --   FROM ods.odsslt_s900_bsad
+    --  WHERE augdt >= @year_month_day
+    --    AND augdt <= @key_date_sap
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    --    AND COALESCE(rstgr,'|') = '400'
+
+    SELECT 'S900' AS system_src
+         , 'BSAD_EPAY' AS ods_src
+         , s.bukrs AS bukrs
+         , s.kunnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , s.rstgr AS rstgr
+         , s.zlsch AS zlsch
+         , NULL AS pays_tran                       -- BSEG无此字段，与其余提前回款分支保持一致
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs900_bkpf_v h
+      JOIN ods.odssap_zs900_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
+     WHERE s.augdt >= @year_month_day             -- 当月清账
+       AND s.augdt <= @key_date_sap
+       AND s.koart = 'D'
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
+       AND COALESCE(s.rstgr, '|') = '400'
 
     UNION ALL
 
-    SELECT 'S610' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
-      FROM ods.odsslt_s810_bsad
-     WHERE augdt >= @year_month_day
-       AND augdt <= @key_date_sap
-       AND mandt = '610'
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       AND COALESCE(rstgr,'|') = '400'
+    -- S610原BSAD_EPAY分支暂时注释保留，待BSEG_EPAY对数通过后再确认是否删除。
+    -- ALTER BY 20261125 21:48 SHIQINGFENG.EX S610提前回款项目改取BKPF和BSEG
+    -- SELECT 'S610' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    --   FROM ods.odsslt_s810_bsad
+    --  WHERE augdt >= @year_month_day
+    --    AND augdt <= @key_date_sap
+    --    AND mandt = '610'
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    --    AND COALESCE(rstgr,'|') = '400'
+
+    SELECT 'S610' AS system_src
+         , 'BSAD_EPAY' AS ods_src
+         , s.bukrs AS bukrs
+         , s.kunnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , s.rstgr AS rstgr
+         , s.zlsch AS zlsch
+         , NULL AS pays_tran                       -- BSEG无此字段，与其余提前回款分支保持一致
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs610_bkpf_v h
+      JOIN ods.odssap_zs610_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
+     WHERE s.augdt >= @year_month_day             -- 当月清账
+       AND s.augdt <= @key_date_sap
+       AND s.koart = 'D'
+       AND s.mandt = '610'                        -- 视图含610与810两套，按系统取数
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
+       AND COALESCE(s.rstgr, '|') = '400'
 
     UNION ALL
 
-    SELECT 'S810' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
-      FROM ods.odsslt_s810_bsad
-     WHERE augdt >= @year_month_day
-       AND augdt <= @key_date_sap
-       AND mandt = '810'
-       AND COALESCE(bstat, '') NOT IN ('A', 'S')
-       AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
-       AND COALESCE(rstgr,'|') = '400'
+    -- S810原BSAD_EPAY分支暂时注释保留，待BSEG_EPAY对数通过后再确认是否删除。
+    -- ALTER BY 20261125 21:48 SHIQINGFENG.EX S810提前回款项目改取BKPF和BSEG
+    -- SELECT 'S810' AS system_src, 'BSAD_EPAY' AS ods_src, bukrs, kunnr AS cust_head_code, hkont, prctr, gsber, filkd, waers, blart, belnr, gjahr, buzei, budat, bldat, zfbdt, zbd1t, augdt, shkzg, dmbtr, wrbtr, bstat, rstgr, zlsch, NULL AS  pays_tran, sgtxt
+    --   FROM ods.odsslt_s810_bsad
+    --  WHERE augdt >= @year_month_day
+    --    AND augdt <= @key_date_sap
+    --    AND mandt = '810'
+    --    AND COALESCE(bstat, '') NOT IN ('A', 'S')
+    --    AND (COALESCE(dmbtr, 0) <> 0 OR COALESCE(wrbtr, 0) <> 0)
+    --    AND COALESCE(rstgr,'|') = '400'
+
+    SELECT 'S810' AS system_src
+         , 'BSAD_EPAY' AS ods_src
+         , s.bukrs AS bukrs
+         , s.kunnr AS cust_head_code
+         , s.hkont AS hkont
+         , s.prctr AS prctr
+         , s.gsber AS gsber
+         , s.filkd AS filkd
+         , h.waers AS waers
+         , h.blart AS blart
+         , s.belnr AS belnr
+         , s.gjahr AS gjahr
+         , s.buzei AS buzei
+         , h.budat AS budat
+         , h.bldat AS bldat
+         , s.zfbdt AS zfbdt
+         , s.zbd1t AS zbd1t
+         , s.augdt AS augdt
+         , s.shkzg AS shkzg
+         , s.dmbtr AS dmbtr
+         , s.wrbtr AS wrbtr
+         , h.bstat AS bstat
+         , s.rstgr AS rstgr
+         , s.zlsch AS zlsch
+         , NULL AS pays_tran                       -- BSEG无此字段，与其余提前回款分支保持一致
+         , s.sgtxt AS sgtxt
+      FROM ods.odssap_zs810_bkpf_v h
+      JOIN ods.odssap_zs810_bseg_v s
+        ON h.bukrs = s.bukrs
+       AND h.belnr = s.belnr
+       AND h.gjahr = s.gjahr
+     WHERE s.augdt >= @year_month_day             -- 当月清账
+       AND s.augdt <= @key_date_sap
+       AND s.koart = 'D'
+       AND s.mandt = '810'                        -- 视图含610与810两套，按系统取数
+       AND COALESCE(h.bstat, '') NOT IN ('A', 'S')
+       AND (COALESCE(s.dmbtr, 0) <> 0 OR COALESCE(s.wrbtr, 0) <> 0)
+       AND COALESCE(s.rstgr, '|') = '400'
 
 ),
 -- 供应商未清项目：仅保留参数月末前已过账且非A/S状态的记录。
