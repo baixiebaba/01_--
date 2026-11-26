@@ -7,9 +7,9 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
   /*******************************************************************************
    *                              存储过程说明
    *-----------------------------------------------------------------------------
-   * 最后更新时间：20261125 20:52
-   * 本次修改：ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
-   * 上次修改：ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
+   * 最后更新时间：20261126 10:06
+   * 本次修改：ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载
+   * 上次修改：ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
    *
    * 过程名称  ：CPM_SP_M2M_ARP_TOV_M_PHASE2
    * 功能描述  ：装载应收周转计算汇总表
@@ -17,6 +17,7 @@ CREATE OR REPLACE PROCEDURE CPM_SP_M2M_ARP_TOV_M_PHASE2(
    * 目标表    ：AW_MR9_ARPM03_000001
    *
    * 修改历史：
+   *   ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载
    *   ALTER BY 20261125 20:52 SHIQINGFENG.EX ZAMOUNT_L2按公司范围控制进数：23%、26%、6701-6745、6801-6889（排除6847）
    *   ALTER BY 20261125 18:32 SHIQINGFENG.EX 主分户映射公司通配符按会话公司清单展开后匹配
    *   ALTER BY 20261125 18:28 SHIQINGFENG.EX IMOCC来源1740公司排除区组Z0020
@@ -1742,6 +1743,178 @@ END;
   /* ALTER BY 20261027 16:04 SHIQINGFENG.EX 记录第二段特殊数据源装载完成，便于定位两段装载执行状态。 */
   INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
   VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', '第二段目标表装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+
+  /* 国际营销占用手工调整来源：取ARPM01法报调整(ZFAMOUNT/ARP_03_004)，事业部按利润中心优先、公司兜底。
+     ALTER BY 20261126 10:06 SHIQINGFENG.EX 新增国际营销占用手工调整来源装载 */
+BEGIN
+  INSERT INTO AW_MR9_ARPM03_000001 (
+      OID
+    , COD_SCENARIO
+    , COD_PERIODO
+    , D_BG
+    , COD_AZIENDA
+    , COD_CONTO
+    , COD_CATEGORIA
+    , D_GRAN_CAL
+    , GRP_SCOPE
+    , CUST_CODE
+    , CUST_NAME
+    , CUST_HEAD_CODE
+    , CUST_HEAD_NAME
+    , CUST_BRANCH_CODE
+    , CUST_BRANCH_NAME
+    , COD_AZI_CTP
+    , COUNTRY_NAME
+    , NATURE_L2_NAME
+    , D_CHANNEL
+    , D_ONOFFLINE
+    , COD_DEST2
+    , COD_DEST3
+    , D_SALE_DEPT
+    , D_CHANNEL_BU
+    , D_TOV_CHAN
+    , D_CC_CUSTGRP
+    , COD_VALUTA
+    , AR_AMT
+    , REV_AMT
+    , F1_ODUE_AMT
+    , F2_EPAY_AMT
+    , F3_ECR_AMT
+    , F4_UREB_AMT
+    , F5_UFEE_AMT
+    , F6_INVSM_AMT
+    , F7_GSUB_AMT
+    , F8_ADJ_AMT
+    , SRC_DETAIL
+    , PROVENIENZA
+    , DATEUPD
+    , USERUPD
+  )
+  WITH
+  /* 手工调整利润中心事业部映射：限定有效周转事业部及参数事业部范围，同一利润中心只取一个事业部。 */
+  ADJ_PCR_BG AS (
+    SELECT LTRIM(TRIM(P.COD_DEST2), '0') AS COD_DEST2
+         , MAX(P.COD_BG) AS COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_PCRMAP_000001 P
+     WHERE P.VALID_FR <= V_YEARMONTH
+       AND NVL(P.VALID_TO, '999999') >= V_YEARMONTH
+       AND P.COD_BG NOT LIKE 'CXC%'
+       AND (P_BG = 'ALL'
+          OR INSTR(',' || P_BG || ',', ',' || P.COD_BG || ',') > 0)
+       AND P.COD_BG IN (
+             SELECT C.COD_BG
+               FROM TGK_FIMA_HISENSE.AW_RUL_COSMAP_000001 C
+              WHERE C.AR_TOV_FLAG = 'Y'
+                AND C.VALID_FR <= V_YEARMONTH
+                AND NVL(C.VALID_TO, '999999') >= V_YEARMONTH
+       )
+     GROUP BY LTRIM(TRIM(P.COD_DEST2), '0')
+  ),
+  /* 手工调整公司事业部映射：利润中心未命中时按公司兜底。 */
+  ADJ_ATS_BG AS (
+    SELECT TRIM(A.COD_AZIENDA) AS COD_AZIENDA
+         , MAX(A.COD_BG) AS COD_BG
+      FROM TGK_FIMA_HISENSE.AW_RUL_ATSMAP_000001 A
+     WHERE A.VALID_FR <= V_YEARMONTH
+       AND NVL(A.VALID_TO, '999999') >= V_YEARMONTH
+       AND A.COD_BG NOT LIKE 'CXC%'
+       AND (P_BG = 'ALL'
+          OR INSTR(',' || P_BG || ',', ',' || A.COD_BG || ',') > 0)
+       AND A.COD_BG IN (
+             SELECT C.COD_BG
+               FROM TGK_FIMA_HISENSE.AW_RUL_COSMAP_000001 C
+              WHERE C.AR_TOV_FLAG = 'Y'
+                AND C.VALID_FR <= V_YEARMONTH
+                AND NVL(C.VALID_TO, '999999') >= V_YEARMONTH
+       )
+     GROUP BY TRIM(A.COD_AZIENDA)
+  ),
+  ADJ_SOURCE AS (
+    SELECT A.COD_SCENARIO
+         , A.COD_PERIODO
+         , NVL(NVL(PC.COD_BG, AT.COD_BG), 'ZZZZ') AS D_BG
+         , A.COD_AZIENDA
+         , A.CUST_CODE
+         , A.CUST_NAME
+         , A.CUST_HEAD_CODE
+         , A.CUST_HEAD_NAME
+         , A.CUST_BRANCH_CODE
+         , A.CUST_BRANCH_NAME
+         , A.COD_AZI_CTP
+         , A.COUNTRY_NAME
+         , A.NATURE_L2_NAME
+         , A.D_CHANNEL
+         , A.D_ONOFFLINE
+         , A.COD_DEST2
+         , A.COD_DEST3
+         , A.D_SALE_DEPT
+         , A.D_CHANNEL_BU
+         , A.D_TOV_CHAN
+         , A.D_CC_CUSTGRP
+         , A.COD_VALUTA
+         , NVL(A.BCY_0_AMT, 0) AS AR_AMT
+      FROM TGK_FIMA_HISENSE.AW_MR9_ARPM01_000001 A
+      LEFT JOIN ADJ_PCR_BG PC
+        ON PC.COD_DEST2 = NULLIF(LTRIM(TRIM(A.COD_DEST2), '0'), '')
+      LEFT JOIN ADJ_ATS_BG AT
+        ON AT.COD_AZIENDA = TRIM(A.COD_AZIENDA)
+     WHERE A.COD_SCENARIO = V_SCENARIO
+       AND A.COD_PERIODO = V_PERIODO
+       AND A.COD_CATEGORIA = 'ZFAMOUNT'
+       AND A.D_ADJ_TYPE = 'ARP_03_004'
+       AND A.COD_AZIENDA IN (
+             SELECT ELEM
+               FROM SESSION_AZIENDA_LIST
+              WHERE SESSION_ID = V_SESSION_ID
+       )
+  )
+  SELECT NEWID() AS OID
+      , S.COD_SCENARIO
+      , S.COD_PERIODO
+      , S.D_BG
+      , S.COD_AZIENDA
+      , '1122000000' AS COD_CONTO
+      , 'ZAMOUNT' AS COD_CATEGORIA
+      , 'ARTO_CUST' AS D_GRAN_CAL
+      , 'GEX-集团外' AS GRP_SCOPE
+      , S.CUST_CODE
+      , S.CUST_NAME
+      , S.CUST_HEAD_CODE
+      , S.CUST_HEAD_NAME
+      , S.CUST_BRANCH_CODE
+      , S.CUST_BRANCH_NAME
+      , S.COD_AZI_CTP
+      , S.COUNTRY_NAME
+      , S.NATURE_L2_NAME
+      , S.D_CHANNEL
+      , S.D_ONOFFLINE
+      , S.COD_DEST2
+      , S.COD_DEST3
+      , S.D_SALE_DEPT
+      , S.D_CHANNEL_BU
+      , S.D_TOV_CHAN
+      , S.D_CC_CUSTGRP
+      , S.COD_VALUTA
+      , S.AR_AMT
+      , 0 AS REV_AMT
+      , 0 AS F1_ODUE_AMT
+      , 0 AS F2_EPAY_AMT
+      , 0 AS F3_ECR_AMT
+      , 0 AS F4_UREB_AMT
+      , 0 AS F5_UFEE_AMT
+      , 0 AS F6_INVSM_AMT
+      , 0 AS F7_GSUB_AMT
+      , 0 AS F8_ADJ_AMT
+      , 'IMOCC_ADJ-国际营销占用手工调整' AS SRC_DETAIL
+      , 'CPM_SP_M2M_ARP_TOV_M_PHASE2' AS PROVENIENZA
+      , SYSDATE AS DATEUPD
+      , SESSION_USER AS USERUPD
+    FROM ADJ_SOURCE S
+   WHERE S.AR_AMT <> 0;
+
+  INSERT INTO ZTAB_CPM_LOG (CPM, STEP, EXECTIME, CREATEBY, COD_SCENARIO, COD_PERIODO, COD_AZIENDA)
+  VALUES ('CPM_SP_M2M_ARP_TOV_M_PHASE2', '手工调整来源装载完成', SYSDATE, SESSION_USER, V_SCENARIO, V_PERIODO, P_BG || '|' || V_AZIENDA);
+END;
 
   /* 主装载的零金额条件在聚合前生效，正负抵消的分组仍会落成全0行，装载后统一清理。
      ALTER BY 20261109 17:00 SHIQINGFENG.EX 装载后清理金额全为0的记录 */
